@@ -18,7 +18,11 @@ except ImportError:
 
 from metpy.io._tools import Bits, DictStruct, IOBuffer, NamedStruct, open_as_needed
 
-def _word_to_position(word, bytes_per_word=4):
+ANLB_SIZE = 128
+BYTES_PER_WORD = 4
+NAVB_SIZE = 256
+
+def _word_to_position(word, bytes_per_word=BYTES_PER_WORD):
     r"""Return beginning position of a word in bytes"""
     return (word * bytes_per_word) - bytes_per_word
 
@@ -40,6 +44,25 @@ class GempakDM(AbstractDataStore):
                                 ('file_type', 'i'), ('data_source', 'i'),
                                 ('machine_type', 'i'), ('missing_int', 'i'),
                                 (None, '12x'), ('missing_float' ,'f')])
+    
+    grid_nav_fmt = NamedStruct([('grid_definition_type', 'f'), ('projection', '3sx'),
+                                ('left_grid_number', 'f'), ('bottom_grid_number', 'f'),
+                                ('right_grid_number', 'f'), ('top_grid_number', 'f'),
+                                ('lower_left_lat', 'f'), ('lower_left_lon', 'f'),
+                                ('upper_right_lat', 'f'), ('upper_right_lon', 'f'),
+                                ('proj_angle1', 'f'), ('proj_angle2', 'f'),
+                                ('proj_angle3', 'f'), (None, '972x')])
+
+    grid_anl_fmt1 = NamedStruct([('analysis_type', 'f'), ('delta_n', 'f'),
+                                 ('delta_x', 'f'), ('delta_y', 'f'),
+                                 (None, 'x'), ('garea_bounds', 'f'),
+                                 ('extarea_bounds', 'f'), ('datarea_bounds', 'f'),
+                                 (None, '444x')])
+
+    grid_anl_fmt2 = NamedStruct([('analysis_type', 'f'), ('delta_n', 'f'),
+                                 ('grid_ext', 'f'), ('garea', 'f'),
+                                 ('garea_bounds', 'f'), ('extarea_bounds', 'f'),
+                                 ('datarea_bounds', 'f'), (None, '440x')])
 
     def __init__(self, filename):
         """
@@ -61,6 +84,7 @@ class GempakDM(AbstractDataStore):
 
         # Process file keys
         # Should this be so general or can we rely on there only ever being NAVB and ANLB?
+        # This will grab all headers, but we will forego processing all but NAVB and ANLB for now.
         fkey_prod = product(['header_name', 'header_length', 'header_type'], range(1, self.prod_desc.file_headers + 1))
         fkey_names = [ x for x in [ '{}{}'.format(*x) for x in fkey_prod ] ]
         fkey_meta = list(zip(fkey_names, np.repeat(('4s', 'i', 'i'), self.prod_desc.file_headers)))
@@ -71,9 +95,28 @@ class GempakDM(AbstractDataStore):
 
         file_key_blocks = self._buffer.set_mark()
         # We are now at the NAVB/ANLB portion of the file.
-        for block in range(self.prod_desc.file_headers):
-            bsize = self._buffer.read_int('i')
-            
+        # NAVB
+        navb_size = self._buffer.read_int('i')
+        if navb_size != NAVB_SIZE:
+            raise ValueError('Navigation block size does not match GEMPAK specification')
+        else:
+            self.navigation_block = self._buffer.read_struct(self.grid_nav_fmt)
+        
+        # ANLB
+        anlb_size = self._buffer.read_int('i')
+        anlb_start = self._buffer.set_mark()
+        if anlb_size != ANLB_SIZE:
+            raise ValueError('Analysis block size does not match GEMPAK specification')
+        else:
+            anlb_type = self._buffer.read_int('f')
+            self._buffer.jump_to(anlb_start)
+            if anlb_type == 1:
+                self.analysis_block = self._buffer.read_struct(self.grid_anl_fmt1)
+            elif anlb_type == 2:
+                self.analysis_block = self._buffer.read_struct(self.grid_anl_fmt2)
+
+        # We are neglecting other file keys at this time
+
     def _process_gempak_header(self):
         """Read off the GEMPAK header from the file, if necessary."""
         data = self._buffer.get_next(len(self.gempak_header)).decode('utf-8', 'ignore')
