@@ -82,40 +82,75 @@ class GempakDM(AbstractDataStore):
         self.prod_desc = self._buffer.read_struct(self.prod_desc_fmt)
         meta = self._buffer.set_mark()
 
-        # Process file keys
-        # Should this be so general or can we rely on there only ever being NAVB and ANLB?
-        # This will grab all headers, but we will forego processing all but NAVB and ANLB for now.
-        fkey_prod = product(['header_name', 'header_length', 'header_type'], range(1, self.prod_desc.file_headers + 1))
-        fkey_names = [ x for x in [ '{}{}'.format(*x) for x in fkey_prod ] ]
-        fkey_meta = list(zip(fkey_names, np.repeat(('4s', 'i', 'i'), self.prod_desc.file_headers)))
-        self.file_keys_format = NamedStruct(fkey_meta)
+        # FILE KEYS
+        # Surface and upper-air files will not have the file headers, so we need to check for that.
+        if self.prod_desc.file_headers > 0:
+            # Should this be so general or can we rely on there only ever being NAVB and ANLB?
+            # This will grab all headers, but we will forego processing all but NAVB and ANLB for now.
+            fkey_prod = product(['header_name', 'header_length', 'header_type'], range(1, self.prod_desc.file_headers + 1))
+            fkey_names = [ x for x in [ '{}{}'.format(*x) for x in fkey_prod ] ]
+            fkey_info = list(zip(fkey_names, np.repeat(('4s', 'i', 'i'), self.prod_desc.file_headers)))
+            self.file_keys_format = NamedStruct(fkey_info)
 
-        self._buffer.jump_to(start, _word_to_position(self.prod_desc.file_keys_ptr))
-        self.file_keys = self._buffer.read_struct(self.file_keys_format)
+            self._buffer.jump_to(start, _word_to_position(self.prod_desc.file_keys_ptr))
+            self.file_keys = self._buffer.read_struct(self.file_keys_format)
 
-        file_key_blocks = self._buffer.set_mark()
-        # We are now at the NAVB/ANLB portion of the file.
-        # NAVB
-        navb_size = self._buffer.read_int('i')
-        if navb_size != NAVB_SIZE:
-            raise ValueError('Navigation block size does not match GEMPAK specification')
+            file_key_blocks = self._buffer.set_mark()
+            # We are now at the NAVB/ANLB portion of the file.
+            # NAVB
+            navb_size = self._buffer.read_int('i')
+            if navb_size != NAVB_SIZE:
+                raise ValueError('Navigation block size does not match GEMPAK specification')
+            else:
+                self.navigation_block = self._buffer.read_struct(self.grid_nav_fmt)
+            
+            # ANLB
+            anlb_size = self._buffer.read_int('i')
+            anlb_start = self._buffer.set_mark()
+            if anlb_size != ANLB_SIZE:
+                raise ValueError('Analysis block size does not match GEMPAK specification')
+            else:
+                anlb_type = self._buffer.read_int('f')
+                self._buffer.jump_to(anlb_start)
+                if anlb_type == 1:
+                    self.analysis_block = self._buffer.read_struct(self.grid_anl_fmt1)
+                elif anlb_type == 2:
+                    self.analysis_block = self._buffer.read_struct(self.grid_anl_fmt2)
+
+            # We are neglecting other file keys at this time
         else:
-            self.navigation_block = self._buffer.read_struct(self.grid_nav_fmt)
-        
-        # ANLB
-        anlb_size = self._buffer.read_int('i')
-        anlb_start = self._buffer.set_mark()
-        if anlb_size != ANLB_SIZE:
-            raise ValueError('Analysis block size does not match GEMPAK specification')
-        else:
-            anlb_type = self._buffer.read_int('f')
-            self._buffer.jump_to(anlb_start)
-            if anlb_type == 1:
-                self.analysis_block = self._buffer.read_struct(self.grid_anl_fmt1)
-            elif anlb_type == 2:
-                self.analysis_block = self._buffer.read_struct(self.grid_anl_fmt2)
+            self.analysis_block = None
+            self.navigation_block = None
 
-        # We are neglecting other file keys at this time
+        # ROW KEYS
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.row_keys_ptr))
+        row_key_info = [ ('row_key{:d}'.format(n), '4s') for n in range(1, self.prod_desc.row_keys + 1) ]
+        row_keys_fmt = NamedStruct(row_key_info)
+        self.row_keys = self._buffer.read_struct(row_keys_fmt)
+
+        # ROW HEADERS
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.row_headers_ptr))
+        row_headers_info = [ ('row_header{:d}'.format(n), 'i') for n in range(1, self.prod_desc.rows + 1) ]
+        row_headers_fmt = NamedStruct(row_headers_info)
+        self.row_headers = self._buffer.read_struct(row_headers_fmt)
+
+        # COL KEYS
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.column_keys_ptr))
+        column_key_info = [ ('column_key{:d}'.format(n), '4s') for n in range(1, self.prod_desc.column_keys + 1) ]
+        column_keys_fmt = NamedStruct(column_key_info)
+        self.column_keys = self._buffer.read_struct(column_keys_fmt)
+
+        # COL HEADERS
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.column_headers_ptr))
+        column_headers_info = [ ('column_header{:d}'.format(n), 'i') for n in range(1, self.prod_desc.columns + 1) ]
+        column_headers_fmt = NamedStruct(column_headers_info)
+        self.column_headers = self._buffer.read_struct(column_headers_fmt)
+
+        # PARTS
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.parts_ptr))
+        parts_info = [ ('parts_key{:d}'.format(n), '4s') for n in range(1, self.prod_desc.parts + 1) ]
+        parts_fmt = NamedStruct(parts_info)
+        self.parts = self._buffer.read_struct(parts_fmt)
 
     def _process_gempak_header(self):
         """Read off the GEMPAK header from the file, if necessary."""
