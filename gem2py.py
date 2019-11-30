@@ -55,14 +55,24 @@ class GempakDM(AbstractDataStore):
 
     grid_anl_fmt1 = NamedStruct([('analysis_type', 'f'), ('delta_n', 'f'),
                                  ('delta_x', 'f'), ('delta_y', 'f'),
-                                 (None, 'x'), ('garea_bounds', 'f'),
-                                 ('extarea_bounds', 'f'), ('datarea_bounds', 'f'),
-                                 (None, '444x')])
+                                 (None, '4x'), ('garea_llcr_lat', 'f'),
+                                 ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'),
+                                 ('garea_urcr_lon', 'f'), ('extarea_llcr_lat', 'f'),
+                                 ('extarea_llcr_lon', 'f'), ('extarea_urcr_lat', 'f'),
+                                 ('extarea_urcr_lon', 'f'), ('datarea_llcr_lat', 'f'),
+                                 ('datarea_llcr_lon', 'f'), ('datarea_urcr_lat', 'f'),
+                                 ('datarea_urcrn_lon', 'f'), (None, '444x')])
 
     grid_anl_fmt2 = NamedStruct([('analysis_type', 'f'), ('delta_n', 'f'),
-                                 ('grid_ext', 'f'), ('garea', 'f'),
-                                 ('garea_bounds', 'f'), ('extarea_bounds', 'f'),
-                                 ('datarea_bounds', 'f'), (None, '440x')])
+                                 ('grid_ext_left', 'f'), ('grid_ext_down', 'f'),
+                                 ('grid_ext_right', 'f'), ('grid_ext_up', 'f'),
+                                 ('garea_llcr_lat', 'f'), ('garea_llcr_lon', 'f'),
+                                 ('garea_urcr_lat', 'f'), ('garea_urcr_lon', 'f'),
+                                 ('extarea_llcr_lat', 'f'), ('extarea_llcr_lon', 'f'),
+                                 ('extarea_urcr_lat', 'f'), ('extarea_urcr_lon', 'f'),
+                                 ('datarea_llcr_lat', 'f'), ('datarea_llcr_lon', 'f'),
+                                 ('datarea_urcr_lat', 'f'), ('datarea_urcrn_lon', 'f'),
+                                 (None, '440x')])
 
     def __init__(self, filename):
         """
