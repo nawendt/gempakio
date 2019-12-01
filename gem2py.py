@@ -138,23 +138,31 @@ class GempakDM(AbstractDataStore):
         row_keys_fmt = NamedStruct(row_key_info)
         self.row_keys = self._buffer.read_struct(row_keys_fmt)
 
-        # ROW HEADERS
-        self._buffer.jump_to(start, _word_to_position(self.prod_desc.row_headers_ptr))
-        row_headers_info = [ ('row_header{:d}'.format(n), 'i') for n in range(1, self.prod_desc.rows + 1) ]
-        row_headers_fmt = NamedStruct(row_headers_info)
-        self.row_headers = self._buffer.read_struct(row_headers_fmt)
-
         # COL KEYS
         self._buffer.jump_to(start, _word_to_position(self.prod_desc.column_keys_ptr))
         column_key_info = [ ('column_key{:d}'.format(n), '4s') for n in range(1, self.prod_desc.column_keys + 1) ]
         column_keys_fmt = NamedStruct(column_key_info)
         self.column_keys = self._buffer.read_struct(column_keys_fmt)
 
+        # Based on GEMPAK source, row/col headers have a 0th element in their Fortran arrays.
+        # This appears to be a flag value to say a header is used or not. Will account for that
+        # here. Do we need it?
+        # ROW HEADERS
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.row_headers_ptr))
+        # Just going to use a list of NamedStructs to store this now. Probably is a better way to do this.
+        self.row_headers = []
+        for n in range(1, self.prod_desc.rows + 1):
+            row_headers_info = [ ('row_header{:d}'.format(n), 'i') for n in range(0, self.prod_desc.row_keys + 1) ]
+            row_headers_fmt = NamedStruct(row_headers_info)
+            self.row_headers.append(self._buffer.read_struct(row_headers_fmt))
+
         # COL HEADERS
         self._buffer.jump_to(start, _word_to_position(self.prod_desc.column_headers_ptr))
-        column_headers_info = [ ('column_header{:d}'.format(n), 'i') for n in range(1, self.prod_desc.columns + 1) ]
-        column_headers_fmt = NamedStruct(column_headers_info)
-        self.column_headers = self._buffer.read_struct(column_headers_fmt)
+        self.column_headers = []
+        for n in range(1, self.prod_desc.columns + 1):
+            column_headers_info = [ ('column_header{:d}'.format(n), 'i') for n in range(0, self.prod_desc.column_keys + 1) ]
+            column_headers_fmt = NamedStruct(column_headers_info)
+            self.column_headers.append(self._buffer.read_struct(column_headers_fmt))
 
         # PARTS
         self._buffer.jump_to(start, _word_to_position(self.prod_desc.parts_ptr))
