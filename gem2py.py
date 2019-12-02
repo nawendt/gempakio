@@ -1,6 +1,7 @@
 """Tools to process GEMPAK-formatted products."""
 
 import contextlib
+from collections import defaultdict
 from datetime import datetime
 from enum import Enum
 from io import BytesIO
@@ -106,7 +107,6 @@ class GempakDM(AbstractDataStore):
             self.file_keys = self._buffer.read_struct(self.file_keys_format)
 
             file_key_blocks = self._buffer.set_mark()
-            # We are now at the NAVB/ANLB portion of the file.
             # NAVB
             navb_size = self._buffer.read_int('i')
             if navb_size != NAVB_SIZE:
@@ -166,9 +166,31 @@ class GempakDM(AbstractDataStore):
 
         # PARTS
         self._buffer.jump_to(start, _word_to_position(self.prod_desc.parts_ptr))
-        parts_info = [ ('parts_key{:d}'.format(n), '4s') for n in range(1, self.prod_desc.parts + 1) ]
+        parts_info = ([ ('part_name{:d}'.format(n), '4s') for n in range(1, self.prod_desc.parts + 1) ] + 
+                      [ ('header_length{:d}'.format(n), 'i') for n in range(1, self.prod_desc.parts + 1) ] +
+                      [ ('data_type{:d}'.format(n), 'i') for n in range(1, self.prod_desc.parts + 1) ] +
+                      [ ('parameter_count{:d}'.format(n), 'i') for n in range(1, self.prod_desc.parts + 1) ])
         parts_fmt = NamedStruct(parts_info)
         self.parts = self._buffer.read_struct(parts_fmt)
+
+        # PARAMETERS
+        self.parameters = defaultdict(lambda: defaultdict(list))
+        parts_dict = self.parts._asdict()
+        for n in range(1, self.prod_desc.parts + 1):
+            pname = parts_dict[parts_dict['parameter_name{:d}'.format(n)]]
+            self.parameters[pname] = {}
+            for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1):
+                self.parameters[pname]['names'] += self._buffer.read_binary(4, 's')
+
+            names_info = [ ('parameter_name{:d}'.format(m), '4s') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
+        for n in range(1, self.prod_desc.parts + 1):
+            scale_info = [ ('scale{:d}'.format(m), 'i') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
+        for n in range(1, self.prod_desc.parts + 1):
+            offset_info = [ ('offset{:d}'.format(m), 'i') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
+        for n in range(1, self.prod_desc.parts + 1):
+            bits_info = [ ('bits{:d}'.format(m), 'i') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
+            params_fmt = NamedStruct(params_info)
+            self.parameters.append(self._buffer.read_struct(params_fmt))
 
     def _process_gempak_header(self):
         """Read off the GEMPAK header from the file, if necessary."""
