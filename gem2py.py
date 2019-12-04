@@ -21,6 +21,10 @@ from metpy.io._tools import Bits, DictStruct, IOBuffer, NamedStruct, open_as_nee
 
 ANLB_SIZE = 128
 BYTES_PER_WORD = 4
+FILE_TYPES = {1: 'surface',
+              2: 'sounding',
+              3: 'grid',
+              }
 NAVB_SIZE = 256
 
 def _word_to_position(word, bytes_per_word=BYTES_PER_WORD):
@@ -74,6 +78,10 @@ class GempakDM(AbstractDataStore):
                                  ('datarea_llcr_lat', 'f'), ('datarea_llcr_lon', 'f'),
                                  ('datarea_urcr_lat', 'f'), ('datarea_urcrn_lon', 'f'),
                                  (None, '440x')])
+
+    data_management_fmt = NamedStruct([('next_free_word', 'i'),('max_free_pairs', 'i'),
+                                       ('actual_free_pairs', 'i'), ('last_word', 'i')] + 
+                                       [ ('free_word{:d}'.format(n), 'i') for n in range(1, 29) ])
 
     def __init__(self, filename):
         """
@@ -174,23 +182,33 @@ class GempakDM(AbstractDataStore):
         self.parts = self._buffer.read_struct(parts_fmt)
 
         # PARAMETERS
+        # No need to jump to any position as this follows parts information
         self.parameters = defaultdict(lambda: defaultdict(list))
         parts_dict = self.parts._asdict()
         for n in range(1, self.prod_desc.parts + 1):
-            pname = parts_dict[parts_dict['parameter_name{:d}'.format(n)]]
-            self.parameters[pname] = {}
+            pname = parts_dict['part_name{:d}'.format(n)].decode()
             for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1):
-                self.parameters[pname]['names'] += self._buffer.read_binary(4, 's')
+                self.parameters[pname]['names'].append(self._buffer.read_binary(4, 's')[0].decode())
+        for n in range(1, self.prod_desc.parts + 1):
+            pname = parts_dict['part_name{:d}'.format(n)].decode()
+            for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1):
+                self.parameters[pname]['scale'] += self._buffer.read_binary(1, 'i')
+        for n in range(1, self.prod_desc.parts + 1):
+            pname = parts_dict['part_name{:d}'.format(n)].decode()
+            for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1):
+                self.parameters[pname]['offset'] += self._buffer.read_binary(1, 'i')
+        for n in range(1, self.prod_desc.parts + 1):
+            pname = parts_dict['part_name{:d}'.format(n)].decode()
+            for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1):
+                self.parameters[pname]['bits'] += self._buffer.read_binary(1, 'i')
 
-            names_info = [ ('parameter_name{:d}'.format(m), '4s') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
-        for n in range(1, self.prod_desc.parts + 1):
-            scale_info = [ ('scale{:d}'.format(m), 'i') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
-        for n in range(1, self.prod_desc.parts + 1):
-            offset_info = [ ('offset{:d}'.format(m), 'i') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
-        for n in range(1, self.prod_desc.parts + 1):
-            bits_info = [ ('bits{:d}'.format(m), 'i') for m in range(1, parts_dict['parameter_count{:d}'.format(n)] + 1) ]
-            params_fmt = NamedStruct(params_info)
-            self.parameters.append(self._buffer.read_struct(params_fmt))
+        # DATA MANAGEMENT
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.data_mgmt_ptr))
+        self.data_management = self._buffer.read_struct(self.data_management_fmt)
+
+        # DATA
+        self._buffer.jump_to(start, _word_to_position(self.prod_desc.data_block_ptr))
+        
 
     def _process_gempak_header(self):
         """Read off the GEMPAK header from the file, if necessary."""
