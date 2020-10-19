@@ -293,9 +293,15 @@ class GempakFile():
     def fortran_ishift(i, shift):
         mask = 0xffffffff
         if shift > 0:
-            shifted = (i << shift) & mask
+            if i < 0:
+                shifted = (i & mask) << shift
+            else:    
+                shifted = i << shift
         elif shift < 0:
-            shifted = (i >> abs(shift))
+            if i < 0:
+                shifted = (i & mask) >> abs(shift)
+            else:
+                shifted = i >> abs(shift)
         elif shift == 0:
             shifted = i
         else:
@@ -441,14 +447,14 @@ class GempakGrid(GempakFile):
         if packing_type == PackingType.none:
             raise NotImplementedError('Upacked data not supported.')
         elif packing_type == PackingType.nmc:
-            # raise NotImplementedError('NMC unpacking not supported.')
+            raise NotImplementedError('NMC unpacking not supported.')
             integer_meta_fmt = [('bits', 'i'), ('missing_flag', 'i'), ('kxky', 'i')]
             real_meta_fmt = [('reference', 'f'), ('scale', 'f')]
             self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt, self.prefmt, 'GridMetaInt'))
             self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt, self.prefmt, 'GridMetaReal'))
             grid_start = self._buffer.set_mark()
         elif packing_type == PackingType.diff:
-            raise NotImplementedError('GEMPAK DIF unpacking not supported.')
+            # raise NotImplementedError('GEMPAK DIF unpacking not supported.')
             integer_meta_fmt = [('bits', 'i'), ('missing_flag', 'i'), ('kxky', 'i'), ('kx', 'i')]
             real_meta_fmt = [('reference', 'f'), ('scale', 'f'), ('diffmin', 'f')]
             self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt, self.prefmt, 'GridMetaInt'))
@@ -461,53 +467,57 @@ class GempakGrid(GempakFile):
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
             grid = np.zeros((self.ky, self.kx))
 
-            iword = 0
-            ibit = 1
-            first = True
-            for j in range(self.ky):
-                line = False
+            if lendat > 1:
+                iword = 0
+                ibit = 1
+                first = True
                 for i in range(self.kx):
-                    jshft = self.grid_meta_int.bits - 33
-                    idat = self.fortran_ishift(packed_buffer[iword], jshft)
-                    idat &= imiss
+                    line = False
+                    for j in range(self.ky):
+                        jshft = self.grid_meta_int.bits + ibit - 33
+                        idat = self.fortran_ishift(packed_buffer[iword], jshft)
+                        idat &= imiss
 
-                    if jshft > 0:
-                        jshft -= 32
-                        idat2 = self.fortran_ishift(packed_buffer[iword+1], jshft)
-                        idat |= idat2
+                        if jshft > 0:
+                            jshft -= 32
+                            idat2 = self.fortran_ishift(packed_buffer[iword+1], jshft)
+                            idat |= idat2
 
-                    ibit += self.grid_meta_int.bits
-                    if ibit > 32:
-                        ibit -= 21
-                        iword += 1
+                        ibit += self.grid_meta_int.bits
+                        if ibit > 32:
+                            ibit -= 21
+                            iword += 1
 
-                    if (self.grid_meta_int.missing_flag and idat == imiss):
-                        grid[j,i] = self.prod_desc.missing_float
-                    else:
-                        if first:
-                            grid[j,i] = self.grid_meta_real.reference
-                            psav = self.grid_meta_real.reference
-                            plin = self.grid_meta_real.reference
-                            line = True
-                            first = False
+                        if (self.grid_meta_int.missing_flag and idat == imiss):
+                            grid[j,i] = self.prod_desc.missing_float
                         else:
-                            if not line:
-                                grid[j,i] = plin + (self.grid_meta_real.diffmin 
-                                                    + idat * self.grid_meta_real.scale)
+                            if first:
+                                grid[j,i] = self.grid_meta_real.reference
+                                psav = self.grid_meta_real.reference
+                                plin = self.grid_meta_real.reference
                                 line = True
-                                plin = grid[j,i]
+                                first = False
                             else:
-                                grid[j,i] = psav + (self.grid_meta_real.diffmin
-                                                    + idat * self.grid_meta_real.scale)
-                            psav = grid[j,i]
+                                if not line:
+                                    grid[j,i] = plin + (self.grid_meta_real.diffmin 
+                                                        + idat * self.grid_meta_real.scale)
+                                    line = True
+                                    plin = grid[j,i]
+                                else:
+                                    grid[j,i] = psav + (self.grid_meta_real.diffmin
+                                                        + idat * self.grid_meta_real.scale)
+                                psav = grid[j,i]
+            else:
+                grid = None
+            return grid
 
-
-        elif packing_type == PackingType.grib:
+        elif packing_type == PackingType.grib or packing_type == PackingType.dec:
             integer_meta_fmt = [('bits', 'i'), ('missing_flag', 'i'), ('kxky', 'i')]
             real_meta_fmt = [('reference', 'f'), ('scale', 'f')]
             self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt, self.prefmt, 'GridMetaInt'))
             self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt, self.prefmt, 'GridMetaReal'))
             grid_start = self._buffer.set_mark()
+            # print(self._buffer._offset)
             # print(self.grid_meta_real.reference, self.grid_meta_real.scale)
             # print(self.grid_meta_int.missing_flag)
 
@@ -523,14 +533,23 @@ class GempakGrid(GempakFile):
                 ibit = 1
                 iword = 0
                 for cell in range(self.grid_meta_int.kxky):
+                    # print('INFO:: -----iword-----: {}'.format(cell))
+                    # print('INFO:: idata: {}'.format(packed_buffer[iword]))
                     jshft = self.grid_meta_int.bits + ibit - 33
+                    # print('INFO:: jshft1: {}'.format(jshft))
                     idat = self.fortran_ishift(packed_buffer[iword], jshft)
+                    # print('INFO:: idat_shift: {}'.format(idat))
                     idat &= imax
+                    # print('INFO:: idat_and: {}'.format(idat))
 
                     if jshft > 0:
                         jshft -= 32
+                        # print('INFO:: jshft_gt0: {}'.format(jshft))
                         idat2 = self.fortran_ishift(packed_buffer[iword+1], jshft)
+                        # print('INFO:: idat_next: {}'.format(packed_buffer[iword+1]))
+                        # print('INFO:: idat2_shift: {}'.format(idat2))
                         idat |= idat2
+                        # print('INFO:: idat_or: {}'.format(idat))
 
                     if (idat == imax) and self.grid_meta_int.missing_flag:
                         grid[cell] = self.prod_desc.missing_float
@@ -539,8 +558,10 @@ class GempakGrid(GempakFile):
                     # print(idat, grid[cell])
                     
                     ibit += self.grid_meta_int.bits
+                    # print('INFO:: ibit: {}'.format(ibit))
                     if ibit > 32:
                         ibit -= 32
+                        # print('INFO:: ibit_gt32: {}'.format(ibit))
                         iword += 1
             else:
                 grid = None
@@ -552,6 +573,8 @@ class GempakGrid(GempakFile):
             self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt, self.prefmt, 'GridMetaInt'))
             self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt, self.prefmt, 'GridMetaReal'))
             grid_start = self._buffer.set_mark()
+        else:
+            raise NotImplementedError('No method for unknown grid packing {}'.format(packing_type.name))
 
     def to_xarray(self):
         grids = []
