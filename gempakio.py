@@ -444,14 +444,21 @@ class GempakGrid(GempakFile):
         self.lon, self.lat = transform(xx, yy, inverse=True)
 
     def _unpack_grid(self, packing_type, part):
-        print(packing_type)
+        # print(packing_type)
         if packing_type == PackingType.none:
             # raise NotImplementedError('Upacked data not supported.')
             lendat = self.data_header_length - part.header_length - 1
-            buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
-            buffer = self._buffer.read_struct(struct.Struct(buffer_fmt))
-            grid = np.zeros((self.ky, self.kx))
-            print(lendat)
+
+            if lendat > 1:
+                buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
+                buffer = self._buffer.read_struct(struct.Struct(buffer_fmt))
+                grid = np.zeros(self.ky * self.kx)
+                grid[...] = buffer
+            else:
+                grid = None
+            
+            return grid
+
         elif packing_type == PackingType.nmc:
             raise NotImplementedError('NMC unpacking not supported.')
             integer_meta_fmt = [('bits', 'i'), ('missing_flag', 'i'), ('kxky', 'i')]
@@ -480,28 +487,28 @@ class GempakGrid(GempakFile):
                 for j in range(self.ky):
                     line = False
                     for i in range(self.kx):
-                        print('INFO:: -----iword----- {}'.format(iword+1))
+                        # print('INFO:: -----iword----- {}'.format(iword+1))
                         jshft = self.grid_meta_int.bits + ibit - 33
-                        print('INFO:: idata: {}'.format(packed_buffer[iword]))
-                        print('INFO:: jshft: {}'.format(jshft))
+                        # print('INFO:: idata: {}'.format(packed_buffer[iword]))
+                        # print('INFO:: jshft: {}'.format(jshft))
                         idat = self.fortran_ishift(packed_buffer[iword], jshft)
-                        print('INFO:: idat_shift: {}'.format(idat))
+                        # print('INFO:: idat_shift: {}'.format(idat))
                         idat &= imiss
-                        print('INFO:: idat_and: {}'.format(idat))
+                        # print('INFO:: idat_and: {}'.format(idat))
 
                         if jshft > 0:
                             jshft -= 32
-                            print('INFO:: jshft_gt0: {}'.format(jshft))
+                            # print('INFO:: jshft_gt0: {}'.format(jshft))
                             idat2 = self.fortran_ishift(packed_buffer[iword+1], jshft)
-                            print('INFO:: idat2_shift: {}'.format(idat2))
+                            # print('INFO:: idat2_shift: {}'.format(idat2))
                             idat |= idat2
-                            print('INFO:: idat_or: {}'.format(idat))
+                            # print('INFO:: idat_or: {}'.format(idat))
 
                         ibit += self.grid_meta_int.bits
-                        print('INFO:: ibit: {}'.format(ibit))
+                        # print('INFO:: ibit: {}'.format(ibit))
                         if ibit > 32:
                             ibit -= 32
-                            print('INFO:: ibit_gt32: {}'.format(ibit))
+                            # print('INFO:: ibit_gt32: {}'.format(ibit))
                             iword += 1
 
                         if (self.grid_meta_int.missing_flag and idat == imiss):
@@ -509,7 +516,7 @@ class GempakGrid(GempakFile):
                         else:
                             if first:
                                 grid[j,i] = self.grid_meta_real.reference
-                                print('INFO:: grid_first: {}'.format(grid[j,i]))
+                                # print('INFO:: grid_first: {}'.format(grid[j,i]))
                                 psav = self.grid_meta_real.reference
                                 plin = self.grid_meta_real.reference
                                 line = True
@@ -518,16 +525,17 @@ class GempakGrid(GempakFile):
                                 if not line:
                                     grid[j,i] = plin + (self.grid_meta_real.diffmin 
                                                         + idat * self.grid_meta_real.scale)
-                                    print('INFO:: grid_line: {}'.format(grid[j,i]))
+                                    # print('INFO:: grid_line: {}'.format(grid[j,i]))
                                     line = True
                                     plin = grid[j,i]
                                 else:
                                     grid[j,i] = psav + (self.grid_meta_real.diffmin
                                                         + idat * self.grid_meta_real.scale)
-                                    print('INFO:: grid: {}'.format(grid[j,i]))
+                                    # print('INFO:: grid: {}'.format(grid[j,i]))
                                 psav = grid[j,i]
             else:
                 grid = None
+
             return grid
 
         elif packing_type == PackingType.grib or packing_type == PackingType.dec:
@@ -584,6 +592,7 @@ class GempakGrid(GempakFile):
                         iword += 1
             else:
                 grid = None
+
             return grid
         elif packing_type == PackingType.grib2:
             raise NotImplementedError('GRIB2 unpacking not supported.')
