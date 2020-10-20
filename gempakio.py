@@ -444,13 +444,11 @@ class GempakGrid(GempakFile):
         self.lon, self.lat = transform(xx, yy, inverse=True)
 
     def _unpack_grid(self, packing_type, part):
-        # print(packing_type)
         if packing_type == PackingType.none:
-            # raise NotImplementedError('Upacked data not supported.')
             lendat = self.data_header_length - part.header_length - 1
 
             if lendat > 1:
-                buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
+                buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
                 buffer = self._buffer.read_struct(struct.Struct(buffer_fmt))
                 grid = np.zeros(self.ky * self.kx)
                 grid[...] = buffer
@@ -467,7 +465,6 @@ class GempakGrid(GempakFile):
             self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt, self.prefmt, 'GridMetaReal'))
             grid_start = self._buffer.set_mark()
         elif packing_type == PackingType.diff:
-            # raise NotImplementedError('GEMPAK DIF unpacking not supported.')
             integer_meta_fmt = [('bits', 'i'), ('missing_flag', 'i'), ('kxky', 'i'), ('kx', 'i')]
             real_meta_fmt = [('reference', 'f'), ('scale', 'f'), ('diffmin', 'f')]
             self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt, self.prefmt, 'GridMetaInt'))
@@ -487,28 +484,18 @@ class GempakGrid(GempakFile):
                 for j in range(self.ky):
                     line = False
                     for i in range(self.kx):
-                        # print('INFO:: -----iword----- {}'.format(iword+1))
                         jshft = self.grid_meta_int.bits + ibit - 33
-                        # print('INFO:: idata: {}'.format(packed_buffer[iword]))
-                        # print('INFO:: jshft: {}'.format(jshft))
                         idat = self.fortran_ishift(packed_buffer[iword], jshft)
-                        # print('INFO:: idat_shift: {}'.format(idat))
                         idat &= imiss
-                        # print('INFO:: idat_and: {}'.format(idat))
 
                         if jshft > 0:
                             jshft -= 32
-                            # print('INFO:: jshft_gt0: {}'.format(jshft))
                             idat2 = self.fortran_ishift(packed_buffer[iword+1], jshft)
-                            # print('INFO:: idat2_shift: {}'.format(idat2))
                             idat |= idat2
-                            # print('INFO:: idat_or: {}'.format(idat))
 
                         ibit += self.grid_meta_int.bits
-                        # print('INFO:: ibit: {}'.format(ibit))
                         if ibit > 32:
                             ibit -= 32
-                            # print('INFO:: ibit_gt32: {}'.format(ibit))
                             iword += 1
 
                         if (self.grid_meta_int.missing_flag and idat == imiss):
@@ -516,7 +503,6 @@ class GempakGrid(GempakFile):
                         else:
                             if first:
                                 grid[j,i] = self.grid_meta_real.reference
-                                # print('INFO:: grid_first: {}'.format(grid[j,i]))
                                 psav = self.grid_meta_real.reference
                                 plin = self.grid_meta_real.reference
                                 line = True
@@ -525,13 +511,11 @@ class GempakGrid(GempakFile):
                                 if not line:
                                     grid[j,i] = plin + (self.grid_meta_real.diffmin 
                                                         + idat * self.grid_meta_real.scale)
-                                    # print('INFO:: grid_line: {}'.format(grid[j,i]))
                                     line = True
                                     plin = grid[j,i]
                                 else:
                                     grid[j,i] = psav + (self.grid_meta_real.diffmin
                                                         + idat * self.grid_meta_real.scale)
-                                    # print('INFO:: grid: {}'.format(grid[j,i]))
                                 psav = grid[j,i]
             else:
                 grid = None
@@ -544,51 +528,34 @@ class GempakGrid(GempakFile):
             self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt, self.prefmt, 'GridMetaInt'))
             self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt, self.prefmt, 'GridMetaReal'))
             grid_start = self._buffer.set_mark()
-            # print(self._buffer._offset)
-            # print(self.grid_meta_real.reference, self.grid_meta_real.scale)
-            # print(self.grid_meta_int.missing_flag)
 
             lendat = self.data_header_length - part.header_length - 6
-            # print('lendat: %d' % lendat)
             packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
 
             grid = np.zeros(self.grid_meta_int.kxky)
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-            # print('\t{}'.format(len(packed_buffer)))
             if lendat > 1:
                 imax = 2**self.grid_meta_int.bits - 1
                 ibit = 1
                 iword = 0
                 for cell in range(self.grid_meta_int.kxky):
-                    # print('INFO:: -----iword-----: {}'.format(cell))
-                    # print('INFO:: idata: {}'.format(packed_buffer[iword]))
                     jshft = self.grid_meta_int.bits + ibit - 33
-                    # print('INFO:: jshft1: {}'.format(jshft))
                     idat = self.fortran_ishift(packed_buffer[iword], jshft)
-                    # print('INFO:: idat_shift: {}'.format(idat))
                     idat &= imax
-                    # print('INFO:: idat_and: {}'.format(idat))
 
                     if jshft > 0:
                         jshft -= 32
-                        # print('INFO:: jshft_gt0: {}'.format(jshft))
                         idat2 = self.fortran_ishift(packed_buffer[iword+1], jshft)
-                        # print('INFO:: idat_next: {}'.format(packed_buffer[iword+1]))
-                        # print('INFO:: idat2_shift: {}'.format(idat2))
                         idat |= idat2
-                        # print('INFO:: idat_or: {}'.format(idat))
 
                     if (idat == imax) and self.grid_meta_int.missing_flag:
                         grid[cell] = self.prod_desc.missing_float
                     else:
                         grid[cell] = self.grid_meta_real.reference + (idat * self.grid_meta_real.scale)
-                    # print(idat, grid[cell])
                     
                     ibit += self.grid_meta_int.bits
-                    # print('INFO:: ibit: {}'.format(ibit))
                     if ibit > 32:
                         ibit -= 32
-                        # print('INFO:: ibit_gt32: {}'.format(ibit))
                         iword += 1
             else:
                 grid = None
@@ -616,7 +583,6 @@ class GempakGrid(GempakFile):
             packing_type_from_file = PackingType(self._buffer.read_int('i'))
             packing_type = ( packing_type_from_file if self.packing_type_from_user is None 
                              else PackingType[self.packing_type_from_user] )
-            # print(n, self.data_ptr, header.GPM1, header.GDT1 + header.GTM1[1], packing_type)
             ftype, ftime = header.GTM1
             init = header.GDT1
             valid = init + ftime
@@ -625,8 +591,10 @@ class GempakGrid(GempakFile):
             # accum = re.search('^[PSCWIZAHGNRL](?P<accum>\d{2,3})[IM]$', header.GPM1, flags=re.I)
             data = self._unpack_grid(packing_type, part)
             if data is not None:
-                data = np.ma.array(data.reshape((self.ky, self.kx)), mask=data == self.prod_desc.missing_float)
-                # print(n, data.max(), data.min())
+                if data.ndim < 2:
+                    data = np.ma.array(data.reshape((self.ky, self.kx)), mask=data == self.prod_desc.missing_float)
+                else:
+                    data = np.ma.array(data, mask=data == self.prod_desc.missing_float)
                 grids.append(data)
             #     xrda = xr.DataArray(data = data[np.newaxis, np.newaxis, ...],
             #                         coords = {'time': [valid], 
