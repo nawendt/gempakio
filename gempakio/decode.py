@@ -18,7 +18,7 @@ import xarray as xr
 
 from .gemcalc import (interp_logp_data, interp_logp_height,
                       interp_logp_pressure, interp_moist_height)
-from .tools import IOBuffer, NamedStruct, open_as_needed
+from .tools import IOBuffer, NamedStruct
 
 
 ANLB_SIZE = 128
@@ -185,7 +185,7 @@ class GempakFile():
 
     def __init__(self, file):
         """Instantiate GempakFile object from file."""
-        fobj = open_as_needed(file)
+        fobj = open(file, 'rb')
 
         with contextlib.closing(fobj):
             self._buffer = IOBuffer.fromfile(fobj)
