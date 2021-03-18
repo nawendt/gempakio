@@ -1,1 +1,2 @@
-from .decode import GempakGrid, GempakSounding
+from .decode import GempakGrid, GempakSounding, GempakSurface
+

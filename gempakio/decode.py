@@ -118,7 +118,9 @@ class DataSource(Enum):
     watch_by_county = 7
     unknown = 99
     text = 100
-    raob = 104
+    metar2 = 102
+    ship2 = 103
+    raob_buoy2 = 104
 
 
 GEMPAK_HEADER = 'GEMPAK DATA MANAGEMENT FILE '
@@ -1503,4 +1505,54 @@ class GempakSounding(GempakFile):
 class GempakSurface(GempakFile):
     """Subclass of GempakFile specific to GEMPAK surface data."""
 
-    pass
+    def __init__(self, file, *args, **kwargs):
+        super().__init__(file)
+
+        # Row Headers
+        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.row_headers_ptr))
+        self.row_headers = []
+        row_headers_info = self._key_types(self.row_keys)
+        row_headers_info.extend([(None, None)])
+        row_headers_fmt = NamedStruct(row_headers_info, self.prefmt, 'RowHeaders')
+        for _ in range(1, self.prod_desc.rows + 1):
+            if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
+                self.row_headers.append(self._buffer.read_struct(row_headers_fmt))
+
+        # Column Headers
+        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.column_headers_ptr))
+        self.column_headers = []
+        column_headers_info = self._key_types(self.column_keys)
+        column_headers_info.extend([(None, None)])
+        column_headers_fmt = NamedStruct(column_headers_info, self.prefmt, 'ColumnHeaders')
+        for _ in range(1, self.prod_desc.columns + 1):
+            if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
+                self.column_headers.append(self._buffer.read_struct(column_headers_fmt))
+
+        self._get_surface_type()
+
+    def _get_surface_type(self):
+        if len(self.row_headers) == 1:
+            self.surface_type = 'ship'
+        elif 'DATE' in self.row_keys:
+            self.surface_type = 'standard'
+        elif 'DATE' in self.column_keys:
+            self.surface_type = 'climate'
+        else:
+            raise RuntimeError('Unknown surface data type')
+    
+    def _key_types(self, keys):
+        header_info = [(key, '4s', self._decode_strip) if key == 'STID'
+                       else (key, 'i') if key == 'STNM'
+                       else (key, 'i', lambda x: x / 100) if key == 'SLAT'
+                       else (key, 'i', lambda x: x / 100) if key == 'SLON'
+                       else (key, 'i') if key == 'SELV'
+                       else (key, '4s', self._decode_strip) if key == 'STAT'
+                       else (key, '4s', self._decode_strip) if key == 'COUN'
+                       else (key, '4s', self._decode_strip) if key == 'STD2'
+                       else (key, 'i', self._make_date) if key == 'DATE'
+                       else (key, 'i', self._make_time) if key == 'TIME'
+                       else (key, 'i')
+                       for key in keys]
+        
+        return header_info
+
