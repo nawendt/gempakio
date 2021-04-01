@@ -79,10 +79,10 @@ def moist_hydrostatic_height(z_bot, pres_bot, pres_top, scale_height,
     See GEMPAK function PR_MHGT
     """
     if (z_bot == missing or pres_bot == missing
-       or pres_top or scale_height == missing):
+       or pres_top == missing or scale_height == missing):
         mhgt = missing
     else:
-        mhgt = z_bot + scale_height * np.loa(pres_bot / pres_top)
+        mhgt = z_bot + scale_height * np.log(pres_bot / pres_top)
     return mhgt
 
 
@@ -124,14 +124,12 @@ def scale_height(tmpc_bot, tmpc_top, dwpc_bot, dwpc_top,
     """
     if (tmpc_bot == missing
        or tmpc_top == missing
-       or dwpc_bot == missing
-       or dwpc_top == missing
        or pres_bot == missing
        or pres_top == missing):
         sclh = missing
     else:
-        tvbk = virtual_temperature(tmpc_bot, pres_bot, missing)
-        tvtk = virtual_temperature(tmpc_top, pres_top, missing)
+        tvbk = virtual_temperature(tmpc_bot, dwpc_bot, pres_bot, missing)
+        tvtk = virtual_temperature(tmpc_top,  dwpc_top, pres_top, missing)
         if tvbk == missing or tvtk == missing:
             sclh = missing
         else:
@@ -359,8 +357,8 @@ def interp_logp_pressure(sounding, missing=-9999):
     ilev = -1
     klev = -1
     size = len(sounding['PRES'])
-    pb = missing
-    zb = missing
+    pt = missing
+    zt = missing
 
     while i < size:
         p = sounding['PRES'][i]
@@ -436,7 +434,7 @@ def interp_moist_height(sounding, missing=-9999):
                    and sounding['PRES'][jlev] != missing
                    and sounding['TEMP'][jlev] != missing):
                     H = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
-                    znew = moist_hydrostatic_height(zb, pb, pt, H)
+                    znew = moist_hydrostatic_height(zb, pb, pt, H, missing)
                     tb = tt
                     tdb = tdt
                     pb = pt
@@ -462,4 +460,3 @@ def interp_moist_height(sounding, missing=-9999):
             pbb = p
 
         ilev = klev
-

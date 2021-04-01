@@ -184,4 +184,3 @@ class IOBuffer:
     def __len__(self):
         """Return the amount of data in the buffer."""
         return len(self._data)
-
