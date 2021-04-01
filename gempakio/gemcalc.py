@@ -1,3 +1,4 @@
+# Copyright 2021 Nathan Wendt
 """GEMPAK calculations."""
 
 import numpy as np
@@ -129,7 +130,7 @@ def scale_height(tmpc_bot, tmpc_top, dwpc_bot, dwpc_top,
         sclh = missing
     else:
         tvbk = virtual_temperature(tmpc_bot, dwpc_bot, pres_bot, missing)
-        tvtk = virtual_temperature(tmpc_top,  dwpc_top, pres_top, missing)
+        tvtk = virtual_temperature(tmpc_top, dwpc_top, pres_top, missing)
         if tvbk == missing or tvtk == missing:
             sclh = missing
         else:
@@ -358,7 +359,9 @@ def interp_logp_pressure(sounding, missing=-9999):
     klev = -1
     size = len(sounding['PRES'])
     pt = missing
+    pb = missing
     zt = missing
+    zb = missing
 
     while i < size:
         p = sounding['PRES'][i]
@@ -372,7 +375,7 @@ def interp_logp_pressure(sounding, missing=-9999):
         if ilev != -1 and klev != -1:
             for j in range(ilev + 1, klev):
                 z = sounding['HGHT'][j]
-                if z != missing:
+                if z != missing and zb != missing and pb != missing:
                     sounding['PRES'][j] = (
                         pb * np.exp((z - zb) * np.log(pt / pb) / (zt - zb))
                     )

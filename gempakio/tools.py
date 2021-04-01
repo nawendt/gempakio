@@ -1,7 +1,8 @@
+# Copyright 2021 Nathan Wendt
 """Tools for reading GEMPAK files."""
 
-import struct
 from collections import namedtuple
+import struct
 
 import numpy as np
 
@@ -129,7 +130,9 @@ class IOBuffer:
         else:
             order = '@'
 
-        return list(self.read_struct(struct.Struct(order + '{:d}'.format(int(num)) + item_type)))
+        return list(
+            self.read_struct(struct.Struct(order + '{:d}'.format(int(num)) + item_type))
+        )
 
     def read_int(self, size, endian, signed):
         """Parse the current buffer offset as the specified integer code."""
