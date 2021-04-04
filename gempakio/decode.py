@@ -1,5 +1,7 @@
-# Copyright 2021 Nathan Wendt
-"""Tools to process GEMPAK-formatted products."""
+# Copyright (c) 2021 Nathan Wendt.
+# Distributed under the terms of the BSD 3-Clause License.
+# SPDX-License-Identifier: BSD-3-Clause
+"""Classes for decoding various GEMPAK file formats."""
 
 import bisect
 from collections import namedtuple
@@ -11,6 +13,7 @@ from enum import Enum
 from itertools import product
 import logging
 import math
+from pathlib import Path
 import struct
 import sys
 
@@ -18,8 +21,8 @@ import numpy as np
 import pyproj
 import xarray as xr
 
-from .gemcalc import (interp_logp_data, interp_logp_height,
-                      interp_logp_pressure, interp_moist_height)
+from .gemcalc import (interp_logp_height, interp_logp_pressure,
+                      interp_missing_data, interp_moist_height)
 from .tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
@@ -223,6 +226,8 @@ class GempakFile():
 
     def __init__(self, file):
         """Instantiate GempakFile object from file."""
+        if isinstance(file, Path):
+            file = str(file)
         fobj = open(file, 'rb')
 
         with contextlib.closing(fobj):
@@ -353,6 +358,7 @@ class GempakFile():
                         self.parameters[n][attr] += self._buffer.read_binary(*fmt)
 
     def _swap_bytes(self, binary):
+        """Swap between little and big endian."""
         self.swaped_bytes = (struct.pack('@i', 1) != binary)
 
         if self.swaped_bytes:
@@ -376,6 +382,7 @@ class GempakFile():
 
     @staticmethod
     def _convert_dattim(dattim):
+        """Convert GEMPAK DATTIM integer to datetime object."""
         if dattim:
             if dattim < 100000000:
                 dt = datetime.strptime(str(dattim), '%y%m%d')
@@ -387,6 +394,7 @@ class GempakFile():
 
     @staticmethod
     def _convert_ftime(ftime):
+        """Convert GEMPAK forecast time and type integer."""
         if ftime:
             iftype = ForecastType(ftime // 100000)
             iftime = ftime - iftype.value * 100000
@@ -399,14 +407,17 @@ class GempakFile():
 
     @staticmethod
     def _convert_level(level):
-        if (isinstance(level, int)
-           or isinstance(level, float)):
+        """Convert levels."""
+        if ((isinstance(level, int)
+           or isinstance(level, float))
+           and level >= 0):
             return level
         else:
             return None
 
     @staticmethod
     def _convert_vertical_coord(coord):
+        """Convert integer vertical coordinate to name."""
         if coord <= 8:
             return VerticalCoordinates(coord).name.upper()
         else:
@@ -414,11 +425,13 @@ class GempakFile():
 
     @staticmethod
     def _convert_parms(parm):
+        """Convert parameter strings."""
         dparm = parm.decode()
         return dparm.strip() if dparm.strip() else ''
 
     @staticmethod
     def _fortran_ishift(i, shift):
+        """Python-friendly bit shifting."""
         mask = 0xffffffff
         if shift > 0:
             shifted = ctypes.c_int32(i << shift).value
@@ -435,14 +448,17 @@ class GempakFile():
 
     @staticmethod
     def _decode_strip(b):
+        """Decode bytes to string and strip whitespace."""
         return b.decode().strip()
 
     @staticmethod
     def _make_date(dattim):
+        """Make a date object from GEMPAK DATTIM integer."""
         return GempakFile._convert_dattim(dattim).date()
 
     @staticmethod
     def _make_time(t):
+        """Make a time object from GEMPAK FTIME integer."""
         string = '{:04d}'.format(t)
         return datetime.strptime(string, '%H%M').time()
 
@@ -456,7 +472,7 @@ class GempakFile():
 
         pwords = (sum(parameters['bits']) - 1) // 32 + 1
         npack = (length - 1) // pwords + 1
-        unpacked = np.ones(npack * nparms) * self.prod_desc.missing_float
+        unpacked = np.ones(npack * nparms, dtype=np.float32) * self.prod_desc.missing_float
         if npack * pwords != length:
             raise ValueError('Unpacking length mismatch.')
 
@@ -506,6 +522,7 @@ class GempakGrid(GempakFile):
     """Subclass of GempakFile specific to GEMPAK gridded data."""
 
     def __init__(self, file, *args, **kwargs):
+        """Instantiate GempakGrid object from file."""
         super().__init__(file)
 
         datetime_names = ['GDT1', 'GDT2']
@@ -568,6 +585,7 @@ class GempakGrid(GempakFile):
         return self._gdinfo
 
     def _get_crs(self):
+        """Create CRS from GEMPAK navigation block."""
         gemproj = self.navigation_block.projection
         proj, ptype = GEMPROJ_TO_PROJ[gemproj]
 
@@ -610,24 +628,29 @@ class GempakGrid(GempakFile):
                                              'lat_2': lat_2})
 
     def _get_coordinates(self):
+        """Use GEMPAK navigation block to define coordinates.
+
+        Defines geographic and projection coordinates for the object.
+        """
         transform = pyproj.Proj(self.crs)
         llx, lly = transform(self.navigation_block.lower_left_lon,
                              self.navigation_block.lower_left_lat)
         urx, ury = transform(self.navigation_block.upper_right_lon,
                              self.navigation_block.upper_right_lat)
-        self.x = np.linspace(llx, urx, self.kx)
-        self.y = np.linspace(lly, ury, self.ky)
+        self.x = np.linspace(llx, urx, self.kx, dtype=np.float32)
+        self.y = np.linspace(lly, ury, self.ky, dtype=np.float32)
         xx, yy = np.meshgrid(self.x, self.y)
         self.lon, self.lat = transform(xx, yy, inverse=True)
 
     def _unpack_grid(self, packing_type, part):
+        """Read raw GEMPAK grid integers and unpack into floats."""
         if packing_type == PackingType.none:
             lendat = self.data_header_length - part.header_length - 1
 
             if lendat > 1:
                 buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
                 buffer = self._buffer.read_struct(struct.Struct(buffer_fmt))
-                grid = np.zeros(self.ky * self.kx)
+                grid = np.zeros(self.ky * self.kx, dtype=np.float32)
                 grid[...] = buffer
             else:
                 grid = None
@@ -661,7 +684,7 @@ class GempakGrid(GempakFile):
             lendat = self.data_header_length - part.header_length - 8
             packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-            grid = np.zeros((self.ky, self.kx))
+            grid = np.zeros((self.ky, self.kx), dtype=np.float32)
 
             if lendat > 1:
                 iword = 0
@@ -722,7 +745,7 @@ class GempakGrid(GempakFile):
             lendat = self.data_header_length - part.header_length - 6
             packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
 
-            grid = np.zeros(self.grid_meta_int.kxky)
+            grid = np.zeros(self.grid_meta_int.kxky, dtype=np.float32)
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
             if lendat > 1:
                 imax = 2**self.grid_meta_int.bits - 1
@@ -847,7 +870,7 @@ class GempakGrid(GempakFile):
         matched = list(matched)
 
         if len(matched) < 1:
-            raise RuntimeError('No grids were matched.')
+            raise KeyError('No grids were matched with given parameters.')
 
         gridno = [g.GRIDNO for g in matched]
 
@@ -881,9 +904,11 @@ class GempakGrid(GempakFile):
                 if data is not None:
                     if data.ndim < 2:
                         data = np.ma.array(data.reshape((self.ky, self.kx)),
-                                           mask=data == self.prod_desc.missing_float)
+                                           mask=data == self.prod_desc.missing_float,
+                                           dtype=np.float32)
                     else:
-                        data = np.ma.array(data, mask=data == self.prod_desc.missing_float)
+                        data = np.ma.array(data, mask=data == self.prod_desc.missing_float,
+                                           dtype=np.float32)
 
                     xrda = xr.DataArray(
                         data=data[np.newaxis, np.newaxis, ...],
@@ -911,6 +936,7 @@ class GempakSounding(GempakFile):
     """Subclass of GempakFile specific to GEMPAK sounding data."""
 
     def __init__(self, file, *args, **kwargs):
+        """Instantiate GempakSounding object from file."""
         super().__init__(file)
 
         # Row Headers
@@ -969,6 +995,7 @@ class GempakSounding(GempakFile):
                     )
 
     def _unpack_merged(self, sndno):
+        """Unpack merged sounding data."""
         soundings = []
         for irow, row_head in enumerate(self.row_headers):
             for icol, col_head in enumerate(self.column_headers):
@@ -1020,12 +1047,15 @@ class GempakSounding(GempakFile):
                             sounding[param] = unpacked[iprm::nparms]
                     else:
                         for iprm, param in enumerate(parameters['name']):
-                            sounding[param] = packed_buffer[iprm::nparms]
+                            sounding[param] = np.array(
+                                packed_buffer[iprm::nparms], dtype=np.float32
+                            )
 
                 soundings.append(sounding)
         return soundings
 
     def _unpack_unmerged(self, sndno):
+        """Unpack unmerged sounding data."""
         soundings = []
         for irow, row_head in enumerate(self.row_headers):
             for icol, col_head in enumerate(self.column_headers):
@@ -1087,12 +1117,15 @@ class GempakSounding(GempakFile):
                                     packed_buffer[iprm].decode().strip()
                                 )
                         else:
-                            sounding[part.name][param] = packed_buffer[iprm::nparms]
+                            sounding[part.name][param] = (
+                                np.array(packed_buffer[iprm::nparms], dtype=np.float32)
+                            )
 
                 soundings.append(self._merge_sounding(sounding))
         return soundings
 
     def _merge_sounding(self, parts):
+        """Merge unmerged sounding data."""
         merged = {'STID': parts['STID'],
                   'STNM': parts['STNM'],
                   'SLAT': parts['SLAT'],
@@ -1242,6 +1275,7 @@ class GempakSounding(GempakFile):
 
         # Merge MAN temperature
         bgl = 0
+        qcman = []
         if num_man_levels >= 2 or num_above_man_levels >= 1:
             if merged['PRES'][0] == self.prod_desc.missing_float:
                 plast = 2000
@@ -1258,7 +1292,13 @@ class GempakSounding(GempakFile):
                         merged[pname].append(pval[i])
                     plast = merged['PRES'][-1]
                 else:
-                    bgl += 1
+                    if parts['TTAA']['PRES'][i] > merged['PRES'][0]:
+                        bgl += 1
+                    else:
+                        # GEMPAK ignores MAN data with missing TEMP/HGHT and does not
+                        # interpolate for them.
+                        if parts['TTAA']['PRES'][i] != self.prod_desc.missing_float:
+                            qcman.append(parts['TTAA']['PRES'][i])
 
         if num_above_man_levels >= 1:
             for i in range(num_above_man_levels):
@@ -1271,7 +1311,7 @@ class GempakSounding(GempakFile):
                     plast = merged['PRES'][-1]
 
         # Merge MAN wind
-        if num_man_wind_levels >= 1 and num_man_levels >= 1:
+        if num_man_wind_levels >= 1 and num_man_levels >= 1 and len(merged['PRES']) >= 2:
             for iwind, pres in enumerate(parts['PPAA']['PRES']):
                 if pres in merged['PRES'][1:]:
                     loc = merged['PRES'].index(pres)
@@ -1279,18 +1319,19 @@ class GempakSounding(GempakFile):
                         merged['DRCT'][loc] = parts['PPAA']['DRCT'][iwind]
                         merged['SPED'][loc] = parts['PPAA']['SPED'][iwind]
                 else:
-                    size = len(merged['PRES'])
-                    loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
-                    if loc >= size + 1:
-                        loc = -1
-                    merged['PRES'].insert(loc, pres)
-                    merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                    merged['DWPT'].insert(loc, self.prod_desc.missing_float)
-                    merged['DRCT'].insert(loc, parts['PPAA']['DRCT'][iwind])
-                    merged['SPED'].insert(loc, parts['PPAA']['SPED'][iwind])
-                    merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                    if pres not in qcman:
+                        size = len(merged['PRES'])
+                        loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
+                        if loc >= size + 1:
+                            loc = -1
+                        merged['PRES'].insert(loc, pres)
+                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
+                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
+                        merged['DRCT'].insert(loc, parts['PPAA']['DRCT'][iwind])
+                        merged['SPED'].insert(loc, parts['PPAA']['SPED'][iwind])
+                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
 
-        if num_above_man_wind_levels >= 1 and num_man_levels >= 1:
+        if num_above_man_wind_levels >= 1 and num_man_levels >= 1 and len(merged['PRES']) >= 2:
             for iwind, pres in enumerate(parts['PPCC']['PRES']):
                 if pres in merged['PRES'][1:]:
                     loc = merged['PRES'].index(pres)
@@ -1298,16 +1339,17 @@ class GempakSounding(GempakFile):
                         merged['DRCT'][loc] = parts['PPCC']['DRCT'][iwind]
                         merged['SPED'][loc] = parts['PPCC']['SPED'][iwind]
                 else:
-                    size = len(merged['PRES'])
-                    loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
-                    if loc >= size + 1:
-                        loc = -1
-                    merged['PRES'].insert(loc, pres)
-                    merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                    merged['DWPT'].insert(loc, self.prod_desc.missing_float)
-                    merged['DRCT'].insert(loc, parts['PPCC']['DRCT'][iwind])
-                    merged['SPED'].insert(loc, parts['PPCC']['SPED'][iwind])
-                    merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                    if pres not in qcman:
+                        size = len(merged['PRES'])
+                        loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
+                        if loc >= size + 1:
+                            loc = -1
+                        merged['PRES'].insert(loc, pres)
+                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
+                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
+                        merged['DRCT'].insert(loc, parts['PPCC']['DRCT'][iwind])
+                        merged['SPED'].insert(loc, parts['PPCC']['SPED'][iwind])
+                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
 
         # Merge TROP
         if num_trop_levels >= 1 or num_above_trop_levels >= 1:
@@ -1424,9 +1466,6 @@ class GempakSounding(GempakFile):
                         if merged['TEMP'][ploc] == self.prod_desc.missing_float:
                             merged['TEMP'][ploc] = parts['TTDD']['TEMP'][isigt]
                             merged['DWPT'][ploc] = parts['TTDD']['DWPT'][isigt]
-                        merged['DRCT'][ploc] = self.prod_desc.missing_float
-                        merged['SPED'][ploc] = self.prod_desc.missing_float
-                        merged['HGHT'][ploc] = self.prod_desc.missing_float
                     else:
                         size = len(merged['PRES'])
                         loc = size - bisect.bisect_left(merged['PRES'][::-1], pres)
@@ -1513,6 +1552,7 @@ class GempakSounding(GempakFile):
                 pbot = 0
 
         if num_max_wind_levels >= 1:
+
             for imxw, pres in enumerate(parts['MXWA']['PRES']):
                 pres = abs(pres)
                 if (pres != self.prod_desc.missing_float
@@ -1672,7 +1712,7 @@ class GempakSounding(GempakFile):
             interp_logp_pressure(merged, self.prod_desc.missing_float)
 
         # Interpolate missing data
-        interp_logp_data(merged, self.prod_desc.missing_float)
+        interp_missing_data(merged, self.prod_desc.missing_float)
 
         # Add below ground MAN data
         if merged['PRES'][0] != self.prod_desc.missing_float:
@@ -1745,7 +1785,7 @@ class GempakSounding(GempakFile):
         matched = list(matched)
 
         if len(matched) < 1:
-            raise RuntimeError('No grids were matched.')
+            raise KeyError('No stations were matched with given parameters.')
 
         sndno = [(s.DTNO, s.SNDNO) for s in matched]
 
@@ -1786,7 +1826,8 @@ class GempakSounding(GempakFile):
             var = {}
             for param, values in snd.items():
                 values = np.array(values)[np.newaxis, ...]
-                maskval = np.ma.array(values, mask=values == self.prod_desc.missing_float)
+                maskval = np.ma.array(values, mask=values == self.prod_desc.missing_float,
+                                      dtype=np.float32)
                 var[param.lower()] = (['time', 'pres'], maskval)
 
             xrds = xr.Dataset(var,
@@ -1804,6 +1845,7 @@ class GempakSurface(GempakFile):
     """Subclass of GempakFile specific to GEMPAK surface data."""
 
     def __init__(self, file, *args, **kwargs):
+        """Instantiate GempakSurface object from file."""
         super().__init__(file)
 
         # Row Headers
@@ -1899,6 +1941,7 @@ class GempakSurface(GempakFile):
             raise TypeError('Unknown surface type {}'.format(self.surface_type))
 
     def _get_surface_type(self):
+        """Determine type of surface file."""
         if len(self.row_headers) == 1:
             self.surface_type = 'ship'
         elif 'DATE' in self.row_keys:
@@ -1906,9 +1949,10 @@ class GempakSurface(GempakFile):
         elif 'DATE' in self.column_keys:
             self.surface_type = 'climate'
         else:
-            raise RuntimeError('Unknown surface data type')
+            raise TypeError('Unknown surface data type')
 
     def _key_types(self, keys):
+        """Determine header information from a set of keys."""
         header_info = [(key, '4s', self._decode_strip) if key == 'STID'
                        else (key, 'i') if key == 'STNM'
                        else (key, 'i', lambda x: x / 100) if key == 'SLAT'
@@ -1925,6 +1969,7 @@ class GempakSurface(GempakFile):
         return header_info
 
     def _unpack_climate(self, sfcno):
+        """Unpack a climate surface data file."""
         stations = []
         for icol, col_head in enumerate(self.column_headers):
             for irow, row_head in enumerate(self.row_headers):
@@ -1992,6 +2037,7 @@ class GempakSurface(GempakFile):
         return stations
 
     def _unpack_ship(self, sfcno):
+        """Unpack ship (moving observation) surface data file."""
         stations = []
         irow = 0
         for icol, col_head in enumerate(self.column_headers):
@@ -2059,6 +2105,7 @@ class GempakSurface(GempakFile):
         return stations
 
     def _unpack_standard(self, sfcno):
+        """Unpack a standard surface data file."""
         stations = []
         for irow, row_head in enumerate(self.row_headers):
             for icol, col_head in enumerate(self.column_headers):
@@ -2127,7 +2174,7 @@ class GempakSurface(GempakFile):
 
     def sfjson(self, station_id=None, station_number=None,
                date_time=None, state=None, country=None):
-        """Select surface stations and output as JSON."""
+        """Select surface stations and output as list of JSON objects."""
         if station_id is not None:
             if (not isinstance(station_id, Iterable)
                or isinstance(station_id, str)):
@@ -2195,7 +2242,7 @@ class GempakSurface(GempakFile):
         matched = list(matched)
 
         if len(matched) < 1:
-            raise RuntimeError('No grids were matched.')
+            raise KeyError('No stations were matched with given parameters.')
 
         sfcno = [(s.ROW, s.COL) for s in matched]
 

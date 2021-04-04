@@ -1,4 +1,6 @@
-# Copyright 2021 Nathan Wendt
+# Copyright (c) 2021 Nathan Wendt.
+# Distributed under the terms of the BSD 3-Clause License.
+# SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK calculations."""
 
 import numpy as np
@@ -206,87 +208,6 @@ def virtual_temperature(tmpc, dwpc, pres, missing=-9999):
     return tvirt
 
 
-def interp_logp_data(sounding, missing=-9999):
-    """Interpolate missing data with respect to log p.
-
-    This function is similar to the MR_MISS subroutine
-    in GEMPAK and also incorporates PC_INTP functionality.
-    """
-    size = len(sounding['PRES'])
-    recipe = [('TEMP', 'DWPT'), ('DRCT', 'SPED'), ('DWPT', None)]
-
-    for var1, var2 in recipe:
-        iabove = 0
-        i = 1
-        more = True
-        while (i < size - 1) and more:
-            if sounding[var1][i] == missing:
-                if iabove <= i:
-                    iabove = i + 1
-                    found = False
-                    while not found:
-                        if sounding[var1][iabove] != missing:
-                            found = True
-                        else:
-                            iabove += 1
-                            if iabove >= size:
-                                found = True
-                                iabove = 0
-                                more = False
-
-                if var2 is None and iabove != 0:
-                    if sounding['PRES'][i] - sounding['PRES'][iabove] > 100:
-                        for j in range(iabove, size):
-                            sounding['DWPT'][j] = missing
-                        iabove = 0
-                        more = False
-
-                if (var1 == 'DRCT' and iabove != 0
-                   and sounding['PRES'][i - 1] > 100
-                   and sounding['PRES'][iabove] < 100):
-                    iabove = 0
-
-                if iabove != 0:
-                    output = {}
-                    pres1 = sounding['PRES'][i - 1]
-                    pres2 = sounding['PRES'][iabove]
-                    vlev = sounding['PRES'][i]
-                    between = (((pres1 < pres2) and (pres1 < vlev)
-                               and (vlev < pres2))
-                               or ((pres2 < pres1) and (pres2 < vlev)
-                               and (vlev < pres1)))
-                    if not between:
-                        raise RuntimeError('Cannot interpolate sounding data.')
-                    elif pres1 <= 0 or pres2 <= 0:
-                        raise ValueError('Pressure cannot be negative.')
-
-                    rmult = np.log(vlev / pres1) / np.log(pres2 / pres1)
-                    output['PRES'] = vlev
-                    for parm in [var1, var2]:
-                        if parm is None:
-                            continue
-                        output[parm] = missing
-                        if parm == 'DRCT':
-                            angle1 = sounding[parm][i - 1] % 360
-                            angle2 = sounding[parm][iabove] % 360
-                            if abs(angle1 - angle2) > 180:
-                                if angle1 < angle2:
-                                    angle1 -= 360
-                                else:
-                                    angle2 -= 360
-                            iangle = angle1 + (angle2 - angle1) * rmult
-                            output[parm] = iangle % 360
-                        else:
-                            output[parm] = (
-                                sounding[parm][i - 1]
-                                + (sounding[parm][iabove] - sounding[parm][i - 1]) * rmult
-                            )
-                    sounding[var1][i] = output[var1]
-                    if var2 is not None:
-                        sounding[var2][i] = output[var2]
-            i += 1
-
-
 def interp_logp_height(sounding, missing=-9999):
     """Interpolate height linearly with respect to log p.
 
@@ -463,3 +384,92 @@ def interp_moist_height(sounding, missing=-9999):
             pbb = p
 
         ilev = klev
+
+
+def interp_missing_data(sounding, missing=-9999):
+    """Interpolate missing sounding data.
+
+    This function is similar to the MR_MISS subroutine in GEMPAK.
+    """
+    size = len(sounding['PRES'])
+    recipe = [('TEMP', 'DWPT'), ('DRCT', 'SPED'), ('DWPT', None)]
+
+    for var1, var2 in recipe:
+        iabove = 0
+        i = 1
+        more = True
+        while i < (size - 1) and more:
+            if sounding[var1][i] == missing:
+                if iabove <= i:
+                    iabove = i + 1
+                    found = False
+                    while not found:
+                        if sounding[var1][iabove] != missing:
+                            found = True
+                        else:
+                            iabove += 1
+                            if iabove >= size:
+                                found = True
+                                iabove = 0
+                                more = False
+
+                if (var2 is None and iabove != 0
+                   and sounding['PRES'][i - 1] > 100
+                   and sounding['PRES'][iabove] < 100):
+                    iabove = 0
+
+                if iabove != 0:
+                    adata = {}
+                    bdata = {}
+                    for param, val in sounding.items():
+                        if (param in ['PRES', 'TEMP', 'DWPT',
+                                      'DRCT', 'SPED', 'HGHT']):
+                            adata[param] = val[i - 1]
+                            bdata[param] = val[iabove]
+                    vlev = sounding['PRES'][i]
+                    outdata = interp_parameters(vlev, adata, bdata, missing)
+                    sounding[var1][i] = outdata[var1]
+                    if var2 is not None:
+                        sounding[var2][i] = outdata[var2]
+            i += 1
+
+
+def interp_parameters(vlev, adata, bdata, missing=-9999):
+    """General interpolation with respect to log-p.
+
+    See the PC_INTP subroutine in GEMPAK.
+    """
+    pres1 = adata['PRES']
+    pres2 = bdata['PRES']
+    between = (((pres1 < pres2) and (pres1 < vlev)
+               and (vlev < pres2))
+               or ((pres2 < pres1) and (pres2 < vlev)
+               and (vlev < pres1)))
+
+    if not between:
+        raise ValueError('Current pressure does not fall between levels.')
+    elif pres1 <= 0 or pres2 <= 0:
+        raise ValueError('Pressure cannot be negative.')
+
+    outdata = {}
+    rmult = np.log(vlev / pres1) / np.log(pres2 / pres1)
+    outdata['PRES'] = vlev
+    for param, aval in adata.items():
+        bval = bdata[param]
+        if param == 'DRCT':
+            ang1 = aval % 360
+            ang2 = bval % 360
+            if abs(ang1 - ang2) > 180:
+                if ang1 < ang2:
+                    ang1 += 360
+                else:
+                    ang2 += 360
+            ang = ang1 + (ang2 - ang1) * rmult
+            outdata[param] = ang % 360
+        else:
+            outdata[param] = aval + (bval - aval) * rmult
+
+        if aval == missing or bval == missing:
+            outdata[param] = missing
+
+    return outdata
