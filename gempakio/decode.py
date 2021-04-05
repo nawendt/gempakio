@@ -228,9 +228,8 @@ class GempakFile():
         """Instantiate GempakFile object from file."""
         if isinstance(file, Path):
             file = str(file)
-        fobj = open(file, 'rb')
 
-        with contextlib.closing(fobj):
+        with contextlib.closing(open(file, 'rb')) as fobj:  # noqa: SIM115
             self._buffer = IOBuffer.fromfile(fobj)
 
         # Save file start position as pointers use this as reference
@@ -408,9 +407,7 @@ class GempakFile():
     @staticmethod
     def _convert_level(level):
         """Convert levels."""
-        if ((isinstance(level, int)
-           or isinstance(level, float))
-           and level >= 0):
+        if isinstance(level, (int, float)) and level >= 0:
             return level
         else:
             return None
@@ -578,7 +575,7 @@ class GempakGrid(GempakFile):
         # Coordinates
         if self.navigation_block is not None:
             self._get_crs()
-            self._get_coordinates()
+            self._set_coordinates()
 
     def gdinfo(self):
         """Return grid information."""
@@ -588,6 +585,8 @@ class GempakGrid(GempakFile):
         """Create CRS from GEMPAK navigation block."""
         gemproj = self.navigation_block.projection
         proj, ptype = GEMPROJ_TO_PROJ[gemproj]
+        ellps = 'sphere'  # Kept for posterity
+        R = 6371200.0  # R takes precedence over ellps
 
         if ptype == 'azm':
             lat_0 = self.navigation_block.proj_angle1
@@ -596,7 +595,9 @@ class GempakGrid(GempakFile):
             self.crs = pyproj.CRS.from_dict({'proj': proj,
                                              'lat_0': lat_0,
                                              'lon_0': lon_0,
-                                             'lat_ts': lat_ts})
+                                             'lat_ts': lat_ts,
+                                             'ellps': ellps,
+                                             'R': R})
         elif ptype == 'cyl':
             if gemproj != 'mcd':
                 lat_0 = self.navigation_block.proj_angle1
@@ -605,7 +606,9 @@ class GempakGrid(GempakFile):
                 self.crs = pyproj.CRS.from_dict({'proj': proj,
                                                  'lat_0': lat_0,
                                                  'lon_0': lon_0,
-                                                 'lat_ts': lat_ts})
+                                                 'lat_ts': lat_ts,
+                                                 'ellps': ellps,
+                                                 'R': R})
             else:
                 avglat = (self.navigation_block.upper_right_lat
                           + self.navigation_block.lower_left_lat) * 0.5
@@ -617,7 +620,9 @@ class GempakGrid(GempakFile):
                 self.crs = pyproj.CRS.from_dict({'proj': proj,
                                                  'lat_0': avglat,
                                                  'lon_0': lon_0,
-                                                 'k_0': k_0})
+                                                 'k_0': k_0,
+                                                 'ellps': ellps,
+                                                 'R': R})
         elif ptype == 'con':
             lat_1 = self.navigation_block.proj_angle1
             lon_0 = self.navigation_block.proj_angle2
@@ -625,9 +630,11 @@ class GempakGrid(GempakFile):
             self.crs = pyproj.CRS.from_dict({'proj': proj,
                                              'lon_0': lon_0,
                                              'lat_1': lat_1,
-                                             'lat_2': lat_2})
+                                             'lat_2': lat_2,
+                                             'ellps': ellps,
+                                             'R': R})
 
-    def _get_coordinates(self):
+    def _set_coordinates(self):
         """Use GEMPAK navigation block to define coordinates.
 
         Defines geographic and projection coordinates for the object.
@@ -639,8 +646,10 @@ class GempakGrid(GempakFile):
                              self.navigation_block.upper_right_lat)
         self.x = np.linspace(llx, urx, self.kx, dtype=np.float32)
         self.y = np.linspace(lly, ury, self.ky, dtype=np.float32)
-        xx, yy = np.meshgrid(self.x, self.y)
+        xx, yy = np.meshgrid(self.x, self.y, copy=False)
         self.lon, self.lat = transform(xx, yy, inverse=True)
+        self.lon = self.lon.astype(np.float32)
+        self.lat = self.lat.astype(np.float32)
 
     def _unpack_grid(self, packing_type, part):
         """Read raw GEMPAK grid integers and unpack into floats."""
@@ -814,9 +823,8 @@ class GempakGrid(GempakFile):
                 coordinate = [coordinate]
             coordinate = [c.upper() for c in coordinate]
 
-        if level is not None:
-            if not isinstance(level, Iterable):
-                level = [level]
+        if level is not None and not isinstance(level, Iterable):
+            level = [level]
 
         if date_time2 is not None:
             if (not isinstance(date_time2, Iterable)
@@ -826,9 +834,8 @@ class GempakGrid(GempakFile):
                 if isinstance(dt, str):
                     date_time2[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
-        if level2 is not None:
-            if not isinstance(level2, Iterable):
-                level2 = [level2]
+        if level2 is not None and not isinstance(level2, Iterable):
+            level2 = [level2]
 
         # Figure out which columns to extract from the file
         matched = self._gdinfo.copy()
@@ -1184,11 +1191,10 @@ class GempakSounding(GempakFile):
                 ppbb_is_z = False
             else:
                 for z in parts['PPBB']['HGHT']:
-                    if z != self.prod_desc.missing_float:
-                        if z < 0:
-                            ppbb_is_z = False
-                            parts['PPBB']['PRES'] = parts['PPBB']['HGHT']
-                            break
+                    if z != self.prod_desc.missing_float and z < 0:
+                        ppbb_is_z = False
+                        parts['PPBB']['PRES'] = parts['PPBB']['HGHT']
+                        break
 
         ppdd_is_z = True
         if num_above_sigw_levels:
@@ -1196,11 +1202,10 @@ class GempakSounding(GempakFile):
                 ppdd_is_z = False
             else:
                 for z in parts['PPDD']['HGHT']:
-                    if z != self.prod_desc.missing_float:
-                        if z < 0:
-                            ppdd_is_z = False
-                            parts['PPDD']['PRES'] = parts['PPDD']['HGHT']
-                            break
+                    if z != self.prod_desc.missing_float and z < 0:
+                        ppdd_is_z = False
+                        parts['PPDD']['PRES'] = parts['PPDD']['HGHT']
+                        break
 
         # Process surface data
         if num_man_levels < 1:
@@ -1715,19 +1720,18 @@ class GempakSounding(GempakFile):
         interp_missing_data(merged, self.prod_desc.missing_float)
 
         # Add below ground MAN data
-        if merged['PRES'][0] != self.prod_desc.missing_float:
-            if bgl > 0:
-                for ibgl in range(1, num_man_levels):
-                    pres = parts['TTAA']['PRES'][ibgl]
-                    if pres > merged['PRES'][0]:
-                        loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
-                        merged['PRES'].insert(loc, pres)
-                        merged['TEMP'].insert(loc, parts['TTAA']['TEMP'][ibgl])
-                        merged['DWPT'].insert(loc, parts['TTAA']['DWPT'][ibgl])
-                        merged['DRCT'].insert(loc, parts['TTAA']['DRCT'][ibgl])
-                        merged['SPED'].insert(loc, parts['TTAA']['SPED'][ibgl])
-                        merged['HGHT'].insert(loc, parts['TTAA']['HGHT'][ibgl])
-                        size += 1
+        if merged['PRES'][0] != self.prod_desc.missing_float and bgl > 0:
+            for ibgl in range(1, num_man_levels):
+                pres = parts['TTAA']['PRES'][ibgl]
+                if pres > merged['PRES'][0]:
+                    loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
+                    merged['PRES'].insert(loc, pres)
+                    merged['TEMP'].insert(loc, parts['TTAA']['TEMP'][ibgl])
+                    merged['DWPT'].insert(loc, parts['TTAA']['DWPT'][ibgl])
+                    merged['DRCT'].insert(loc, parts['TTAA']['DRCT'][ibgl])
+                    merged['SPED'].insert(loc, parts['TTAA']['SPED'][ibgl])
+                    merged['HGHT'].insert(loc, parts['TTAA']['HGHT'][ibgl])
+                    size += 1
 
         # Add text data, if it is included
         if 'TXTA' in parts:
@@ -1884,7 +1888,7 @@ class GempakSurface(GempakFile):
                                 irow,
                                 icol,
                                 datetime.combine(row_head.DATE, row_head.TIME),
-                                col_head.STID,
+                                col_head.STID + col_head.STD2,
                                 col_head.STNM,
                                 col_head.SLAT,
                                 col_head.SLON,
@@ -1906,7 +1910,7 @@ class GempakSurface(GempakFile):
                             irow,
                             icol,
                             datetime.combine(col_head.DATE, col_head.TIME),
-                            col_head.STID,
+                            col_head.STID + col_head.STD2,
                             col_head.STNM,
                             col_head.SLAT,
                             col_head.SLON,
@@ -1928,7 +1932,7 @@ class GempakSurface(GempakFile):
                                 irow,
                                 icol,
                                 datetime.combine(col_head.DATE, col_head.TIME),
-                                row_head.STID,
+                                row_head.STID + row_head.STD2,
                                 row_head.STNM,
                                 row_head.SLAT,
                                 row_head.SLON,
@@ -1981,6 +1985,7 @@ class GempakSurface(GempakFile):
                            'SLON': row_head.SLON,
                            'SELV': row_head.SELV,
                            'STAT': row_head.STAT,
+                           'COUN': row_head.COUN,
                            'STD2': row_head.STD2,
                            'SPRI': row_head.SPRI,
                            'DATE': col_head.DATE,
@@ -2031,7 +2036,9 @@ class GempakSurface(GempakFile):
                             station[param] = packed_buffer[iprm].decode().strip()
                     else:
                         for iprm, param in enumerate(parameters['name']):
-                            station[param] = packed_buffer[iprm]
+                            station[param] = np.array(
+                                packed_buffer[iprm], dtype=np.float32
+                            )
 
                 stations.append(station)
         return stations
@@ -2049,6 +2056,7 @@ class GempakSurface(GempakFile):
                        'SLON': col_head.SLON,
                        'SELV': col_head.SELV,
                        'STAT': col_head.STAT,
+                       'COUN': col_head.COUN,
                        'STD2': col_head.STD2,
                        'SPRI': col_head.SPRI,
                        'DATE': col_head.DATE,
@@ -2099,7 +2107,9 @@ class GempakSurface(GempakFile):
                         station[param] = packed_buffer[iprm].decode().strip()
                 else:
                     for iprm, param in enumerate(parameters['name']):
-                        station[param] = packed_buffer[iprm]
+                        station[param] = np.array(
+                            packed_buffer[iprm], dtype=np.float32
+                        )
 
             stations.append(station)
         return stations
@@ -2117,6 +2127,7 @@ class GempakSurface(GempakFile):
                            'SLON': col_head.SLON,
                            'SELV': col_head.SELV,
                            'STAT': col_head.STAT,
+                           'COUN': col_head.COUN,
                            'STD2': col_head.STD2,
                            'SPRI': col_head.SPRI,
                            'DATE': row_head.DATE,
@@ -2167,7 +2178,9 @@ class GempakSurface(GempakFile):
                             station[param] = packed_buffer[iprm].decode().strip()
                     else:
                         for iprm, param in enumerate(parameters['name']):
-                            station[param] = packed_buffer[iprm]
+                            station[param] = np.array(
+                                packed_buffer[iprm], dtype=np.float32
+                            )
 
                 stations.append(station)
         return stations
@@ -2175,16 +2188,15 @@ class GempakSurface(GempakFile):
     def sfjson(self, station_id=None, station_number=None,
                date_time=None, state=None, country=None):
         """Select surface stations and output as list of JSON objects."""
-        if station_id is not None:
-            if (not isinstance(station_id, Iterable)
-               or isinstance(station_id, str)):
-                station_id = [station_id]
-                station_id = [c.upper() for c in station_id]
+        if (station_id is not None
+           and (not isinstance(station_id, Iterable)
+                or isinstance(station_id, str))):
+            station_id = [station_id]
+            station_id = [c.upper() for c in station_id]
 
-        if station_number is not None:
-            if not isinstance(station_number, Iterable):
-                station_number = [station_number]
-                station_number = [int(sn) for sn in station_number]
+        if station_number is not None and not isinstance(station_number, Iterable):
+            station_number = [station_number]
+            station_number = [int(sn) for sn in station_number]
 
         if date_time is not None:
             if (not isinstance(date_time, Iterable)
@@ -2194,17 +2206,17 @@ class GempakSurface(GempakFile):
                 if isinstance(dt, str):
                     date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
-        if state is not None:
-            if (not isinstance(state, Iterable)
-               or isinstance(state, str)):
-                state = [state]
-                state = [s.upper() for s in state]
+        if (state is not None
+           and (not isinstance(state, Iterable)
+                or isinstance(state, str))):
+            state = [state]
+            state = [s.upper() for s in state]
 
-        if country is not None:
-            if (not isinstance(country, Iterable)
-               or isinstance(country, str)):
-                country = [country]
-                country = [c.upper() for c in country]
+        if (country is not None
+           and (not isinstance(country, Iterable)
+                or isinstance(country, str))):
+            country = [country]
+            country = [c.upper() for c in country]
 
         # Figure out which columns to extract from the file
         matched = self._sfinfo.copy()
@@ -2260,13 +2272,13 @@ class GempakSurface(GempakFile):
             stnobj['values'] = {}
             stnobj['properties']['date_time'] = datetime.combine(stn.pop('DATE'),
                                                                  stn.pop('TIME'))
-            stnobj['properties']['station_id'] = stn.pop('STID')
+            stnobj['properties']['station_id'] = stn.pop('STID') + stn.pop('STD2')
             stnobj['properties']['station_number'] = stn.pop('STNM')
             stnobj['properties']['longitude'] = stn.pop('SLON')
             stnobj['properties']['latitude'] = stn.pop('SLAT')
             stnobj['properties']['elevation'] = stn.pop('SELV')
             stnobj['properties']['state'] = stn.pop('STAT')
-            stnobj['properties']['station_id_alt'] = stn.pop('STD2')
+            stnobj['properties']['country'] = stn.pop('COUN')
             stnobj['properties']['priority'] = stn.pop('SPRI')
             if stn:
                 for name, ob in stn.items():

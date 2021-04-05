@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
 
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import pytest
 

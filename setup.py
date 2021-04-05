@@ -15,7 +15,21 @@ EMAIL = 'nathan.wendt@noaa.gov'
 LICENSE = 'BSD 3-clause'
 PACKAGES = find_packages()
 EXTRAS = {
-    'test': ['pytest']
+    'test': ['pytest'],
+    'lint': [
+        'flake8',
+        'flake8-bugbear',
+        'flake8-builtins',
+        'flake8-comprehensions',
+        'flake8-copyright',
+        'flake8-import-order',
+        'flake8-mutable',
+        'flake8-pep3101',
+        'flake8-print',
+        'flake8-quotes',
+        'flake8-simplify',
+        'pep8-naming',
+    ]
 }
 
 if __name__ == '__main__':

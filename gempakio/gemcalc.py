@@ -35,7 +35,7 @@ def mixing_ratio(dwpc, pres, missing=-9999):
     -----
     See GEMPAK function PR_MIXR
     """
-    if dwpc == missing or pres == missing:
+    if missing in [dwpc, pres]:
         mixr = missing
     else:
         vapr = vapor_pressure(dwpc, missing)
@@ -81,8 +81,7 @@ def moist_hydrostatic_height(z_bot, pres_bot, pres_top, scale_height,
     -----
     See GEMPAK function PR_MHGT
     """
-    if (z_bot == missing or pres_bot == missing
-       or pres_top == missing or scale_height == missing):
+    if missing in [z_bot, pres_bot, pres_top, scale_height]:
         mhgt = missing
     else:
         mhgt = z_bot + scale_height * np.log(pres_bot / pres_top)
@@ -125,15 +124,12 @@ def scale_height(tmpc_bot, tmpc_top, dwpc_bot, dwpc_top,
     -----
     See GEMPAK function PR_SCLH
     """
-    if (tmpc_bot == missing
-       or tmpc_top == missing
-       or pres_bot == missing
-       or pres_top == missing):
+    if missing in [tmpc_bot, tmpc_top, pres_bot, pres_top]:
         sclh = missing
     else:
         tvbk = virtual_temperature(tmpc_bot, dwpc_bot, pres_bot, missing)
         tvtk = virtual_temperature(tmpc_top, dwpc_top, pres_top, missing)
-        if tvbk == missing or tvtk == missing:
+        if missing in [tvbk, tvtk]:
             sclh = missing
         else:
             tavg = (tvbk + tvtk) * 0.5
@@ -194,7 +190,7 @@ def virtual_temperature(tmpc, dwpc, pres, missing=-9999):
     -----
     See GEMPAK function PR_TVRK
     """
-    if tmpc == missing or pres == missing:
+    if missing in [tmpc, pres]:
         tvirt = missing
     elif dwpc == missing:
         tvirt = tmpc + 273.15
@@ -469,7 +465,7 @@ def interp_parameters(vlev, adata, bdata, missing=-9999):
         else:
             outdata[param] = aval + (bval - aval) * rmult
 
-        if aval == missing or bval == missing:
+        if missing in [aval, bval]:
             outdata[param] = missing
 
     return outdata
