@@ -140,7 +140,7 @@ Grid = namedtuple('Grid', [
     'COORD',
 ])
 
-Sounding = namedtuple('Soungind', [
+Sounding = namedtuple('Sounding', [
     'DTNO',
     'SNDNO',
     'DATTIM',
@@ -149,6 +149,8 @@ Sounding = namedtuple('Soungind', [
     'LAT',
     'LON',
     'ELEV',
+    'STATE',
+    'COUNTRY',
 ])
 
 Surface = namedtuple('Surface', [
@@ -591,22 +593,26 @@ class GempakGrid(GempakFile):
         if ptype == 'azm':
             lat_0 = self.navigation_block.proj_angle1
             lon_0 = self.navigation_block.proj_angle2
-            lat_ts = self.navigation_block.proj_angle3
+            rot = self.navigation_block.proj_angle3
+            if rot != 0:
+                logger.warning('Rotated projections currently '
+                                'not supported. Angle3 (%7.2f) ignored.', rot)
             self.crs = pyproj.CRS.from_dict({'proj': proj,
                                              'lat_0': lat_0,
                                              'lon_0': lon_0,
-                                             'lat_ts': lat_ts,
                                              'ellps': ellps,
                                              'R': R})
         elif ptype == 'cyl':
             if gemproj != 'mcd':
                 lat_0 = self.navigation_block.proj_angle1
                 lon_0 = self.navigation_block.proj_angle2
-                lat_ts = self.navigation_block.proj_angle3
+                rot = self.navigation_block.proj_angle3
+                if rot != 0:
+                    logger.warning('Rotated projections currently '
+                                   'not supported. Angle3 (%7.2f) ignored.', rot)
                 self.crs = pyproj.CRS.from_dict({'proj': proj,
                                                  'lat_0': lat_0,
                                                  'lon_0': lon_0,
-                                                 'lat_ts': lat_ts,
                                                  'ellps': ellps,
                                                  'R': R})
             else:
@@ -802,7 +808,34 @@ class GempakGrid(GempakFile):
 
     def gdxarray(self, parameter=None, date_time=None, coordinate=None,
                  level=None, date_time2=None, level2=None):
-        """Select grids and output as list of xarray DataArrays."""
+        """Select grids and output as list of xarray DataArrays.
+        
+        Parameters
+        ----------
+        parameter : str or array-like of str
+            Name of GEMPAK parameter.
+
+        date_time : datetime or array-like of datetime
+            Valid datetime of the grid.
+
+        coordinate : str or array-like of str
+            Vertical coordinate.
+
+        level : float or array-like of float
+            Vertical level.
+
+        date_time2 : datetime or array-like of datetime
+            Secondary valid datetime of the grid.
+
+        level2: float or array_like of float
+            Secondary vertical level. Typically used for layers.
+
+        Returns
+        -------
+        list
+            List of xarray.DataArray objects for each grid.
+
+        """
         if parameter is not None:
             if (not isinstance(parameter, Iterable)
                or isinstance(parameter, str)):
@@ -998,6 +1031,8 @@ class GempakSounding(GempakFile):
                             col_head.SLAT,
                             col_head.SLON,
                             col_head.SELV,
+                            col_head.STAT,
+                            col_head.COUN,
                         )
                     )
 
@@ -1013,6 +1048,8 @@ class GempakSounding(GempakFile):
                             'SLAT': col_head.SLAT,
                             'SLON': col_head.SLON,
                             'SELV': col_head.SELV,
+                            'STAT': col_head.STAT,
+                            'COUN': col_head.COUN,
                             'DATE': row_head.DATE,
                             'TIME': row_head.TIME,
                             }
@@ -1073,6 +1110,8 @@ class GempakSounding(GempakFile):
                             'SLAT': col_head.SLAT,
                             'SLON': col_head.SLON,
                             'SELV': col_head.SELV,
+                            'STAT': col_head.STAT,
+                            'COUN': col_head.COUN,
                             'DATE': row_head.DATE,
                             'TIME': row_head.TIME,
                             }
@@ -1138,6 +1177,8 @@ class GempakSounding(GempakFile):
                   'SLAT': parts['SLAT'],
                   'SLON': parts['SLON'],
                   'SELV': parts['SELV'],
+                  'STAT': parts['STAT'],
+                  'COUN': parts['COUN'],
                   'DATE': parts['DATE'],
                   'TIME': parts['TIME'],
                   'PRES': [],
@@ -1746,8 +1787,31 @@ class GempakSounding(GempakFile):
         return merged
 
     def snxarray(self, station_id=None, station_number=None,
-                 date_time=None):
-        """Select soundings and output as list of xarray Datasets."""
+                 date_time=None, state=None, country=None):
+        """Select soundings and output as list of xarray Datasets.
+
+        Parameters
+        ----------
+        station_id : str or array-like of str
+            Station ID of sounding site.
+
+        station_number : int or array-like of int
+            Station number of sounding site.
+
+        date_time : datetime or array-like of datetime
+            Valid/observed datetime of the sounding.
+        
+        state : str or array-like of str
+            State where sounding site is located.
+
+        country : str or array-like of str
+            Country where sounding site is located.
+
+        Returns
+        -------
+        list
+            List of xarray.Dataset objects for each sounding.
+        """
         if station_id is not None:
             if (not isinstance(station_id, Iterable)
                or isinstance(station_id, str)):
@@ -1767,22 +1831,46 @@ class GempakSounding(GempakFile):
                 if isinstance(dt, str):
                     date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
+        if (state is not None
+           and (not isinstance(state, Iterable)
+                or isinstance(state, str))):
+            state = [state]
+            state = [s.upper() for s in state]
+
+        if (country is not None
+           and (not isinstance(country, Iterable)
+                or isinstance(country, str))):
+            country = [country]
+            country = [c.upper() for c in country]
+
         # Figure out which columns to extract from the file
         matched = self._sninfo.copy()
 
         if station_id is not None:
             matched = filter(
-                lambda grid: grid if grid.ID in station_id else False, matched)
+                lambda snd: snd if snd.ID in station_id else False, matched)
 
         if station_number is not None:
             matched = filter(
-                lambda grid: grid if grid.NUMBER in station_number else False,
+                lambda snd: snd if snd.NUMBER in station_number else False,
                 matched
             )
 
         if date_time is not None:
             matched = filter(
-                lambda grid: grid if grid.DATTIM in date_time else False,
+                lambda snd: snd if snd.DATTIM in date_time else False,
+                matched
+            )
+
+        if state is not None:
+            matched = filter(
+                lambda snd: snd if snd.STATE in state else False,
+                matched
+            )
+
+        if country is not None:
+            matched = filter(
+                lambda snd: snd if snd.COUNTRY in country else False,
                 matched
             )
 
@@ -1811,6 +1899,8 @@ class GempakSounding(GempakFile):
                 'lon': snd.pop('SLON'),
                 'elevation': snd.pop('SELV'),
                 'station_pressure': station_pressure,
+                'state': snd.pop('STAT'),
+                'country': snd.pop('COUN'),
             }
 
             if 'TXTA' in snd:
@@ -2187,7 +2277,30 @@ class GempakSurface(GempakFile):
 
     def sfjson(self, station_id=None, station_number=None,
                date_time=None, state=None, country=None):
-        """Select surface stations and output as list of JSON objects."""
+        """Select surface stations and output as list of JSON objects.
+
+        Parameters
+        ----------
+        station_id : str or array-like of str
+            Station ID of the surface station.
+
+        station_number : int or array-like of int
+            Station number of the surface station.
+
+        date_time : datetime or array-like of datetime
+            Valid/observed datetime of the surface station.
+
+        state : str or array-like of str
+            State where surface station is located.
+
+        country : str or array-like of str
+            Country where surface station is located.
+
+        Returns
+        -------
+        list
+            List of dicts/JSONs for each surface station.
+        """
         if (station_id is not None
            and (not isinstance(station_id, Iterable)
                 or isinstance(station_id, str))):
@@ -2223,31 +2336,31 @@ class GempakSurface(GempakFile):
 
         if station_id is not None:
             matched = filter(
-                lambda grid: grid if grid.ID in station_id else False,
+                lambda sfc: sfc if sfc.ID in station_id else False,
                 matched
             )
 
         if station_number is not None:
             matched = filter(
-                lambda grid: grid if grid.NUMBER in station_number else False,
+                lambda sfc: sfc if sfc.NUMBER in station_number else False,
                 matched
             )
 
         if date_time is not None:
             matched = filter(
-                lambda grid: grid if grid.DATTIM in date_time else False,
+                lambda sfc: sfc if sfc.DATTIM in date_time else False,
                 matched
             )
 
         if state is not None:
             matched = filter(
-                lambda grid: grid if grid.STATE in state else False,
+                lambda sfc: sfc if sfc.STATE in state else False,
                 matched
             )
 
         if country is not None:
             matched = filter(
-                lambda grid: grid if grid.COUNTRY in country else False,
+                lambda sfc: sfc if sfc.COUNTRY in country else False,
                 matched
             )
 

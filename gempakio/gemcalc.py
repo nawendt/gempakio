@@ -207,6 +207,13 @@ def virtual_temperature(tmpc, dwpc, pres, missing=-9999):
 def interp_logp_height(sounding, missing=-9999):
     """Interpolate height linearly with respect to log p.
 
+    Parameters
+    ----------
+    sounding : dict
+        Sounding dictionary structure.
+
+    Notes
+    -----
     This function mimics the functionality of the MR_INTZ
     subroutine in GEMPAK.
     """
@@ -269,6 +276,13 @@ def interp_logp_height(sounding, missing=-9999):
 def interp_logp_pressure(sounding, missing=-9999):
     """Interpolate pressure from heights.
 
+    Parameters
+    ----------
+    sounding : dict
+        Sounding dictionary structure.
+
+    Notes
+    -----
     This function is similar to the MR_INTP subroutine from GEMPAK.
     """
     i = 0
@@ -305,6 +319,13 @@ def interp_logp_pressure(sounding, missing=-9999):
 def interp_moist_height(sounding, missing=-9999):
     """Interpolate moist hydrostatic height.
 
+    Parameters
+    ----------
+    sounding : dict
+        Sounding dictionary structure.
+
+    Notes
+    -----
     This function mimics the functionality of the MR_SCMZ
     subroutine in GEMPAK. This the default behavior when
     merging observed sounding data.
@@ -385,6 +406,13 @@ def interp_moist_height(sounding, missing=-9999):
 def interp_missing_data(sounding, missing=-9999):
     """Interpolate missing sounding data.
 
+    Parameters
+    ----------
+    sounding : dict
+        Sounding dictionary structure.
+
+    Notes
+    -----
     This function is similar to the MR_MISS subroutine in GEMPAK.
     """
     size = len(sounding['PRES'])
@@ -433,6 +461,26 @@ def interp_missing_data(sounding, missing=-9999):
 def interp_parameters(vlev, adata, bdata, missing=-9999):
     """General interpolation with respect to log-p.
 
+    Parameters
+    ----------
+    vlev : float
+        Pressure level to interpolate to.
+
+    adata : dict
+        Sounding dictionary containing data below (i.e., greater pressure) the
+        desired pressure level.
+
+    bdata : dict
+        Sounding dictionary containing the data above (i.e., lesser pressure)
+        the desired pressure level.
+
+    Returns
+    -------
+    dict
+        A sounding dictionary with interpolated values.
+
+    Notes
+    -----
     See the PC_INTP subroutine in GEMPAK.
     """
     pres1 = adata['PRES']
