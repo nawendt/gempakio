@@ -50,6 +50,8 @@ GEMPROJ_TO_PROJ = {
     'ORT': ('ortho', 'azm'),
     'LEA': ('laea', 'azm'),
     'GNO': ('gnom', 'azm'),
+    'TVM': ('tmerc', 'obq'),
+    'UTM': ('utm', 'obq'),
 }
 GVCORD_TO_VAR = {
     'PRES': 'p',
@@ -374,7 +376,7 @@ class GempakFile():
             self.endian = sys.byteorder
 
     def _process_gempak_header(self):
-        """Read the GEMPAK header from the file, if necessary."""
+        """Read the GEMPAK header from the file."""
         fmt = [('text', '28s', bytes.decode), (None, None)]
 
         header = self._buffer.read_struct(NamedStruct(fmt, '', 'GempakHeader'))
@@ -586,6 +588,9 @@ class GempakGrid(GempakFile):
     def _get_crs(self):
         """Create CRS from GEMPAK navigation block."""
         gemproj = self.navigation_block.projection
+        if gemproj not in GEMPROJ_TO_PROJ:
+            raise NotImplementedError('{} projection not implemented.'
+                                      .format(gemproj))
         proj, ptype = GEMPROJ_TO_PROJ[gemproj]
         ellps = 'sphere'  # Kept for posterity
         R = 6371200.0  # R takes precedence over ellps
@@ -596,14 +601,14 @@ class GempakGrid(GempakFile):
             rot = self.navigation_block.proj_angle3
             if rot != 0:
                 logger.warning('Rotated projections currently '
-                                'not supported. Angle3 (%7.2f) ignored.', rot)
+                               'not supported. Angle3 (%7.2f) ignored.', rot)
             self.crs = pyproj.CRS.from_dict({'proj': proj,
                                              'lat_0': lat_0,
                                              'lon_0': lon_0,
                                              'ellps': ellps,
                                              'R': R})
         elif ptype == 'cyl':
-            if gemproj != 'mcd':
+            if gemproj != 'MCD':
                 lat_0 = self.navigation_block.proj_angle1
                 lon_0 = self.navigation_block.proj_angle2
                 rot = self.navigation_block.proj_angle3
@@ -639,6 +644,20 @@ class GempakGrid(GempakFile):
                                              'lat_2': lat_2,
                                              'ellps': ellps,
                                              'R': R})
+
+        elif ptype == 'obq':
+            lon_0 = self.navigation_block.proj_angle1
+            if gemproj == 'UTM':
+                zone = np.digitize((lon_0 % 360) / 6 + 1, range(1, 61), right=True)
+                self.crs = pyproj.CRS.from_dict({'proj': proj,
+                                                 'zone': zone,
+                                                 'ellps': ellps,
+                                                 'R': R})
+            else:
+                self.crs = pyproj.CRS.from_dict({'proj': proj,
+                                                 'lon_0': lon_0,
+                                                 'ellps': ellps,
+                                                 'R': R})
 
     def _set_coordinates(self):
         """Use GEMPAK navigation block to define coordinates.
@@ -809,7 +828,7 @@ class GempakGrid(GempakFile):
     def gdxarray(self, parameter=None, date_time=None, coordinate=None,
                  level=None, date_time2=None, level2=None):
         """Select grids and output as list of xarray DataArrays.
-        
+
         Parameters
         ----------
         parameter : str or array-like of str
@@ -834,7 +853,6 @@ class GempakGrid(GempakFile):
         -------
         list
             List of xarray.DataArray objects for each grid.
-
         """
         if parameter is not None:
             if (not isinstance(parameter, Iterable)
@@ -1152,17 +1170,18 @@ class GempakSounding(GempakFile):
                     parameters = self.parameters[iprt]
                     nparms = len(parameters['name'])
                     sounding[part.name] = {}
-                    for iprm, param in enumerate(parameters['name']):
-                        if part.data_type == DataTypes.realpack:
-                            unpacked = self._unpack_real(packed_buffer, parameters, lendat)
-                            for iprm, param in enumerate(parameters['name']):
-                                sounding[part.name][param] = unpacked[iprm::nparms]
-                        elif part.data_type == DataTypes.character:
-                            for iprm, param in enumerate(parameters['name']):
-                                sounding[part.name][param] = (
-                                    packed_buffer[iprm].decode().strip()
-                                )
-                        else:
+
+                    if part.data_type == DataTypes.realpack:
+                        unpacked = self._unpack_real(packed_buffer, parameters, lendat)
+                        for iprm, param in enumerate(parameters['name']):
+                            sounding[part.name][param] = unpacked[iprm::nparms]
+                    elif part.data_type == DataTypes.character:
+                        for iprm, param in enumerate(parameters['name']):
+                            sounding[part.name][param] = (
+                                packed_buffer[iprm].decode().strip()
+                            )
+                    else:
+                        for iprm, param in enumerate(parameters['name']):
                             sounding[part.name][param] = (
                                 np.array(packed_buffer[iprm::nparms], dtype=np.float32)
                             )
@@ -1598,7 +1617,6 @@ class GempakSounding(GempakFile):
                 pbot = 0
 
         if num_max_wind_levels >= 1:
-
             for imxw, pres in enumerate(parts['MXWA']['PRES']):
                 pres = abs(pres)
                 if (pres != self.prod_desc.missing_float
@@ -1800,7 +1818,7 @@ class GempakSounding(GempakFile):
 
         date_time : datetime or array-like of datetime
             Valid/observed datetime of the sounding.
-        
+
         state : str or array-like of str
             State where sounding site is located.
 

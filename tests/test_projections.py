@@ -13,7 +13,7 @@ from gempakio import GempakGrid
 
 
 @pytest.mark.parametrize('proj_type', ['conical', 'cylindrical', 'azimuthal'])
-def test_grid_loading(proj_type):
+def test_coordinates_creation(proj_type):
     """Test projections and coordinates."""
     g = Path(__file__).parent / 'data' / f'{proj_type}.grd'
     d = Path(__file__).parent / 'data' / f'{proj_type}.npz'
@@ -28,4 +28,3 @@ def test_grid_loading(proj_type):
 
     np.testing.assert_allclose(decode_lat, true_lat, rtol=1e-6, atol=1e-2)
     np.testing.assert_allclose(decode_lon, true_lon, rtol=1e-6, atol=1e-2)
-

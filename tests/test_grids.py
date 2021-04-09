@@ -14,7 +14,7 @@ from gempakio import GempakGrid
 
 @pytest.mark.parametrize('grid_name', ['none', 'diff', 'dec', 'grib'])
 def test_grid_loading(grid_name):
-    """Test reading grids."""
+    """Test reading grids with various packing."""
     g = Path(__file__).parent / 'data' / f'{grid_name}.grd'
     d = Path(__file__).parent / 'data' / f'{grid_name}.npz'
 
