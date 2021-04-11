@@ -169,6 +169,18 @@ Surface = namedtuple('Surface', [
 ])
 
 
+def _data_source(source):
+    """Get data source from stored integer."""
+    try:
+        DataSource(source)
+    except ValueError:
+        logger.warning('Could not interpret data source `%s`. '
+                       'Setting to `Unknown`.', source)
+        return DataSource(99)
+    else:
+        return DataSource(source)
+
+
 def _word_to_position(word, bytes_per_word=BYTES_PER_WORD):
     """Return beginning position of a word in bytes."""
     return (word * bytes_per_word) - bytes_per_word
@@ -190,7 +202,7 @@ class GempakFile():
                      ('parts_ptr', 'i'), ('data_mgmt_ptr', 'i'),
                      ('data_mgmt_length', 'i'), ('data_block_ptr', 'i'),
                      ('file_type', 'i', FileTypes),
-                     ('data_source', 'i', DataSource),
+                     ('data_source', 'i', _data_source),
                      ('machine_type', 'i'), ('missing_int', 'i'),
                      (None, '12x'), ('missing_float', 'f')]
 
@@ -352,11 +364,13 @@ class GempakFile():
         self.parameters = [{key: [] for key, _ in PARAM_ATTR}
                            for n in range(self.prod_desc.parts)]
         for attr, fmt in PARAM_ATTR:
-            fmt = (fmt[0], self.prefmt + fmt[1])
+            fmt = (fmt[0], self.prefmt + fmt[1] if fmt[1] != 's' else fmt[1])
             for n, part in enumerate(self.parts):
                 for _ in range(part.parameter_count):
-                    if fmt[1] == 's':
-                        self.parameters[n][attr] += [self._buffer.read_binary(*fmt)[0].decode()]  # noqa: E501
+                    if 's' in fmt[1]:
+                        self.parameters[n][attr] += [
+                            self._buffer.read_binary(*fmt)[0].decode().strip()
+                        ]
                     else:
                         self.parameters[n][attr] += self._buffer.read_binary(*fmt)
 
@@ -835,7 +849,8 @@ class GempakGrid(GempakFile):
             Name of GEMPAK parameter.
 
         date_time : datetime or array-like of datetime
-            Valid datetime of the grid.
+            Valid datetime of the grid. Alternatively
+            can be a string with the format YYYYmmddHHMM.
 
         coordinate : str or array-like of str
             Vertical coordinate.
@@ -844,7 +859,8 @@ class GempakGrid(GempakFile):
             Vertical level.
 
         date_time2 : datetime or array-like of datetime
-            Secondary valid datetime of the grid.
+            Secondary valid datetime of the grid. Alternatively
+            can be a string with the format YYYYmmddHHMM.
 
         level2: float or array_like of float
             Secondary vertical level. Typically used for layers.
@@ -893,12 +909,14 @@ class GempakGrid(GempakFile):
 
         if parameter is not None:
             matched = filter(
-                lambda grid: grid if grid.PARM in parameter else False, matched
+                lambda grid: grid if grid.PARM in parameter else False,
+                matched
             )
 
         if date_time is not None:
             matched = filter(
-                lambda grid: grid if grid.DATTIM1 in date_time else False, matched
+                lambda grid: grid if grid.DATTIM1 in date_time else False,
+                matched
             )
 
         if coordinate is not None:
@@ -1817,7 +1835,8 @@ class GempakSounding(GempakFile):
             Station number of sounding site.
 
         date_time : datetime or array-like of datetime
-            Valid/observed datetime of the sounding.
+            Valid/observed datetime of the sounding. Alternatively
+            can be a string with the format YYYYmmddHHMM.
 
         state : str or array-like of str
             State where sounding site is located.
@@ -1866,7 +1885,9 @@ class GempakSounding(GempakFile):
 
         if station_id is not None:
             matched = filter(
-                lambda snd: snd if snd.ID in station_id else False, matched)
+                lambda snd: snd if snd.ID in station_id else False,
+                matched
+            )
 
         if station_number is not None:
             matched = filter(
@@ -2286,9 +2307,7 @@ class GempakSurface(GempakFile):
                             station[param] = packed_buffer[iprm].decode().strip()
                     else:
                         for iprm, param in enumerate(parameters['name']):
-                            station[param] = np.array(
-                                packed_buffer[iprm], dtype=np.float32
-                            )
+                            station[param] = packed_buffer[iprm]
 
                 stations.append(station)
         return stations
@@ -2306,7 +2325,8 @@ class GempakSurface(GempakFile):
             Station number of the surface station.
 
         date_time : datetime or array-like of datetime
-            Valid/observed datetime of the surface station.
+            Valid/observed datetime of the surface station. Alternatively
+            object or a string with the format YYYYmmddHHMM.
 
         state : str or array-like of str
             State where surface station is located.
