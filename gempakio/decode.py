@@ -843,6 +843,9 @@ class GempakGrid(GempakFile):
                  level=None, date_time2=None, level2=None):
         """Select grids and output as list of xarray DataArrays.
 
+        Subset the data by parameter values. The default is to not
+        subset and return the entire dataset.
+
         Parameters
         ----------
         parameter : str or array-like of str
@@ -1056,7 +1059,10 @@ class GempakSounding(GempakFile):
                            + (irow * self.prod_desc.columns * self.prod_desc.parts)
                            + (icol * self.prod_desc.parts))
 
-                if pointer:
+                self._buffer.jump_to(self._start, _word_to_position(pointer))
+                data_ptr = self._buffer.read_int(4, self.endian, False)
+
+                if data_ptr:
                     self._sninfo.append(
                         Sounding(
                             irow,
@@ -1071,6 +1077,10 @@ class GempakSounding(GempakFile):
                             col_head.COUN,
                         )
                     )
+
+    def sninfo(self):
+        """Return sounding information."""
+        return self._sninfo
 
     def _unpack_merged(self, sndno):
         """Unpack merged sounding data."""
@@ -1826,6 +1836,9 @@ class GempakSounding(GempakFile):
                  date_time=None, state=None, country=None):
         """Select soundings and output as list of xarray Datasets.
 
+        Subset the data by parameter values. The default is to not
+        subset and return the entire dataset.
+
         Parameters
         ----------
         station_id : str or array-like of str
@@ -2011,7 +2024,10 @@ class GempakSurface(GempakFile):
                                + (irow * self.prod_desc.columns * self.prod_desc.parts)
                                + (icol * self.prod_desc.parts))
 
-                    if pointer:
+                    self._buffer.jump_to(self._start, _word_to_position(pointer))
+                    data_ptr = self._buffer.read_int(4, self.endian, False)
+
+                    if data_ptr:
                         self._sfinfo.append(
                             Surface(
                                 irow,
@@ -2033,7 +2049,10 @@ class GempakSurface(GempakFile):
                            + (irow * self.prod_desc.columns * self.prod_desc.parts)
                            + (icol * self.prod_desc.parts))
 
-                if pointer:
+                self._buffer.jump_to(self._start, _word_to_position(pointer))
+                data_ptr = self._buffer.read_int(4, self.endian, False)
+
+                if data_ptr:
                     self._sfinfo.append(
                         Surface(
                             irow,
@@ -2055,7 +2074,10 @@ class GempakSurface(GempakFile):
                                + (irow * self.prod_desc.columns * self.prod_desc.parts)
                                + (icol * self.prod_desc.parts))
 
-                    if pointer:
+                    self._buffer.jump_to(self._start, _word_to_position(pointer))
+                    data_ptr = self._buffer.read_int(4, self.endian, False)
+
+                    if data_ptr:
                         self._sfinfo.append(
                             Surface(
                                 irow,
@@ -2072,6 +2094,10 @@ class GempakSurface(GempakFile):
                         )
         else:
             raise TypeError('Unknown surface type {}'.format(self.surface_type))
+
+    def sfinfo(self):
+        """Return station information."""
+        return self._sfinfo
 
     def _get_surface_type(self):
         """Determine type of surface file."""
@@ -2315,6 +2341,9 @@ class GempakSurface(GempakFile):
     def sfjson(self, station_id=None, station_number=None,
                date_time=None, state=None, country=None):
         """Select surface stations and output as list of JSON objects.
+
+        Subset the data by parameter values. The default is to not
+        subset and return the entire dataset.
 
         Parameters
         ----------
