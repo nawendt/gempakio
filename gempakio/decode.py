@@ -599,6 +599,25 @@ class GempakGrid(GempakFile):
         """Return grid information."""
         return self._gdinfo
 
+    def project_point(self, lon, lat):
+        """Project geographic corrdinates.
+
+        Parameters
+        ----------
+        lon : float or array-like of float
+            Longitude of point(s).
+
+        lat : float or array-like of float
+            Latitude of point(s).
+
+        Returns
+        -------
+        tuple
+            Tuple containing lists of x and y projected
+            coordinate values.
+        """
+        return self._transform(lon, lat)
+
     def _get_crs(self):
         """Create CRS from GEMPAK navigation block."""
         gemproj = self.navigation_block.projection
@@ -679,6 +698,7 @@ class GempakGrid(GempakFile):
         Defines geographic and projection coordinates for the object.
         """
         transform = pyproj.Proj(self.crs)
+        self._transform = transform
         llx, lly = transform(self.navigation_block.lower_left_lon,
                              self.navigation_block.lower_left_lat)
         urx, ury = transform(self.navigation_block.upper_right_lon,
@@ -996,6 +1016,8 @@ class GempakGrid(GempakFile):
                             gvcord: [col_head.GLV1],
                             'x': self.x,
                             'y': self.y,
+                            'lat': (['y', 'x'], self.lat),
+                            'lon': (['y', 'x'], self.lon),
                         },
                         dims=['time', gvcord, 'y', 'x'],
                         name=var,
