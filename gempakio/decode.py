@@ -1384,7 +1384,7 @@ class GempakSounding(GempakFile):
                     first_sig_p = abs(parts['PPBB']['PRES'][0])
                     if (first_man_p == self.prod_desc.missing_float
                        or np.isclose(first_man_p, first_sig_p)):
-                        merged['DRCT'][0] = abs(parts['PPBB']['PRES'][0])
+                        merged['PRES'][0] = abs(parts['PPBB']['PRES'][0])
                         merged['DRCT'][0] = parts['PPBB']['DRCT'][0]
                         merged['SPED'][0] = parts['PPBB']['SPED'][0]
 
