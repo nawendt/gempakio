@@ -29,7 +29,7 @@ def test_standard_surface():
     gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
                          parse_dates=['YYMMDD/HHMM'],
                          date_parser=dtparse)
-    if not gempak.index.is_lexsorted():
+    if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 
     for stn in gstns:
@@ -57,7 +57,7 @@ def test_ship_surface():
     gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
                          parse_dates=['YYMMDD/HHMM'],
                          date_parser=dtparse)
-    if not gempak.index.is_lexsorted():
+    if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 
     uidx = gempak.index.unique()

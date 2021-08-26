@@ -369,7 +369,7 @@ class GempakFile():
                 for _ in range(part.parameter_count):
                     if 's' in fmt[1]:
                         self.parameters[n][attr] += [
-                            self._buffer.read_binary(*fmt)[0].decode().strip()
+                            self._decode_strip(self._buffer.read_binary(*fmt)[0])
                         ]
                     else:
                         self.parameters[n][attr] += self._buffer.read_binary(*fmt)
@@ -437,12 +437,6 @@ class GempakFile():
             return VerticalCoordinates(coord).name.upper()
         else:
             return struct.pack('i', coord).decode()
-
-    @staticmethod
-    def _convert_parms(parm):
-        """Convert parameter strings."""
-        dparm = parm.decode()
-        return dparm.strip() if dparm.strip() else ''
 
     @staticmethod
     def _fortran_ishift(i, shift):
@@ -566,7 +560,7 @@ class GempakGrid(GempakFile):
                                else (key, 'i', self._convert_vertical_coord) if key == 'GVCD'
                                else (key, 'i', self._convert_dattim) if key in datetime_names
                                else (key, 'i', self._convert_ftime) if key in ftime_names
-                               else (key, '4s', self._convert_parms) if key in string_names
+                               else (key, '4s', self._decode_strip) if key in string_names
                                else (key, 'i')
                                for key in self.column_keys]
         column_headers_info.extend([(None, None)])
@@ -1136,19 +1130,20 @@ class GempakSounding(GempakFile):
                                          _word_to_position(part.header_length + 1))
                     lendat = self.data_header_length - part.header_length
 
-                    if part.data_type == DataTypes.real:
-                        packed_buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.realpack:
-                        packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    else:
+                    fmt_code = {
+                        DataTypes.real: 'f',
+                        DataTypes.realpack: 'i',
+                        DataTypes.character: 's',
+                    }.get(part.data_type)
+
+                    if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    packed_buffer = (
+                        self._buffer.read_struct(
+                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                        )
+                    )
 
                     parameters = self.parameters[iprt]
                     nparms = len(parameters['name'])
@@ -1198,24 +1193,20 @@ class GempakSounding(GempakFile):
                                          _word_to_position(part.header_length + 1))
                     lendat = self.data_header_length - part.header_length
 
-                    if part.data_type == DataTypes.real:
-                        packed_buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.realpack:
-                        packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.character:
-                        packed_buffer_fmt = '{}s'.format(lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    else:
+                    fmt_code = {
+                        DataTypes.real: 'f',
+                        DataTypes.realpack: 'i',
+                        DataTypes.character: 's',
+                    }.get(part.data_type)
+
+                    if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    packed_buffer = (
+                        self._buffer.read_struct(
+                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                        )
+                    )
 
                     parameters = self.parameters[iprt]
                     nparms = len(parameters['name'])
@@ -1228,7 +1219,7 @@ class GempakSounding(GempakFile):
                     elif part.data_type == DataTypes.character:
                         for iprm, param in enumerate(parameters['name']):
                             sounding[part.name][param] = (
-                                packed_buffer[iprm].decode().strip()
+                                self._decode_strip(packed_buffer[iprm])
                             )
                     else:
                         for iprm, param in enumerate(parameters['name']):
@@ -2183,24 +2174,20 @@ class GempakSurface(GempakFile):
                                          _word_to_position(part.header_length + 1))
                     lendat = self.data_header_length - part.header_length
 
-                    if part.data_type == DataTypes.real:
-                        packed_buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.realpack:
-                        packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.character:
-                        packed_buffer_fmt = '{}s'.format(lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    else:
+                    fmt_code = {
+                        DataTypes.real: 'f',
+                        DataTypes.realpack: 'i',
+                        DataTypes.character: 's',
+                    }.get(part.data_type)
+
+                    if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    packed_buffer = (
+                        self._buffer.read_struct(
+                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                        )
+                    )
 
                     parameters = self.parameters[iprt]
 
@@ -2210,7 +2197,7 @@ class GempakSurface(GempakFile):
                             station[param] = unpacked[iprm]
                     elif part.data_type == DataTypes.character:
                         for iprm, param in enumerate(parameters['name']):
-                            station[param] = packed_buffer[iprm].decode().strip()
+                            station[param] = self._decode_strip(packed_buffer[iprm])
                     else:
                         for iprm, param in enumerate(parameters['name']):
                             station[param] = np.array(
@@ -2254,24 +2241,20 @@ class GempakSurface(GempakFile):
                                      _word_to_position(part.header_length + 1))
                 lendat = self.data_header_length - part.header_length
 
-                if part.data_type == DataTypes.real:
-                    packed_buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
-                    packed_buffer = (
-                        self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                    )
-                elif part.data_type == DataTypes.realpack:
-                    packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
-                    packed_buffer = (
-                        self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                    )
-                elif part.data_type == DataTypes.character:
-                    packed_buffer_fmt = '{}s'.format(lendat)
-                    packed_buffer = (
-                        self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                    )
-                else:
+                fmt_code = {
+                    DataTypes.real: 'f',
+                    DataTypes.realpack: 'i',
+                    DataTypes.character: 's',
+                }.get(part.data_type)
+
+                if fmt_code is None:
                     raise NotImplementedError('No methods for data type {}'
                                               .format(part.data_type))
+                packed_buffer = (
+                    self._buffer.read_struct(
+                        struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                    )
+                )
 
                 parameters = self.parameters[iprt]
 
@@ -2281,7 +2264,7 @@ class GempakSurface(GempakFile):
                         station[param] = unpacked[iprm]
                 elif part.data_type == DataTypes.character:
                     for iprm, param in enumerate(parameters['name']):
-                        station[param] = packed_buffer[iprm].decode().strip()
+                        station[param] = self._decode_strip(packed_buffer[iprm])
                 else:
                     for iprm, param in enumerate(parameters['name']):
                         station[param] = np.array(
@@ -2325,24 +2308,20 @@ class GempakSurface(GempakFile):
                                          _word_to_position(part.header_length + 1))
                     lendat = self.data_header_length - part.header_length
 
-                    if part.data_type == DataTypes.real:
-                        packed_buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.realpack:
-                        packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    elif part.data_type == DataTypes.character:
-                        packed_buffer_fmt = '{}s'.format(lendat)
-                        packed_buffer = (
-                            self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-                        )
-                    else:
+                    fmt_code = {
+                        DataTypes.real: 'f',
+                        DataTypes.realpack: 'i',
+                        DataTypes.character: 's',
+                    }.get(part.data_type)
+
+                    if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    packed_buffer = (
+                        self._buffer.read_struct(
+                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                        )
+                    )
 
                     parameters = self.parameters[iprt]
 
@@ -2352,7 +2331,7 @@ class GempakSurface(GempakFile):
                             station[param] = unpacked[iprm]
                     elif part.data_type == DataTypes.character:
                         for iprm, param in enumerate(parameters['name']):
-                            station[param] = packed_buffer[iprm].decode().strip()
+                            station[param] = self._decode_strip(packed_buffer[iprm])
                     else:
                         for iprm, param in enumerate(parameters['name']):
                             station[param] = packed_buffer[iprm]
@@ -2385,7 +2364,6 @@ class GempakSurface(GempakFile):
         One of either station_id or station_number must be used. If both
         are present, station_id will take precedence.
         """
-
         if isinstance(date_time, str):
             date_time = datetime.strptime(date_time, '%Y%m%d%H%M')
 
