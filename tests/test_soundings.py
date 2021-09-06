@@ -108,3 +108,36 @@ def test_unmerged(gem, gio, station):
     np.testing.assert_allclose(gdrct, ddrct, rtol=1e-10, atol=1e-2)
     np.testing.assert_allclose(gsped, dsped, rtol=1e-10, atol=1e-2)
     np.testing.assert_allclose(ghght, dhght, rtol=1e-10, atol=1e-2)
+
+
+def test_unmerged_sigw_pressure_sounding():
+    """Test loading an unmerged sounding.
+
+    PPBB and PPDD groups will be in pressure coordinates and there will
+    be MAN levels below the surface.
+    """
+    g = Path(__file__).parent / 'data' / 'dl10548_sigw_pres_unmrg_man_bgl.snd'
+    d = Path(__file__).parent / 'data' / 'dl10548_sigw_pres_unmrg_man_bgl.csv'
+
+    gso = GempakSounding(g).snxarray()
+    gpres = gso[0].pres.values
+    gtemp = gso[0].temp.values.squeeze()
+    gdwpt = gso[0].dwpt.values.squeeze()
+    gdrct = gso[0].drct.values.squeeze()
+    gsped = gso[0].sped.values.squeeze()
+    ghght = gso[0].hght.values.squeeze()
+
+    gempak = pd.read_csv(d, na_values=-9999)
+    dpres = gempak.PRES.values
+    dtemp = gempak.TEMP.values
+    ddwpt = gempak.DWPT.values
+    ddrct = gempak.DRCT.values
+    dsped = gempak.SPED.values
+    dhght = gempak.HGHT.values
+
+    np.testing.assert_allclose(gpres, dpres, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gtemp, dtemp, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gdwpt, ddwpt, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gdrct, ddrct, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gsped, dsped, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(ghght, dhght, rtol=1e-10, atol=1e-1)
