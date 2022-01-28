@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Nathan Wendt.
+# Copyright (c) 2022 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Setup script for installing gempakIO."""
@@ -6,7 +6,7 @@
 from setuptools import find_packages, setup
 
 NAME = 'gempakio'
-VERSION = '0.6'
+VERSION = '0.6.2'
 DESCR = 'Read GEMPAK data with pure Python.'
 URL = 'https://github.com/nawendt/gempakio'
 REQUIRES = ['pyproj', 'xarray']

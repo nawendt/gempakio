@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Nathan Wendt.
+# Copyright (c) 2022 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding various GEMPAK file formats."""
@@ -1139,6 +1139,9 @@ class GempakSounding(GempakFile):
                     if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    if fmt_code == 's':
+                        lendat *= BYTES_PER_WORD
+
                     packed_buffer = (
                         self._buffer.read_struct(
                             struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
@@ -1202,6 +1205,9 @@ class GempakSounding(GempakFile):
                     if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    if fmt_code == 's':
+                        lendat *= BYTES_PER_WORD
+
                     packed_buffer = (
                         self._buffer.read_struct(
                             struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
@@ -1765,9 +1771,10 @@ class GempakSounding(GempakFile):
                     sped = parts['PPDD']['SPED'][i]
                 skip = False
 
-                if (hght == self.prod_desc.missing_float
+                if ((hght == self.prod_desc.missing_float
                    and drct == self.prod_desc.missing_float
-                   and sped == self.prod_desc.missing_float):
+                   and sped == self.prod_desc.missing_float)
+                   or hght <= zold):
                     skip = True
                 elif abs(zold - hght) < 1:
                     skip = True
@@ -1775,8 +1782,6 @@ class GempakSounding(GempakFile):
                        or merged['SPED'][ilev - 1] == self.prod_desc.missing_float):
                         merged['DRCT'][ilev - 1] = drct
                         merged['SPED'][ilev - 1] = sped
-                elif hght <= zold:
-                    skip = True
                 elif hght >= znxt:
                     while more and hght > znxt:
                         zold = znxt
@@ -2033,59 +2038,36 @@ class GempakSurface(GempakFile):
         if self.surface_type == 'standard':
             for irow, row_head in enumerate(self.row_headers):
                 for icol, col_head in enumerate(self.column_headers):
-                    pointer = (self.prod_desc.data_block_ptr
-                               + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts))
+                    for iprt in range(len(self.parts)):
+                        pointer = (self.prod_desc.data_block_ptr
+                                   + (irow * self.prod_desc.columns * self.prod_desc.parts)
+                                   + (icol * self.prod_desc.parts + iprt))
 
-                    self._buffer.jump_to(self._start, _word_to_position(pointer))
-                    data_ptr = self._buffer.read_int(4, self.endian, False)
+                        self._buffer.jump_to(self._start, _word_to_position(pointer))
+                        data_ptr = self._buffer.read_int(4, self.endian, False)
 
-                    if data_ptr:
-                        self._sfinfo.append(
-                            Surface(
-                                irow,
-                                icol,
-                                datetime.combine(row_head.DATE, row_head.TIME),
-                                col_head.STID + col_head.STD2,
-                                col_head.STNM,
-                                col_head.SLAT,
-                                col_head.SLON,
-                                col_head.SELV,
-                                col_head.STAT,
-                                col_head.COUN,
+                        if data_ptr:
+                            self._sfinfo.append(
+                                Surface(
+                                    irow,
+                                    icol,
+                                    datetime.combine(row_head.DATE, row_head.TIME),
+                                    col_head.STID + col_head.STD2,
+                                    col_head.STNM,
+                                    col_head.SLAT,
+                                    col_head.SLON,
+                                    col_head.SELV,
+                                    col_head.STAT,
+                                    col_head.COUN,
+                                )
                             )
-                        )
         elif self.surface_type == 'ship':
             irow = 0
             for icol, col_head in enumerate(self.column_headers):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts))
-
-                self._buffer.jump_to(self._start, _word_to_position(pointer))
-                data_ptr = self._buffer.read_int(4, self.endian, False)
-
-                if data_ptr:
-                    self._sfinfo.append(
-                        Surface(
-                            irow,
-                            icol,
-                            datetime.combine(col_head.DATE, col_head.TIME),
-                            col_head.STID + col_head.STD2,
-                            col_head.STNM,
-                            col_head.SLAT,
-                            col_head.SLON,
-                            col_head.SELV,
-                            col_head.STAT,
-                            col_head.COUN,
-                        )
-                    )
-        elif self.surface_type == 'climate':
-            for icol, col_head in enumerate(self.column_headers):
-                for irow, row_head in enumerate(self.row_headers):
+                for iprt in range(len(self.parts)):
                     pointer = (self.prod_desc.data_block_ptr
                                + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts))
+                               + (icol * self.prod_desc.parts + iprt))
 
                     self._buffer.jump_to(self._start, _word_to_position(pointer))
                     data_ptr = self._buffer.read_int(4, self.endian, False)
@@ -2096,15 +2078,41 @@ class GempakSurface(GempakFile):
                                 irow,
                                 icol,
                                 datetime.combine(col_head.DATE, col_head.TIME),
-                                row_head.STID + row_head.STD2,
-                                row_head.STNM,
-                                row_head.SLAT,
-                                row_head.SLON,
-                                row_head.SELV,
-                                row_head.STAT,
-                                row_head.COUN,
+                                col_head.STID + col_head.STD2,
+                                col_head.STNM,
+                                col_head.SLAT,
+                                col_head.SLON,
+                                col_head.SELV,
+                                col_head.STAT,
+                                col_head.COUN,
                             )
                         )
+        elif self.surface_type == 'climate':
+            for icol, col_head in enumerate(self.column_headers):
+                for irow, row_head in enumerate(self.row_headers):
+                    for iprt in range(len(self.parts)):
+                        pointer = (self.prod_desc.data_block_ptr
+                                   + (irow * self.prod_desc.columns * self.prod_desc.parts)
+                                   + (icol * self.prod_desc.parts + iprt))
+
+                        self._buffer.jump_to(self._start, _word_to_position(pointer))
+                        data_ptr = self._buffer.read_int(4, self.endian, False)
+
+                        if data_ptr:
+                            self._sfinfo.append(
+                                Surface(
+                                    irow,
+                                    icol,
+                                    datetime.combine(col_head.DATE, col_head.TIME),
+                                    row_head.STID + row_head.STD2,
+                                    row_head.STNM,
+                                    row_head.SLAT,
+                                    row_head.SLON,
+                                    row_head.SELV,
+                                    row_head.STAT,
+                                    row_head.COUN,
+                                )
+                            )
         else:
             raise TypeError('Unknown surface type {}'.format(self.surface_type))
 
@@ -2183,6 +2191,9 @@ class GempakSurface(GempakFile):
                     if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    if fmt_code == 's':
+                        lendat *= BYTES_PER_WORD
+
                     packed_buffer = (
                         self._buffer.read_struct(
                             struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
@@ -2250,6 +2261,9 @@ class GempakSurface(GempakFile):
                 if fmt_code is None:
                     raise NotImplementedError('No methods for data type {}'
                                               .format(part.data_type))
+                if fmt_code == 's':
+                    lendat *= BYTES_PER_WORD
+
                 packed_buffer = (
                     self._buffer.read_struct(
                         struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
@@ -2304,6 +2318,11 @@ class GempakSurface(GempakFile):
                     self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
                     self.data_header_length = self._buffer.read_int(4, self.endian, False)
                     data_header = self._buffer.set_mark()
+                    # if part.header_length == 1:
+                    #     ihhmm = self._buffer.read_int(4, self.endian, False)
+                    # if part.header_length == 2:
+                    #     nreps = self._buffer.read_int(4, self.endian, False)
+                    #     ihhmm = self._buffer.read_int(4, self.endian, False)
                     self._buffer.jump_to(data_header,
                                          _word_to_position(part.header_length + 1))
                     lendat = self.data_header_length - part.header_length
@@ -2317,6 +2336,9 @@ class GempakSurface(GempakFile):
                     if fmt_code is None:
                         raise NotImplementedError('No methods for data type {}'
                                                   .format(part.data_type))
+                    if fmt_code == 's':
+                        lendat *= BYTES_PER_WORD
+
                     packed_buffer = (
                         self._buffer.read_struct(
                             struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')

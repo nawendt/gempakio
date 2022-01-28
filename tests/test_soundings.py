@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Nathan Wendt.
+# Copyright (c) 2022 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
@@ -72,6 +72,22 @@ def test_merged():
     np.testing.assert_allclose(gtkel, dtkel, rtol=1e-10, atol=1e-2)
     np.testing.assert_allclose(gimxr, dimxr, rtol=1e-10, atol=1e-2)
     np.testing.assert_allclose(gdtar, ddtar, rtol=1e-10, atol=1e-2)
+
+
+@pytest.mark.parametrize('text_type', ['txta', 'txtb', 'txtc', 'txpb'])
+def test_radat_text(text_type):
+    """Test for proper decoding of RADAT text."""
+
+    g = Path(__file__).parent / 'data' / 'unmerged_with_text.snd'
+    d = Path(__file__).parent / 'data' / 'unmerged_with_text.csv'
+
+    gso = GempakSounding(g).snxarray(station_id='OUN')[0]
+    gempak = pd.read_csv(d)
+
+    text = gso.attrs['RADAT'][text_type]
+    gem_text = gempak.loc[:, text_type.upper()][0]
+
+    assert text == gem_text
 
 
 @pytest.mark.parametrize('gem,gio,station', [
