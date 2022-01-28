@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Nathan Wendt.
+# Copyright (c) 2022 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK surface files."""
@@ -18,7 +18,7 @@ def test_standard_surface():
     def dtparse(string):
         return datetime.strptime(string, '%y%m%d/%H%M')
 
-    skip = ['text']
+    skip = ['text', 'spcl']
 
     g = Path(__file__).parent / 'data' / 'lwc_std_sfc.sfc'
     d = Path(__file__).parent / 'data' / 'lwc_std_sfc.csv'
@@ -47,7 +47,7 @@ def test_ship_surface():
     def dtparse(string):
         return datetime.strptime(string, '%y%m%d/%H%M')
 
-    skip = ['text']
+    skip = ['text', 'spcl']
 
     g = Path(__file__).parent / 'data' / 'ship_sfc.sfc'
     d = Path(__file__).parent / 'data' / 'ship_sfc.csv'
@@ -74,3 +74,21 @@ def test_ship_surface():
                 decoded_vals = [d['values'][param.lower()] for d in gstns]
                 actual_vals = ugem.loc[:, param].values
                 np.testing.assert_allclose(decoded_vals, actual_vals)
+
+
+@pytest.mark.parametrize('text_type,date_time', [
+    ('text', '202109070000'), ('spcl', '202109071600')
+])
+def test_surface_text(text_type, date_time):
+    """Test text decoding of surface hourly and special observations."""
+
+    g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
+    d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
+
+    gsf = GempakSurface(g)
+    text = gsf.nearest_time(date_time, station_id='MSN')[0]['values'][text_type]
+
+    gempak = pd.read_csv(d)
+    gem_text = gempak.loc[:, text_type.upper()][0]
+
+    assert text == gem_text
