@@ -620,7 +620,7 @@ class GempakGrid(GempakFile):
                                       .format(gemproj))
         proj, ptype = GEMPROJ_TO_PROJ[gemproj]
         ellps = 'sphere'  # Kept for posterity
-        R = 6371200.0  # R takes precedence over ellps
+        earth_radius = 6371200.0  # R takes precedence over ellps
 
         if ptype == 'azm':
             lat_0 = self.navigation_block.proj_angle1
@@ -633,7 +633,7 @@ class GempakGrid(GempakFile):
                                              'lat_0': lat_0,
                                              'lon_0': lon_0,
                                              'ellps': ellps,
-                                             'R': R})
+                                             'R': earth_radius})
         elif ptype == 'cyl':
             if gemproj != 'MCD':
                 lat_0 = self.navigation_block.proj_angle1
@@ -646,7 +646,7 @@ class GempakGrid(GempakFile):
                                                  'lat_0': lat_0,
                                                  'lon_0': lon_0,
                                                  'ellps': ellps,
-                                                 'R': R})
+                                                 'R': earth_radius})
             else:
                 avglat = (self.navigation_block.upper_right_lat
                           + self.navigation_block.lower_left_lat) * 0.5
@@ -660,7 +660,7 @@ class GempakGrid(GempakFile):
                                                  'lon_0': lon_0,
                                                  'k_0': k_0,
                                                  'ellps': ellps,
-                                                 'R': R})
+                                                 'R': earth_radius})
         elif ptype == 'con':
             lat_1 = self.navigation_block.proj_angle1
             lon_0 = self.navigation_block.proj_angle2
@@ -670,7 +670,7 @@ class GempakGrid(GempakFile):
                                              'lat_1': lat_1,
                                              'lat_2': lat_2,
                                              'ellps': ellps,
-                                             'R': R})
+                                             'R': earth_radius})
 
         elif ptype == 'obq':
             lon_0 = self.navigation_block.proj_angle1
@@ -679,12 +679,12 @@ class GempakGrid(GempakFile):
                 self.crs = pyproj.CRS.from_dict({'proj': proj,
                                                  'zone': zone,
                                                  'ellps': ellps,
-                                                 'R': R})
+                                                 'R': earth_radius})
             else:
                 self.crs = pyproj.CRS.from_dict({'proj': proj,
                                                  'lon_0': lon_0,
                                                  'ellps': ellps,
-                                                 'R': R})
+                                                 'R': earth_radius})
 
     def _set_coordinates(self):
         """Use GEMPAK navigation block to define coordinates.
@@ -2539,22 +2539,22 @@ class GempakSurface(GempakFile):
 
         stnarr = []
         for stn in data:
-            stnobj = {}
-            stnobj['properties'] = {}
-            stnobj['values'] = {}
-            stnobj['properties']['date_time'] = datetime.combine(stn.pop('DATE'),
-                                                                 stn.pop('TIME'))
-            stnobj['properties']['station_id'] = stn.pop('STID') + stn.pop('STD2')
-            stnobj['properties']['station_number'] = stn.pop('STNM')
-            stnobj['properties']['longitude'] = stn.pop('SLON')
-            stnobj['properties']['latitude'] = stn.pop('SLAT')
-            stnobj['properties']['elevation'] = stn.pop('SELV')
-            stnobj['properties']['state'] = stn.pop('STAT')
-            stnobj['properties']['country'] = stn.pop('COUN')
-            stnobj['properties']['priority'] = stn.pop('SPRI')
             if stn:
-                for name, ob in stn.items():
-                    stnobj['values'][name.lower()] = ob
+                stnobj = {
+                    'properties': {
+                        'date_time': datetime.combine(stn.pop('DATE'),
+                                                      stn.pop('TIME')),
+                        'station_id': stn.pop('STID') + stn.pop('STD2'),
+                        'station_number': stn.pop('STNM'),
+                        'longitude': stn.pop('SLON'),
+                        'latitude': stn.pop('SLAT'),
+                        'elevation': stn.pop('SELV'),
+                        'state': stn.pop('STAT'),
+                        'country': stn.pop('COUN'),
+                        'priority': stn.pop('SPRI'),
+                    },
+                    'values': {name.lower(): ob for name, ob in stn.items()}
+                }
                 stnarr.append(stnobj)
 
         return stnarr

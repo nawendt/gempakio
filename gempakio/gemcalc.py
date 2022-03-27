@@ -77,8 +77,8 @@ def interp_logp_height(sounding, missing=-9999):
                 tt = sounding['TEMP'][i]
                 tdt = sounding['DWPT'][i]
                 pt = sounding['PRES'][i]
-                H = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
-                sounding['HGHT'][i] = moist_hydrostatic_height(zb, pb, pt, H)
+                scale_z = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
+                sounding['HGHT'][i] = moist_hydrostatic_height(zb, pb, pt, scale_z)
 
 
 def interp_logp_pressure(sounding, missing=-9999):
@@ -237,16 +237,16 @@ def interp_moist_height(sounding, missing=-9999):
                    and sounding['TEMP'][ilev] != missing
                    and sounding['PRES'][jlev] != missing
                    and sounding['TEMP'][jlev] != missing):
-                    H = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
-                    znew = moist_hydrostatic_height(zb, pb, pt, H, missing)
+                    scale_z = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
+                    znew = moist_hydrostatic_height(zb, pb, pt, scale_z, missing)
                     tb = tt
                     tdb = tdt
                     pb = pt
                     zb = znew
                 else:
-                    H = missing
+                    scale_z = missing
                     znew = missing
-                hlist[jlev] = H
+                hlist[jlev] = scale_z
 
         if klev != 0:
             s = (zt - zlev) / (znew - zlev)
@@ -257,8 +257,8 @@ def interp_moist_height(sounding, missing=-9999):
         pbb = plev
         for ii in range(ilev + 1, jlev):
             p = sounding['PRES'][ii]
-            H = hlist[ii]
-            z = moist_hydrostatic_height(hbb, pbb, p, H)
+            scale_z = hlist[ii]
+            z = moist_hydrostatic_height(hbb, pbb, p, scale_z)
             sounding['HGHT'][ii] = z
             hbb = z
             pbb = p
