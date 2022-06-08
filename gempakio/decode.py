@@ -21,8 +21,8 @@ import numpy as np
 import pyproj
 import xarray as xr
 
-from .gemcalc import (interp_logp_height, interp_logp_pressure,
-                      interp_missing_data, interp_moist_height)
+from .gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
+                      interp_moist_height)
 from .tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
