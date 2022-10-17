@@ -75,8 +75,8 @@ def test_merged():
 
 
 @pytest.mark.parametrize('text_type', ['txta', 'txtb', 'txtc', 'txpb'])
-def test_radat_text(text_type):
-    """Test for proper decoding of RADAT text."""
+def test_sounding_text(text_type):
+    """Test for proper decoding of coded message text."""
 
     g = Path(__file__).parent / 'data' / 'unmerged_with_text.snd'
     d = Path(__file__).parent / 'data' / 'unmerged_with_text.csv'
@@ -84,7 +84,7 @@ def test_radat_text(text_type):
     gso = GempakSounding(g).snxarray(station_id='OUN')[0]
     gempak = pd.read_csv(d)
 
-    text = gso.attrs['RADAT'][text_type]
+    text = gso.attrs['WMO_CODES'][text_type]
     gem_text = gempak.loc[:, text_type.upper()][0]
 
     assert text == gem_text
