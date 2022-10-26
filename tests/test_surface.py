@@ -92,3 +92,22 @@ def test_surface_text(text_type, date_time):
     gem_text = gempak.loc[:, text_type.upper()][0]
 
     assert text == gem_text
+
+
+def test_multiple_special_observations():
+    """Test text decoding of surface file with multiple special reports in single time."""
+
+    g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
+    d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
+
+    gsf = GempakSurface(g)
+    #  Report text that is too long will end up truncated in surface files
+    nearest = gsf.nearest_time('202109071605', station_id='MSN')
+    text = nearest[0]['values']['spcl']
+    date_time = nearest[0]['properties']['date_time']
+
+    gempak = pd.read_csv(d)
+    gem_text = gempak.loc[:, 'SPCL_TRUNC'][0]
+
+    assert date_time == datetime(2021, 9, 7, 16, 4)
+    assert text == gem_text

@@ -7,6 +7,7 @@ import bisect
 from collections import namedtuple
 from collections.abc import Iterable
 import contextlib
+from copy import deepcopy
 import ctypes
 from datetime import datetime, timedelta
 from enum import Enum
@@ -14,6 +15,7 @@ from itertools import product
 import logging
 import math
 from pathlib import Path
+import re
 import struct
 import sys
 
@@ -21,9 +23,9 @@ import numpy as np
 import pyproj
 import xarray as xr
 
-from .gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
-                      interp_moist_height)
-from .tools import IOBuffer, NamedStruct
+from ..gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
+                       interp_moist_height)
+from ..tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,12 @@ GVCORD_TO_VAR = {
     'HGHT': 'z',
     'THTA': 'theta',
 }
+METAR_STATION_RE = re.compile(
+    r'^(?P<station>[A-Z][A-Z0-9]{3})\s+'
+)
+METAR_TIME_RE = re.compile(
+    r'(?P<day>\d\d)(?P<hour>\d\d)(?P<minute>\d\d)Z'
+)
 
 
 class FileTypes(Enum):
@@ -169,6 +177,19 @@ Surface = namedtuple('Surface', [
 ])
 
 
+def _bbox_filter(lat, lon, bbox):
+    """Filter stations by bbox.
+
+    Notes
+    -----
+    Expects lon in [-180, 180].
+    """
+    left, right, bottom, top = bbox
+
+    return (lon >= left and lon <= right
+            and lat >= bottom and lat <= top)
+
+
 def _data_source(source):
     """Get data source from stored integer."""
     try:
@@ -238,7 +259,7 @@ class GempakFile():
 
     data_management_fmt = ([('next_free_word', 'i'), ('max_free_pairs', 'i'),
                            ('actual_free_pairs', 'i'), ('last_word', 'i')]
-                           + [('free_word{:d}'.format(n), 'i') for n in range(1, 29)])
+                           + [(f'free_word{n}', 'i') for n in range(1, 29)])
 
     def __init__(self, file):
         """Instantiate GempakFile object from file."""
@@ -270,7 +291,7 @@ class GempakFile():
             # This would grab any file headers, but NAVB and ANLB are the only ones used.
             fkey_prod = product(['header_name', 'header_length', 'header_type'],
                                 range(1, self.prod_desc.file_headers + 1))
-            fkey_names = ['{}{}'.format(*x) for x in fkey_prod]
+            fkey_names = [f'{x[0]}{x[1]}' for x in fkey_prod]
             fkey_info = list(zip(fkey_names, np.repeat(('4s', 'i', 'i'),
                                                        self.prod_desc.file_headers)))
             self.file_keys_format = NamedStruct(fkey_info, self.prefmt, 'FileKeys')
@@ -326,7 +347,7 @@ class GempakFile():
 
         # Row Keys
         self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.row_keys_ptr))
-        row_key_info = [('row_key{:d}'.format(n), '4s', self._decode_strip)
+        row_key_info = [(f'row_key{n}', '4s', self._decode_strip)
                         for n in range(1, self.prod_desc.row_keys + 1)]
         row_key_info.extend([(None, None)])
         row_keys_fmt = NamedStruct(row_key_info, self.prefmt, 'RowKeys')
@@ -334,7 +355,7 @@ class GempakFile():
 
         # Column Keys
         self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.column_keys_ptr))
-        column_key_info = [('column_key{:d}'.format(n), '4s', self._decode_strip)
+        column_key_info = [(f'column_key{n}', '4s', self._decode_strip)
                            for n in range(1, self.prod_desc.column_keys + 1)]
         column_key_info.extend([(None, None)])
         column_keys_fmt = NamedStruct(column_key_info, self.prefmt, 'ColumnKeys')
@@ -345,11 +366,11 @@ class GempakFile():
         # parts = self._buffer.set_mark()
         self.parts = []
         parts_info = [('name', '4s', self._decode_strip),
-                      (None, '{:d}x'.format((self.prod_desc.parts - 1) * BYTES_PER_WORD)),
+                      (None, f'{(self.prod_desc.parts - 1) * BYTES_PER_WORD}x'),
                       ('header_length', 'i'),
-                      (None, '{:d}x'.format((self.prod_desc.parts - 1) * BYTES_PER_WORD)),
+                      (None, f'{(self.prod_desc.parts - 1) * BYTES_PER_WORD}x'),
                       ('data_type', 'i', DataTypes),
-                      (None, '{:d}x'.format((self.prod_desc.parts - 1) * BYTES_PER_WORD)),
+                      (None, f'{(self.prod_desc.parts - 1) * BYTES_PER_WORD}x'),
                       ('parameter_count', 'i')]
         parts_info.extend([(None, None)])
         parts_fmt = NamedStruct(parts_info, self.prefmt, 'Parts')
@@ -404,7 +425,7 @@ class GempakFile():
             if dattim < 100000000:
                 dt = datetime.strptime(f'{dattim:06d}', '%y%m%d')
             else:
-                dt = datetime.strptime('{:010d}'.format(dattim), '%m%d%y%H%M')
+                dt = datetime.strptime(f'{dattim:010d}', '%m%d%y%H%M')
         else:
             dt = None
         return dt
@@ -452,7 +473,7 @@ class GempakFile():
         elif shift == 0:
             shifted = i
         else:
-            raise ValueError('Bad shift value {}.'.format(shift))
+            raise ValueError(f'Bad shift value {shift}.')
         return shifted
 
     @staticmethod
@@ -468,7 +489,7 @@ class GempakFile():
     @staticmethod
     def _make_time(t):
         """Make a time object from GEMPAK FTIME integer."""
-        string = '{:04d}'.format(t)
+        string = f'{t:04d}'
         return datetime.strptime(string, '%H%M').time()
 
     def _unpack_real(self, buffer, parameters, length):
@@ -569,9 +590,9 @@ class GempakGrid(GempakFile):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.column_headers.append(self._buffer.read_struct(column_headers_fmt))
 
-        self._gdinfo = []
+        self._gdinfo = set()
         for n, head in enumerate(self.column_headers):
-            self._gdinfo.append(
+            self._gdinfo.add(
                 Grid(
                     n,
                     head.GTM1[0],
@@ -591,7 +612,7 @@ class GempakGrid(GempakFile):
 
     def gdinfo(self):
         """Return grid information."""
-        return self._gdinfo
+        return sorted(self._gdinfo)
 
     def project_point(self, lon, lat):
         """Project geographic corrdinates.
@@ -616,8 +637,7 @@ class GempakGrid(GempakFile):
         """Create CRS from GEMPAK navigation block."""
         gemproj = self.navigation_block.projection
         if gemproj not in GEMPROJ_TO_PROJ:
-            raise NotImplementedError('{} projection not implemented.'
-                                      .format(gemproj))
+            raise NotImplementedError(f'{gemproj} projection not implemented.')
         proj, ptype = GEMPROJ_TO_PROJ[gemproj]
         ellps = 'sphere'  # Kept for posterity
         earth_radius = 6371200.0  # R takes precedence over ellps
@@ -710,7 +730,7 @@ class GempakGrid(GempakFile):
             lendat = self.data_header_length - part.header_length - 1
 
             if lendat > 1:
-                buffer_fmt = '{}{}f'.format(self.prefmt, lendat)
+                buffer_fmt = f'{self.prefmt}{lendat}f'
                 buffer = self._buffer.read_struct(struct.Struct(buffer_fmt))
                 grid = np.zeros(self.ky * self.kx, dtype=np.float32)
                 grid[...] = buffer
@@ -744,7 +764,7 @@ class GempakGrid(GempakFile):
 
             imiss = 2**self.grid_meta_int.bits - 1
             lendat = self.data_header_length - part.header_length - 8
-            packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
+            packed_buffer_fmt = f'{self.prefmt}{lendat}i'
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
             grid = np.zeros((self.ky, self.kx), dtype=np.float32)
 
@@ -805,7 +825,7 @@ class GempakGrid(GempakFile):
             # grid_start = self._buffer.set_mark()
 
             lendat = self.data_header_length - part.header_length - 6
-            packed_buffer_fmt = '{}{}i'.format(self.prefmt, lendat)
+            packed_buffer_fmt = f'{self.prefmt}{lendat}i'
 
             grid = np.zeros(self.grid_meta_int.kxky, dtype=np.float32)
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
@@ -850,8 +870,9 @@ class GempakGrid(GempakFile):
             #                                                            'GridMetaReal'))
             # grid_start = self._buffer.set_mark()
         else:
-            raise NotImplementedError('No method for unknown grid packing {}'
-                                      .format(packing_type.name))
+            raise NotImplementedError(
+                f'No method for unknown grid packing {packing_type.name}'
+            )
 
     def gdxarray(self, parameter=None, date_time=None, coordinate=None,
                  level=None, date_time2=None, level2=None):
@@ -866,8 +887,10 @@ class GempakGrid(GempakFile):
             Name of GEMPAK parameter.
 
         date_time : datetime or array-like of datetime
-            Valid datetime of the grid. Alternatively
-            can be a string with the format YYYYmmddHHMM.
+            Datetime of the grid. Alternatively a string with
+            the format YYYYmmddHHMM or first|FIRST or last|LAST
+            which function to retrieve the latest and oldest
+            time within the file, respectively.
 
         coordinate : str or array-like of str
             Vertical coordinate.
@@ -886,6 +909,16 @@ class GempakGrid(GempakFile):
         -------
         list
             List of xarray.DataArray objects for each grid.
+
+        Notes
+        -----
+        When multiple filters are used, the order of what is returned
+        in the list is determined by the order of the grids in the
+        GEMPAK file. For example, if you request both U and V wind
+        grids in that order, you still may get V winds in the returned
+        list before U winds if that is how they were placed in file
+        originally. If order becomes important, independent calls to
+        gdxarray are more appropriate.
         """
         if parameter is not None:
             if (not isinstance(parameter, Iterable)
@@ -895,11 +928,13 @@ class GempakGrid(GempakFile):
 
         if date_time is not None:
             if (not isinstance(date_time, Iterable)
-               or isinstance(date_time, str)):
+               or (isinstance(date_time, str)
+               and date_time not in ['first', 'FIRST', 'last', 'LAST'])):
                 date_time = [date_time]
-            for i, dt in enumerate(date_time):
-                if isinstance(dt, str):
-                    date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
+            if date_time not in ['first', 'FIRST', 'last', 'LAST']:
+                for i, dt in enumerate(date_time):
+                    if isinstance(dt, str):
+                        date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
         if coordinate is not None:
             if (not isinstance(coordinate, Iterable)
@@ -922,41 +957,48 @@ class GempakGrid(GempakFile):
             level2 = [level2]
 
         # Figure out which columns to extract from the file
-        matched = self._gdinfo.copy()
+        matched = sorted(self._gdinfo)
+
+        # Do this now or the matched filter iterator will be consumed
+        # prematurely.
+        if date_time in ['last', 'LAST']:
+            date_time = [max((d.DATTIM for d in matched))]
+        elif date_time in ['first', 'FIRST']:
+            date_time = [min((d.DATTIM for d in matched))]
 
         if parameter is not None:
             matched = filter(
-                lambda grid: grid if grid.PARM in parameter else False,
+                lambda grid: grid.PARM in parameter,
                 matched
             )
 
         if date_time is not None:
             matched = filter(
-                lambda grid: grid if grid.DATTIM1 in date_time else False,
+                lambda grid: grid.DATTIM1 in date_time,
                 matched
             )
 
         if coordinate is not None:
             matched = filter(
-                lambda grid: grid if grid.COORD in coordinate else False,
+                lambda grid: grid.COORD in coordinate,
                 matched
             )
 
         if level is not None:
             matched = filter(
-                lambda grid: grid if grid.LEVEL1 in level else False,
+                lambda grid: grid.LEVEL1 in level,
                 matched
             )
 
         if date_time2 is not None:
             matched = filter(
-                lambda grid: grid if grid.DATTIM2 in date_time2 else False,
+                lambda grid: grid.DATTIM2 in date_time2,
                 matched
             )
 
         if level2 is not None:
             matched = filter(
-                lambda grid: grid if grid.LEVEL2 in level2 else False,
+                lambda grid: grid.LEVEL2 in level2,
                 matched
             )
 
@@ -969,9 +1011,8 @@ class GempakGrid(GempakFile):
 
         grids = []
         irow = 0  # Only one row for grids
-        for icol, col_head in enumerate(self.column_headers):
-            if icol not in gridno:
-                continue
+        for icol in gridno:
+            col_head = self.column_headers[icol]
             for iprt, part in enumerate(self.parts):
                 pointer = (self.prod_desc.data_block_ptr
                            + (irow * self.prod_desc.columns * self.prod_desc.parts)
@@ -1068,7 +1109,7 @@ class GempakSounding(GempakFile):
 
         self.merged = 'SNDT' in (part.name for part in self.parts)
 
-        self._sninfo = []
+        self._sninfo = set()
         for irow, row_head in enumerate(self.row_headers):
             for icol, col_head in enumerate(self.column_headers):
                 pointer = (self.prod_desc.data_block_ptr
@@ -1079,7 +1120,7 @@ class GempakSounding(GempakFile):
                 data_ptr = self._buffer.read_int(4, self.endian, False)
 
                 if data_ptr:
-                    self._sninfo.append(
+                    self._sninfo.add(
                         Sounding(
                             irow,
                             icol,
@@ -1096,164 +1137,167 @@ class GempakSounding(GempakFile):
 
     def sninfo(self):
         """Return sounding information."""
-        return self._sninfo
+        return sorted(self._sninfo)
 
     def _unpack_merged(self, sndno):
         """Unpack merged sounding data."""
         soundings = []
-        for irow, row_head in enumerate(self.row_headers):
-            for icol, col_head in enumerate(self.column_headers):
-                if (irow, icol) not in sndno:
+        for irow, icol in sndno:
+            row_head = self.row_headers[irow]
+            col_head = self.column_headers[icol]
+            sounding = {
+                'STID': col_head.STID,
+                'STNM': col_head.STNM,
+                'SLAT': col_head.SLAT,
+                'SLON': col_head.SLON,
+                'SELV': col_head.SELV,
+                'STAT': col_head.STAT,
+                'COUN': col_head.COUN,
+                'DATE': row_head.DATE,
+                'TIME': row_head.TIME,
+            }
+            for iprt, part in enumerate(self.parts):
+                pointer = (self.prod_desc.data_block_ptr
+                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
+                           + (icol * self.prod_desc.parts + iprt))
+                self._buffer.jump_to(self._start, _word_to_position(pointer))
+                self.data_ptr = self._buffer.read_int(4, self.endian, False)
+                if not self.data_ptr:
                     continue
-                sounding = {'STID': col_head.STID,
-                            'STNM': col_head.STNM,
-                            'SLAT': col_head.SLAT,
-                            'SLON': col_head.SLON,
-                            'SELV': col_head.SELV,
-                            'STAT': col_head.STAT,
-                            'COUN': col_head.COUN,
-                            'DATE': row_head.DATE,
-                            'TIME': row_head.TIME,
-                            }
-                for iprt, part in enumerate(self.parts):
-                    pointer = (self.prod_desc.data_block_ptr
-                               + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts + iprt))
-                    self._buffer.jump_to(self._start, _word_to_position(pointer))
-                    self.data_ptr = self._buffer.read_int(4, self.endian, False)
-                    if not self.data_ptr:
-                        continue
-                    self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
-                    self.data_header_length = self._buffer.read_int(4, self.endian, False)
-                    data_header = self._buffer.set_mark()
-                    self._buffer.jump_to(data_header,
-                                         _word_to_position(part.header_length + 1))
-                    lendat = self.data_header_length - part.header_length
+                self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
+                self.data_header_length = self._buffer.read_int(4, self.endian, False)
+                data_header = self._buffer.set_mark()
+                self._buffer.jump_to(data_header,
+                                     _word_to_position(part.header_length + 1))
+                lendat = self.data_header_length - part.header_length
 
-                    fmt_code = {
-                        DataTypes.real: 'f',
-                        DataTypes.realpack: 'i',
-                        DataTypes.character: 's',
-                    }.get(part.data_type)
+                fmt_code = {
+                    DataTypes.real: 'f',
+                    DataTypes.realpack: 'i',
+                    DataTypes.character: 's',
+                }.get(part.data_type)
 
-                    if fmt_code is None:
-                        raise NotImplementedError('No methods for data type {}'
-                                                  .format(part.data_type))
-                    if fmt_code == 's':
-                        lendat *= BYTES_PER_WORD
-
-                    packed_buffer = (
-                        self._buffer.read_struct(
-                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
-                        )
+                if fmt_code is None:
+                    raise NotImplementedError(
+                        f'No methods for data type {part.data_type}'
                     )
+                if fmt_code == 's':
+                    lendat *= BYTES_PER_WORD
 
-                    parameters = self.parameters[iprt]
-                    nparms = len(parameters['name'])
+                packed_buffer = (
+                    self._buffer.read_struct(
+                        struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                    )
+                )
 
-                    if part.data_type == DataTypes.realpack:
-                        unpacked = self._unpack_real(packed_buffer, parameters, lendat)
-                        for iprm, param in enumerate(parameters['name']):
-                            sounding[param] = unpacked[iprm::nparms]
-                    else:
-                        for iprm, param in enumerate(parameters['name']):
-                            sounding[param] = np.array(
-                                packed_buffer[iprm::nparms], dtype=np.float32
-                            )
+                parameters = self.parameters[iprt]
+                nparms = len(parameters['name'])
 
-                soundings.append(sounding)
+                if part.data_type == DataTypes.realpack:
+                    unpacked = self._unpack_real(packed_buffer, parameters, lendat)
+                    for iprm, param in enumerate(parameters['name']):
+                        sounding[param] = unpacked[iprm::nparms]
+                else:
+                    for iprm, param in enumerate(parameters['name']):
+                        sounding[param] = np.array(
+                            packed_buffer[iprm::nparms], dtype=np.float32
+                        )
+
+            soundings.append(sounding)
         return soundings
 
     def _unpack_unmerged(self, sndno):
         """Unpack unmerged sounding data."""
         soundings = []
-        for irow, row_head in enumerate(self.row_headers):
-            for icol, col_head in enumerate(self.column_headers):
-                if (irow, icol) not in sndno:
+        for irow, icol in sndno:
+            row_head = self.row_headers[irow]
+            col_head = self.column_headers[icol]
+            sounding = {
+                'STID': col_head.STID,
+                'STNM': col_head.STNM,
+                'SLAT': col_head.SLAT,
+                'SLON': col_head.SLON,
+                'SELV': col_head.SELV,
+                'STAT': col_head.STAT,
+                'COUN': col_head.COUN,
+                'DATE': row_head.DATE,
+                'TIME': row_head.TIME,
+            }
+            for iprt, part in enumerate(self.parts):
+                pointer = (self.prod_desc.data_block_ptr
+                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
+                           + (icol * self.prod_desc.parts + iprt))
+                self._buffer.jump_to(self._start, _word_to_position(pointer))
+                self.data_ptr = self._buffer.read_int(4, self.endian, False)
+                if not self.data_ptr:
                     continue
-                sounding = {'STID': col_head.STID,
-                            'STNM': col_head.STNM,
-                            'SLAT': col_head.SLAT,
-                            'SLON': col_head.SLON,
-                            'SELV': col_head.SELV,
-                            'STAT': col_head.STAT,
-                            'COUN': col_head.COUN,
-                            'DATE': row_head.DATE,
-                            'TIME': row_head.TIME,
-                            }
-                for iprt, part in enumerate(self.parts):
-                    pointer = (self.prod_desc.data_block_ptr
-                               + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts + iprt))
-                    self._buffer.jump_to(self._start, _word_to_position(pointer))
-                    self.data_ptr = self._buffer.read_int(4, self.endian, False)
-                    if not self.data_ptr:
-                        continue
-                    self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
-                    self.data_header_length = self._buffer.read_int(4, self.endian, False)
-                    data_header = self._buffer.set_mark()
-                    self._buffer.jump_to(data_header,
-                                         _word_to_position(part.header_length + 1))
-                    lendat = self.data_header_length - part.header_length
+                self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
+                self.data_header_length = self._buffer.read_int(4, self.endian, False)
+                data_header = self._buffer.set_mark()
+                self._buffer.jump_to(data_header,
+                                     _word_to_position(part.header_length + 1))
+                lendat = self.data_header_length - part.header_length
 
-                    fmt_code = {
-                        DataTypes.real: 'f',
-                        DataTypes.realpack: 'i',
-                        DataTypes.character: 's',
-                    }.get(part.data_type)
+                fmt_code = {
+                    DataTypes.real: 'f',
+                    DataTypes.realpack: 'i',
+                    DataTypes.character: 's',
+                }.get(part.data_type)
 
-                    if fmt_code is None:
-                        raise NotImplementedError('No methods for data type {}'
-                                                  .format(part.data_type))
-                    if fmt_code == 's':
-                        lendat *= BYTES_PER_WORD
-
-                    packed_buffer = (
-                        self._buffer.read_struct(
-                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
-                        )
+                if fmt_code is None:
+                    raise NotImplementedError(
+                        f'No methods for data type {part.data_type}'
                     )
+                if fmt_code == 's':
+                    lendat *= BYTES_PER_WORD
 
-                    parameters = self.parameters[iprt]
-                    nparms = len(parameters['name'])
-                    sounding[part.name] = {}
+                packed_buffer = (
+                    self._buffer.read_struct(
+                        struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                    )
+                )
 
-                    if part.data_type == DataTypes.realpack:
-                        unpacked = self._unpack_real(packed_buffer, parameters, lendat)
-                        for iprm, param in enumerate(parameters['name']):
-                            sounding[part.name][param] = unpacked[iprm::nparms]
-                    elif part.data_type == DataTypes.character:
-                        for iprm, param in enumerate(parameters['name']):
-                            sounding[part.name][param] = (
-                                self._decode_strip(packed_buffer[iprm])
-                            )
-                    else:
-                        for iprm, param in enumerate(parameters['name']):
-                            sounding[part.name][param] = (
-                                np.array(packed_buffer[iprm::nparms], dtype=np.float32)
-                            )
+                parameters = self.parameters[iprt]
+                nparms = len(parameters['name'])
+                sounding[part.name] = {}
 
-                soundings.append(self._merge_sounding(sounding))
+                if part.data_type == DataTypes.realpack:
+                    unpacked = self._unpack_real(packed_buffer, parameters, lendat)
+                    for iprm, param in enumerate(parameters['name']):
+                        sounding[part.name][param] = unpacked[iprm::nparms]
+                elif part.data_type == DataTypes.character:
+                    for iprm, param in enumerate(parameters['name']):
+                        sounding[part.name][param] = (
+                            self._decode_strip(packed_buffer[iprm])
+                        )
+                else:
+                    for iprm, param in enumerate(parameters['name']):
+                        sounding[part.name][param] = (
+                            np.array(packed_buffer[iprm::nparms], dtype=np.float32)
+                        )
+
+            soundings.append(self._merge_sounding(sounding))
         return soundings
 
     def _merge_sounding(self, parts):
         """Merge unmerged sounding data."""
-        merged = {'STID': parts['STID'],
-                  'STNM': parts['STNM'],
-                  'SLAT': parts['SLAT'],
-                  'SLON': parts['SLON'],
-                  'SELV': parts['SELV'],
-                  'STAT': parts['STAT'],
-                  'COUN': parts['COUN'],
-                  'DATE': parts['DATE'],
-                  'TIME': parts['TIME'],
-                  'PRES': [],
-                  'HGHT': [],
-                  'TEMP': [],
-                  'DWPT': [],
-                  'DRCT': [],
-                  'SPED': [],
-                  }
+        merged = {
+            'STID': parts['STID'],
+            'STNM': parts['STNM'],
+            'SLAT': parts['SLAT'],
+            'SLON': parts['SLON'],
+            'SELV': parts['SELV'],
+            'STAT': parts['STAT'],
+            'COUN': parts['COUN'],
+            'DATE': parts['DATE'],
+            'TIME': parts['TIME'],
+            'PRES': [],
+            'HGHT': [],
+            'TEMP': [],
+            'DWPT': [],
+            'DRCT': [],
+            'SPED': [],
+        }
 
         # Number of parameter levels
         num_man_levels = len(parts['TTAA']['PRES']) if 'TTAA' in parts else 0
@@ -1851,7 +1895,7 @@ class GempakSounding(GempakFile):
         return merged
 
     def snxarray(self, station_id=None, station_number=None,
-                 date_time=None, state=None, country=None):
+                 date_time=None, state=None, country=None, bbox=None):
         """Select soundings and output as list of xarray Datasets.
 
         Subset the data by parameter values. The default is to not
@@ -1866,14 +1910,19 @@ class GempakSounding(GempakFile):
             Station number of sounding site.
 
         date_time : datetime or array-like of datetime
-            Valid/observed datetime of the sounding. Alternatively
-            can be a string with the format YYYYmmddHHMM.
+            Datetime of the sounding. Alternatively a string with
+            the format YYYYmmddHHMM or first|FIRST or last|LAST
+            which function to retrieve the latest and oldest
+            time within the file, respectively.
 
         state : str or array-like of str
             State where sounding site is located.
 
         country : str or array-like of str
             Country where sounding site is located.
+
+        bbox: floats (left, right, bottom, top)
+            Bounding area where sounding sites are located.
 
         Returns
         -------
@@ -1893,11 +1942,13 @@ class GempakSounding(GempakFile):
 
         if date_time is not None:
             if (not isinstance(date_time, Iterable)
-               or isinstance(date_time, str)):
+               or (isinstance(date_time, str)
+               and date_time not in ['first', 'FIRST', 'last', 'LAST'])):
                 date_time = [date_time]
-            for i, dt in enumerate(date_time):
-                if isinstance(dt, str):
-                    date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
+            if date_time not in ['first', 'FIRST', 'last', 'LAST']:
+                for i, dt in enumerate(date_time):
+                    if isinstance(dt, str):
+                        date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
         if (state is not None
            and (not isinstance(state, Iterable)
@@ -1912,35 +1963,48 @@ class GempakSounding(GempakFile):
             country = [c.upper() for c in country]
 
         # Figure out which columns to extract from the file
-        matched = self._sninfo.copy()
+        matched = sorted(self._sninfo)
 
-        if station_id is not None:
-            matched = filter(
-                lambda snd: snd if snd.ID in station_id else False,
-                matched
-            )
+        # Do this now or the matched filter iterator will be consumed
+        # prematurely.
+        if date_time in ['last', 'LAST']:
+            date_time = [max((d.DATTIM for d in matched))]
+        elif date_time in ['first', 'FIRST']:
+            date_time = [min((d.DATTIM for d in matched))]
 
-        if station_number is not None:
+        if country is not None:
             matched = filter(
-                lambda snd: snd if snd.NUMBER in station_number else False,
-                matched
-            )
-
-        if date_time is not None:
-            matched = filter(
-                lambda snd: snd if snd.DATTIM in date_time else False,
+                lambda snd: snd.COUNTRY in country,
                 matched
             )
 
         if state is not None:
             matched = filter(
-                lambda snd: snd if snd.STATE in state else False,
+                lambda snd: snd.STATE in state,
                 matched
             )
 
-        if country is not None:
+        if bbox is not None:
             matched = filter(
-                lambda snd: snd if snd.COUNTRY in country else False,
+                lambda snd: _bbox_filter(snd.LAT, snd.LON, bbox),
+                matched
+            )
+
+        if date_time is not None:
+            matched = filter(
+                lambda snd: snd.DATTIM in date_time,
+                matched
+            )
+
+        if station_id is not None:
+            matched = filter(
+                lambda snd: snd.ID in station_id,
+                matched
+            )
+
+        if station_number is not None:
+            matched = filter(
+                lambda snd: snd.NUMBER in station_number,
                 matched
             )
 
@@ -1958,34 +2022,43 @@ class GempakSounding(GempakFile):
 
         soundings = []
         for snd in data:
-            if snd is None or 'PRES' not in snd:
+            if snd is None:
                 continue
-            station_pressure = snd['PRES'][0]
-            radat_text = {}
+            wmo_text = {}
             attrs = {
                 'station_id': snd.pop('STID'),
                 'station_number': snd.pop('STNM'),
                 'lat': snd.pop('SLAT'),
                 'lon': snd.pop('SLON'),
                 'elevation': snd.pop('SELV'),
-                'station_pressure': station_pressure,
                 'state': snd.pop('STAT'),
                 'country': snd.pop('COUN'),
             }
 
+            if 'PRES' in snd:
+                vcoord = 'pres'
+                attrs['station_pressure'] = snd['PRES'][0]
+            elif 'HGHT' in snd:
+                vcoord = 'hght'
+            else:
+                raise ValueError('Unknown vertical coordinate in sounding.')
+
             if 'TXTA' in snd:
-                radat_text['txta'] = snd.pop('TXTA')
+                wmo_text['txta'] = snd.pop('TXTA')
             if 'TXTB' in snd:
-                radat_text['txtb'] = snd.pop('TXTB')
+                wmo_text['txtb'] = snd.pop('TXTB')
             if 'TXTC' in snd:
-                radat_text['txtc'] = snd.pop('TXTC')
+                wmo_text['txtc'] = snd.pop('TXTC')
             if 'TXPB' in snd:
-                radat_text['txpb'] = snd.pop('TXPB')
-            if radat_text:
-                attrs['RADAT'] = radat_text
+                wmo_text['txpb'] = snd.pop('TXPB')
+            if wmo_text:
+                attrs['WMO_CODES'] = wmo_text
 
             dt = datetime.combine(snd.pop('DATE'), snd.pop('TIME'))
-            pres = np.array(snd.pop('PRES'))
+            if vcoord == 'pres':
+                vcdata = np.array(snd.pop('PRES'))
+            elif vcoord == 'hght':
+                vcdata = np.array(snd.pop('HGHT'))
 
             var = {}
             for param, values in snd.items():
@@ -1995,11 +2068,14 @@ class GempakSounding(GempakFile):
                 var[param.lower()] = (['time', 'pres'], maskval)
 
             xrds = xr.Dataset(var,
-                              coords={'time': np.atleast_1d(dt), 'pres': pres},
+                              coords={'time': np.atleast_1d(dt), vcoord: vcdata},
                               attrs=attrs)
 
             # Sort to fix GEMPAK surface data at first level
-            xrds = xrds.sortby('pres', ascending=False)
+            if vcoord == 'pres':
+                xrds = xrds.sortby('pres', ascending=False)
+            elif vcoord == 'hght':
+                xrds = xrds.sortby('hght', ascending=True)
 
             soundings.append(xrds)
         return soundings
@@ -2034,7 +2110,7 @@ class GempakSurface(GempakFile):
 
         self._get_surface_type()
 
-        self._sfinfo = []
+        self._sfinfo = set()
         if self.surface_type == 'standard':
             for irow, row_head in enumerate(self.row_headers):
                 for icol, col_head in enumerate(self.column_headers):
@@ -2047,7 +2123,7 @@ class GempakSurface(GempakFile):
                         data_ptr = self._buffer.read_int(4, self.endian, False)
 
                         if data_ptr:
-                            self._sfinfo.append(
+                            self._sfinfo.add(
                                 Surface(
                                     irow,
                                     icol,
@@ -2073,7 +2149,7 @@ class GempakSurface(GempakFile):
                     data_ptr = self._buffer.read_int(4, self.endian, False)
 
                     if data_ptr:
-                        self._sfinfo.append(
+                        self._sfinfo.add(
                             Surface(
                                 irow,
                                 icol,
@@ -2099,7 +2175,7 @@ class GempakSurface(GempakFile):
                         data_ptr = self._buffer.read_int(4, self.endian, False)
 
                         if data_ptr:
-                            self._sfinfo.append(
+                            self._sfinfo.add(
                                 Surface(
                                     irow,
                                     icol,
@@ -2114,11 +2190,11 @@ class GempakSurface(GempakFile):
                                 )
                             )
         else:
-            raise TypeError('Unknown surface type {}'.format(self.surface_type))
+            raise TypeError(f'Unknown surface type {self.surface_type}')
 
     def sfinfo(self):
         """Return station information."""
-        return self._sfinfo
+        return sorted(self._sfinfo)
 
     def _get_surface_type(self):
         """Determine type of surface file."""
@@ -2151,92 +2227,22 @@ class GempakSurface(GempakFile):
     def _unpack_climate(self, sfcno):
         """Unpack a climate surface data file."""
         stations = []
-        for icol, col_head in enumerate(self.column_headers):
-            for irow, row_head in enumerate(self.row_headers):
-                if (irow, icol) not in sfcno:
-                    continue
-                station = {'STID': row_head.STID,
-                           'STNM': row_head.STNM,
-                           'SLAT': row_head.SLAT,
-                           'SLON': row_head.SLON,
-                           'SELV': row_head.SELV,
-                           'STAT': row_head.STAT,
-                           'COUN': row_head.COUN,
-                           'STD2': row_head.STD2,
-                           'SPRI': row_head.SPRI,
-                           'DATE': col_head.DATE,
-                           'TIME': col_head.TIME,
-                           }
-                for iprt, part in enumerate(self.parts):
-                    pointer = (self.prod_desc.data_block_ptr
-                               + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts + iprt))
-                    self._buffer.jump_to(self._start, _word_to_position(pointer))
-                    self.data_ptr = self._buffer.read_int(4, self.endian, False)
-                    if not self.data_ptr:
-                        continue
-                    self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
-                    self.data_header_length = self._buffer.read_int(4, self.endian, False)
-                    data_header = self._buffer.set_mark()
-                    self._buffer.jump_to(data_header,
-                                         _word_to_position(part.header_length + 1))
-                    lendat = self.data_header_length - part.header_length
-
-                    fmt_code = {
-                        DataTypes.real: 'f',
-                        DataTypes.realpack: 'i',
-                        DataTypes.character: 's',
-                    }.get(part.data_type)
-
-                    if fmt_code is None:
-                        raise NotImplementedError('No methods for data type {}'
-                                                  .format(part.data_type))
-                    if fmt_code == 's':
-                        lendat *= BYTES_PER_WORD
-
-                    packed_buffer = (
-                        self._buffer.read_struct(
-                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
-                        )
-                    )
-
-                    parameters = self.parameters[iprt]
-
-                    if part.data_type == DataTypes.realpack:
-                        unpacked = self._unpack_real(packed_buffer, parameters, lendat)
-                        for iprm, param in enumerate(parameters['name']):
-                            station[param] = unpacked[iprm]
-                    elif part.data_type == DataTypes.character:
-                        for iprm, param in enumerate(parameters['name']):
-                            station[param] = self._decode_strip(packed_buffer[iprm])
-                    else:
-                        for iprm, param in enumerate(parameters['name']):
-                            station[param] = np.array(
-                                packed_buffer[iprm], dtype=np.float32
-                            )
-
-                stations.append(station)
-        return stations
-
-    def _unpack_ship(self, sfcno):
-        """Unpack ship (moving observation) surface data file."""
-        stations = []
-        irow = 0
-        for icol, col_head in enumerate(self.column_headers):
-            if (irow, icol) not in sfcno:
-                continue
-            station = {'STID': col_head.STID,
-                       'STNM': col_head.STNM,
-                       'SLAT': col_head.SLAT,
-                       'SLON': col_head.SLON,
-                       'SELV': col_head.SELV,
-                       'STAT': col_head.STAT,
-                       'COUN': col_head.COUN,
-                       'STD2': col_head.STD2,
-                       'SPRI': col_head.SPRI,
-                       'DATE': col_head.DATE,
-                       'TIME': col_head.TIME,
-                       }
+        for irow, icol in sfcno:
+            col_head = self.column_headers[icol]
+            row_head = self.row_headers[irow]
+            station = {
+                'STID': row_head.STID,
+                'STNM': row_head.STNM,
+                'SLAT': row_head.SLAT,
+                'SLON': row_head.SLON,
+                'SELV': row_head.SELV,
+                'STAT': row_head.STAT,
+                'COUN': row_head.COUN,
+                'STD2': row_head.STD2,
+                'SPRI': row_head.SPRI,
+                'DATE': col_head.DATE,
+                'TIME': col_head.TIME,
+            }
             for iprt, part in enumerate(self.parts):
                 pointer = (self.prod_desc.data_block_ptr
                            + (irow * self.prod_desc.columns * self.prod_desc.parts)
@@ -2259,8 +2265,79 @@ class GempakSurface(GempakFile):
                 }.get(part.data_type)
 
                 if fmt_code is None:
-                    raise NotImplementedError('No methods for data type {}'
-                                              .format(part.data_type))
+                    raise NotImplementedError(
+                        f'No methods for data type {part.data_type}'
+                    )
+                if fmt_code == 's':
+                    lendat *= BYTES_PER_WORD
+
+                packed_buffer = (
+                    self._buffer.read_struct(
+                        struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
+                    )
+                )
+
+                parameters = self.parameters[iprt]
+
+                if part.data_type == DataTypes.realpack:
+                    unpacked = self._unpack_real(packed_buffer, parameters, lendat)
+                    for iprm, param in enumerate(parameters['name']):
+                        station[param] = unpacked[iprm]
+                elif part.data_type == DataTypes.character:
+                    for iprm, param in enumerate(parameters['name']):
+                        station[param] = self._decode_strip(packed_buffer[iprm])
+                else:
+                    for iprm, param in enumerate(parameters['name']):
+                        station[param] = np.array(
+                            packed_buffer[iprm], dtype=np.float32
+                        )
+
+            stations.append(station)
+        return stations
+
+    def _unpack_ship(self, sfcno):
+        """Unpack ship (moving observation) surface data file."""
+        stations = []
+        for irow, icol in sfcno:  # irow should always be zero
+            col_head = self.column_headers[icol]
+            station = {
+                'STID': col_head.STID,
+                'STNM': col_head.STNM,
+                'SLAT': col_head.SLAT,
+                'SLON': col_head.SLON,
+                'SELV': col_head.SELV,
+                'STAT': col_head.STAT,
+                'COUN': col_head.COUN,
+                'STD2': col_head.STD2,
+                'SPRI': col_head.SPRI,
+                'DATE': col_head.DATE,
+                'TIME': col_head.TIME,
+            }
+            for iprt, part in enumerate(self.parts):
+                pointer = (self.prod_desc.data_block_ptr
+                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
+                           + (icol * self.prod_desc.parts + iprt))
+                self._buffer.jump_to(self._start, _word_to_position(pointer))
+                self.data_ptr = self._buffer.read_int(4, self.endian, False)
+                if not self.data_ptr:
+                    continue
+                self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
+                self.data_header_length = self._buffer.read_int(4, self.endian, False)
+                data_header = self._buffer.set_mark()
+                self._buffer.jump_to(data_header,
+                                     _word_to_position(part.header_length + 1))
+                lendat = self.data_header_length - part.header_length
+
+                fmt_code = {
+                    DataTypes.real: 'f',
+                    DataTypes.realpack: 'i',
+                    DataTypes.character: 's',
+                }.get(part.data_type)
+
+                if fmt_code is None:
+                    raise NotImplementedError(
+                        f'No methods for data type {part.data_type}'
+                    )
                 if fmt_code == 's':
                     lendat *= BYTES_PER_WORD
 
@@ -2290,91 +2367,175 @@ class GempakSurface(GempakFile):
 
     def _unpack_standard(self, sfcno):
         """Unpack a standard surface data file."""
-        stations = []
-        for irow, row_head in enumerate(self.row_headers):
-            for icol, col_head in enumerate(self.column_headers):
-                if (irow, icol) not in sfcno:
+        reports = []
+        for irow, icol in sfcno:
+            row_head = self.row_headers[irow]
+            col_head = self.column_headers[icol]
+            report = {
+                'STID': col_head.STID,
+                'STNM': col_head.STNM,
+                'SLAT': col_head.SLAT,
+                'SLON': col_head.SLON,
+                'SELV': col_head.SELV,
+                'STAT': col_head.STAT,
+                'COUN': col_head.COUN,
+                'STD2': col_head.STD2,
+                'SPRI': col_head.SPRI,
+                'DATE': row_head.DATE,
+                'TIME': row_head.TIME,
+            }
+            values = {}
+            for iprt, part in enumerate(self.parts):
+                pointer = (self.prod_desc.data_block_ptr
+                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
+                           + (icol * self.prod_desc.parts + iprt))
+                self._buffer.jump_to(self._start, _word_to_position(pointer))
+                self.data_ptr = self._buffer.read_int(4, self.endian, False)
+                if not self.data_ptr:
                     continue
-                station = {'STID': col_head.STID,
-                           'STNM': col_head.STNM,
-                           'SLAT': col_head.SLAT,
-                           'SLON': col_head.SLON,
-                           'SELV': col_head.SELV,
-                           'STAT': col_head.STAT,
-                           'COUN': col_head.COUN,
-                           'STD2': col_head.STD2,
-                           'SPRI': col_head.SPRI,
-                           'DATE': row_head.DATE,
-                           'TIME': row_head.TIME,
-                           }
-                for iprt, part in enumerate(self.parts):
-                    pointer = (self.prod_desc.data_block_ptr
-                               + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts + iprt))
-                    self._buffer.jump_to(self._start, _word_to_position(pointer))
-                    self.data_ptr = self._buffer.read_int(4, self.endian, False)
-                    if not self.data_ptr:
-                        continue
-                    self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
-                    self.data_header_length = self._buffer.read_int(4, self.endian, False)
-                    data_header = self._buffer.set_mark()
-                    # if part.header_length == 1:
-                    #     ihhmm = self._buffer.read_int(4, self.endian, False)
-                    # if part.header_length == 2:
-                    #     nreps = self._buffer.read_int(4, self.endian, False)
-                    #     ihhmm = self._buffer.read_int(4, self.endian, False)
-                    self._buffer.jump_to(data_header,
-                                         _word_to_position(part.header_length + 1))
-                    lendat = self.data_header_length - part.header_length
+                self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
+                self.data_header_length = self._buffer.read_int(4, self.endian, False)
+                data_header = self._buffer.set_mark()
+                # if part.header_length == 1:
+                #     ihhmm = self._buffer.read_int(4, self.endian, False)
+                # if part.header_length == 2:
+                #     nreps = self._buffer.read_int(4, self.endian, False)
+                #     ihhmm = self._buffer.read_int(4, self.endian, False)
+                self._buffer.jump_to(data_header,
+                                     _word_to_position(part.header_length + 1))
+                lendat = self.data_header_length - part.header_length
 
-                    fmt_code = {
-                        DataTypes.real: 'f',
-                        DataTypes.realpack: 'i',
-                        DataTypes.character: 's',
-                    }.get(part.data_type)
+                fmt_code = {
+                    DataTypes.real: 'f',
+                    DataTypes.realpack: 'i',
+                    DataTypes.character: 's',
+                }.get(part.data_type)
 
-                    if fmt_code is None:
-                        raise NotImplementedError('No methods for data type {}'
-                                                  .format(part.data_type))
-                    if fmt_code == 's':
-                        lendat *= BYTES_PER_WORD
+                if fmt_code is None:
+                    raise NotImplementedError(f'No methods for data type {part.data_type}')
+                if fmt_code == 's':
+                    lendat *= BYTES_PER_WORD
 
-                    packed_buffer = (
-                        self._buffer.read_struct(
-                            struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
-                        )
+                packed_buffer = (
+                    self._buffer.read_struct(
+                        struct.Struct(f'{self.prefmt}{lendat}{fmt_code}')
                     )
+                )
 
-                    parameters = self.parameters[iprt]
+                parameters = self.parameters[iprt]
 
-                    if part.data_type == DataTypes.realpack:
-                        unpacked = self._unpack_real(packed_buffer, parameters, lendat)
-                        for iprm, param in enumerate(parameters['name']):
-                            station[param] = unpacked[iprm]
-                    elif part.data_type == DataTypes.character:
-                        for iprm, param in enumerate(parameters['name']):
-                            station[param] = self._decode_strip(packed_buffer[iprm])
+                if part.data_type == DataTypes.realpack:
+                    unpacked = self._unpack_real(packed_buffer, parameters, lendat)
+                    for iprm, param in enumerate(parameters['name']):
+                        values[param] = unpacked[iprm]
+                elif part.data_type == DataTypes.character:
+                    for iprm, param in enumerate(parameters['name']):
+                        values[param] = self._decode_strip(packed_buffer[iprm])
+                else:
+                    for iprm, param in enumerate(parameters['name']):
+                        values[param] = packed_buffer[iprm]
+
+            processed = self._process_metar_report(report, values)
+
+            for rpt in processed:
+                reports.append(rpt)
+        return reports
+
+    @staticmethod
+    def _process_metar_report(report, values):
+        """Process METAR and SPECI text.
+
+        This method will parse the METAR/SPECI text to ensure that all reports
+        have been processed and given the proper timestamp.
+        """
+        processed = []
+        year = report['DATE'].year
+        month = report['DATE'].month
+
+        # GEMPAK bins reports in this timestamp, not by actual observed time.
+        gem_day = report['DATE'].day
+        gem_hour = report['TIME'].hour
+        gem_minute = report['TIME'].minute
+
+        # Each surface report can have one or both of METAR/SPECI text.
+        text = values.pop('TEXT', None)
+        spcl = values.pop('SPCL', None)
+
+        for param, txt in zip(['TEXT', 'SPCL'], [text, spcl]):
+            if txt:
+                station = METAR_STATION_RE.search(txt)
+                if station is None:
+                    # If no station can be parsed, at least ensure the text
+                    # will be kept with the report we return.
+                    stnstr = '----'
+                else:
+                    stnstr = station.groupdict()['station']
+
+                if txt.count(stnstr) > 1:
+                    # GEMPAK sometimes has more than one text report attached. We can
+                    # recover all of them by splitting with the station ID.
+                    reports = [
+                        f'{stnstr}{s}'.strip() for s in filter(None, txt.split(stnstr))
+                    ]
+                else:
+                    reports = [txt.strip()]
+
+                for rpt in reports:
+                    timestamp = METAR_TIME_RE.search(rpt)
+                    if timestamp is None:
+                        # If no timestamp can be parsed, we will use the GEMPAK
+                        # stored timestamp.
+                        time_group = {
+                            'day': gem_day,
+                            'hour': gem_hour,
+                            'minute': gem_minute
+                        }
                     else:
-                        for iprm, param in enumerate(parameters['name']):
-                            station[param] = packed_buffer[iprm]
+                        time_group = timestamp.groupdict()
 
-                stations.append(station)
-        return stations
+                    dt = datetime(year, month, int(time_group['day']),
+                                  int(time_group['hour']), int(time_group['minute']))
+                    new_report = deepcopy(report)
+                    new_report['DATE'] = dt.date()
+                    new_report['TIME'] = dt.time()
 
-    def nearest_time(self, date_time, station_id=None, station_number=None):
+                    if ((param == 'TEXT' and values)
+                       or (param == 'SPCL' and not text and values)):
+                        # The surface values more than likely associated only with
+                        # standard METAR GEMPAK has decoded. However, this should
+                        # attach values to SPECI reports if they are present and
+                        # no METAR text was found.
+                        new_report.update(**values)
+                    new_report[param] = rpt
+
+                    processed.append(new_report)
+
+        return processed
+
+    def nearest_time(self, date_time, station_id=None, station_number=None, state=None,
+                     country=None, bbox=None):
         """Get nearest observation to given time for selected stations.
 
         Parameters
         ----------
         date_time : datetime or array-like of datetime
-            Valid/observed datetime of the surface station. Alternatively
-            object or a string with the format YYYYmmddHHMM.
+            Valid/observed datetime of the surface station.
+            Alternatively a string with the format YYYYmmddHHMM.
 
         station_id : str or array-like of str
             Station ID of the surface station.
 
-        station_number : int or array-like of int
+        station_number : int or array-like of int or str
             Station number of the surface station.
+
+        state : str or array-like of str
+            State where surface station is located.
+
+        country : str or array-like of str
+            Country where surface station is located.
+
+        bbox: floats (left, right, bottom, top)
+            Bounding area where surface stations are located.
 
         Returns
         -------
@@ -2383,27 +2544,54 @@ class GempakSurface(GempakFile):
 
         Notes
         -----
-        One of either station_id or station_number must be used. If both
-        are present, station_id will take precedence.
+        Only one filter option can be used at one time. Larger spatial
+        extents will yield slower performance.
         """
         if isinstance(date_time, str):
             date_time = datetime.strptime(date_time, '%Y%m%d%H%M')
 
-        if station_id is None and station_number is None:
-            raise ValueError('Must have either station_id or station_number')
+        nargs = sum(map(bool, [station_id, station_number, state, country, bbox]))
 
-        if station_id is not None and station_number is not None:
-            station_number = None
+        if nargs == 0 or nargs > 1:
+            raise ValueError('Invalid filter options.')
 
-        if (station_id is not None
-           and (not isinstance(station_id, Iterable)
-                or isinstance(station_id, str))):
-            station_id = [station_id]
+        if station_id is not None:
+            if (not isinstance(station_id, Iterable)
+               or isinstance(station_id, str)):
+                station_id = [station_id]
             station_id = [c.upper() for c in station_id]
 
-        if station_number is not None and not isinstance(station_number, Iterable):
-            station_number = [station_number]
+        if station_number is not None:
+            if not isinstance(station_number, Iterable):
+                station_number = [station_number]
             station_number = [int(sn) for sn in station_number]
+
+        if country is not None:
+            if (not isinstance(country, Iterable)
+               or isinstance(country, str)):
+                country = [country]
+            country = [c.upper() for c in country]
+
+        if state is not None:
+            if (not isinstance(state, Iterable)
+               or isinstance(state, str)):
+                state = [state]
+            state = [s.upper() for s in state]
+
+        if bbox is not None:
+            station_id = {
+                stn.ID for stn in self._sfinfo if _bbox_filter(stn.LAT, stn.LON, bbox)
+            }
+
+        if country:
+            station_id = set()
+            for cty in country:
+                station_id.update(stn.ID for stn in self._sfinfo if stn.COUNTRY == cty)
+
+        if state:
+            station_id = set()
+            for st in state:
+                station_id.update(stn.ID for stn in self._sfinfo if stn.STATE == st)
 
         time_matched = []
         if station_id:
@@ -2418,7 +2606,7 @@ class GempakSurface(GempakFile):
                 time_matched.append(nearest)
 
         if station_number:
-            for stn in station_id:
+            for stn in station_number:
                 matched = self.sfjson(station_number=stn)
 
                 nearest = min(
@@ -2431,7 +2619,7 @@ class GempakSurface(GempakFile):
         return time_matched
 
     def sfjson(self, station_id=None, station_number=None,
-               date_time=None, state=None, country=None):
+               date_time=None, state=None, country=None, bbox=None):
         """Select surface stations and output as list of JSON objects.
 
         Subset the data by parameter values. The default is to not
@@ -2446,8 +2634,10 @@ class GempakSurface(GempakFile):
             Station number of the surface station.
 
         date_time : datetime or array-like of datetime
-            Valid/observed datetime of the surface station. Alternatively
-            object or a string with the format YYYYmmddHHMM.
+            Datetime of the surface observation. Alternatively
+            a string with the format YYYYmmddHHMM or first|FIRST
+            or last|LAST which function to retrieve the latest
+            and oldest time within the file, respectively.
 
         state : str or array-like of str
             State where surface station is located.
@@ -2455,71 +2645,91 @@ class GempakSurface(GempakFile):
         country : str or array-like of str
             Country where surface station is located.
 
+        bbox: floats (left, right, bottom, top)
+            Bounding area where surface stations are located.
+
         Returns
         -------
         list
             List of dicts/JSONs for each surface station.
         """
-        if (station_id is not None
-           and (not isinstance(station_id, Iterable)
-                or isinstance(station_id, str))):
-            station_id = [station_id]
+        if station_id is not None:
+            if (not isinstance(station_id, Iterable)
+               or isinstance(station_id, str)):
+                station_id = [station_id]
             station_id = [c.upper() for c in station_id]
 
-        if station_number is not None and not isinstance(station_number, Iterable):
-            station_number = [station_number]
+        if station_number is not None:
+            if not isinstance(station_number, Iterable):
+                station_number = [station_number]
             station_number = [int(sn) for sn in station_number]
 
         if date_time is not None:
             if (not isinstance(date_time, Iterable)
-               or isinstance(date_time, str)):
+               or (isinstance(date_time, str)
+               and date_time not in ['first', 'FIRST', 'last', 'LAST'])):
                 date_time = [date_time]
-            for i, dt in enumerate(date_time):
-                if isinstance(dt, str):
-                    date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
+            if date_time not in ['first', 'FIRST', 'last', 'LAST']:
+                for i, dt in enumerate(date_time):
+                    if isinstance(dt, str):
+                        date_time[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
-        if (state is not None
-           and (not isinstance(state, Iterable)
-                or isinstance(state, str))):
-            state = [state]
+        if state is not None:
+            if (not isinstance(state, Iterable)
+               or isinstance(state, str)):
+                state = [state]
             state = [s.upper() for s in state]
 
-        if (country is not None
-           and (not isinstance(country, Iterable)
-                or isinstance(country, str))):
-            country = [country]
+        if country is not None:
+            if (not isinstance(country, Iterable)
+               or isinstance(country, str)):
+                country = [country]
             country = [c.upper() for c in country]
 
         # Figure out which columns to extract from the file
-        matched = self._sfinfo.copy()
+        # matched = self._sfinfo.copy()
+        matched = sorted(self._sfinfo)
 
-        if station_id is not None:
-            matched = filter(
-                lambda sfc: sfc if sfc.ID in station_id else False,
-                matched
-            )
+        # Do this now or the matched filter iterator will be consumed
+        # prematurely.
+        if date_time in ['last', 'LAST']:
+            date_time = [max((d.DATTIM for d in matched))]
+        elif date_time in ['first', 'FIRST']:
+            date_time = [min((d.DATTIM for d in matched))]
 
-        if station_number is not None:
+        if country is not None:
             matched = filter(
-                lambda sfc: sfc if sfc.NUMBER in station_number else False,
-                matched
-            )
-
-        if date_time is not None:
-            matched = filter(
-                lambda sfc: sfc if sfc.DATTIM in date_time else False,
+                lambda sfc: sfc.COUNTRY in country,
                 matched
             )
 
         if state is not None:
             matched = filter(
-                lambda sfc: sfc if sfc.STATE in state else False,
+                lambda sfc: sfc.STATE in state,
                 matched
             )
 
-        if country is not None:
+        if bbox is not None:
             matched = filter(
-                lambda sfc: sfc if sfc.COUNTRY in country else False,
+                lambda sfc: _bbox_filter(sfc.LAT, sfc.LON, bbox),
+                matched
+            )
+
+        if date_time is not None:
+            matched = filter(
+                lambda sfc: sfc.DATTIM in date_time,
+                matched
+            )
+
+        if station_id is not None:
+            matched = filter(
+                lambda sfc: sfc.ID in station_id,
+                matched
+            )
+
+        if station_number is not None:
+            matched = filter(
+                lambda sfc: sfc.NUMBER in station_number,
                 matched
             )
 
