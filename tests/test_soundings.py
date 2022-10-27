@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -84,7 +85,7 @@ def test_sounding_text(text_type):
     gso = GempakSounding(g).snxarray(station_id='OUN')[0]
     gempak = pd.read_csv(d)
 
-    text = gso.attrs['WMO_CODES'][text_type]
+    text = gso.attrs['wmo_codes'][text_type]
     gem_text = gempak.loc[:, text_type.upper()][0]
 
     assert text == gem_text
@@ -157,3 +158,19 @@ def test_unmerged_sigw_pressure_sounding():
     np.testing.assert_allclose(gdrct, ddrct, rtol=1e-10, atol=1e-2)
     np.testing.assert_allclose(gsped, dsped, rtol=1e-10, atol=1e-2)
     np.testing.assert_allclose(ghght, dhght, rtol=1e-10, atol=1e-1)
+
+
+@pytest.mark.parametrize('keyword,date_time', [
+    ('FIRST', '202011070000'), ('LAST', '202011070100')
+])
+def test_time_keywords(keyword, date_time):
+    """Test time keywords FIRST and LAST."""
+    g = Path(__file__).parent / 'data' / 'unmerged_with_text.snd'
+
+    gso = GempakSounding(g).snxarray(date_time=keyword)[0]
+    expected = datetime.strptime(date_time, '%Y%m%d%H%M')
+    dt64 = gso.time.values[0]
+    epoch_seconds = int(dt64) / 1e9
+    sounding_dt = datetime(1970, 1, 1) + timedelta(seconds=epoch_seconds)
+
+    assert sounding_dt == expected

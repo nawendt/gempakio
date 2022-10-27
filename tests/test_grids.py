@@ -4,6 +4,7 @@
 """Tests for decoding GEMPAK grid files."""
 
 
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -24,3 +25,19 @@ def test_grid_loading(grid_name):
     gempak = np.load(d)['values']
 
     np.testing.assert_allclose(gio, gempak, rtol=1e-6, atol=0)
+
+
+@pytest.mark.parametrize('keyword,date_time', [
+    ('FIRST', '201204141200'), ('LAST', '201204150000')
+])
+def test_time_keywords(keyword, date_time):
+    """Test time keywords FIRST and LAST."""
+    g = Path(__file__).parent / 'data' / 'multi_date.grd'
+
+    grid = GempakGrid(g).gdxarray(date_time=keyword)[0]
+    dt64 = grid.time.values[0]
+    epoch_seconds = int(dt64) / 1e9
+    grid_dt = datetime(1970, 1, 1) + timedelta(seconds=epoch_seconds)
+    expected = datetime.strptime(date_time, '%Y%m%d%H%M')
+
+    assert grid_dt == expected

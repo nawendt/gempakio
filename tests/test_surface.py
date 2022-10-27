@@ -111,3 +111,17 @@ def test_multiple_special_observations():
 
     assert date_time == datetime(2021, 9, 7, 16, 4)
     assert text == gem_text
+
+
+@pytest.mark.parametrize('keyword,date_time', [
+    ('FIRST', '202109062353'), ('LAST', '202109071604')
+])
+def test_time_keywords(keyword, date_time):
+    """Test time keywords FIRST and LAST."""
+    g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
+
+    gsf = GempakSurface(g).sfjson(date_time=keyword)[-1]
+    expected = datetime.strptime(date_time, '%Y%m%d%H%M')
+    surface_dt = gsf['properties']['date_time']
+
+    assert surface_dt == expected

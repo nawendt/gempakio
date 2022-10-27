@@ -900,7 +900,9 @@ class GempakGrid(GempakFile):
 
         date_time2 : datetime or array-like of datetime
             Secondary valid datetime of the grid. Alternatively
-            can be a string with the format YYYYmmddHHMM.
+            a string with the format YYYYmmddHHMM or first|FIRST
+            or last|LAST which function to retrieve the latest
+            and oldest time within the file, respectively.
 
         level2: float or array_like of float
             Secondary vertical level. Typically used for layers.
@@ -947,11 +949,13 @@ class GempakGrid(GempakFile):
 
         if date_time2 is not None:
             if (not isinstance(date_time2, Iterable)
-               or isinstance(date_time2, str)):
+               or (isinstance(date_time2, str)
+               and date_time2 not in ['first', 'FIRST', 'last', 'LAST'])):
                 date_time2 = [date_time2]
-            for i, dt in enumerate(date_time2):
-                if isinstance(dt, str):
-                    date_time2[i] = datetime.strptime(dt, '%Y%m%d%H%M')
+            if date_time2 not in ['first', 'FIRST', 'last', 'LAST']:
+                for i, dt in enumerate(date_time2):
+                    if isinstance(dt, str):
+                        date_time2[i] = datetime.strptime(dt, '%Y%m%d%H%M')
 
         if level2 is not None and not isinstance(level2, Iterable):
             level2 = [level2]
@@ -962,9 +966,14 @@ class GempakGrid(GempakFile):
         # Do this now or the matched filter iterator will be consumed
         # prematurely.
         if date_time in ['last', 'LAST']:
-            date_time = [max((d.DATTIM for d in matched))]
+            date_time = [max((d.DATTIM1 for d in matched))]
         elif date_time in ['first', 'FIRST']:
-            date_time = [min((d.DATTIM for d in matched))]
+            date_time = [min((d.DATTIM1 for d in matched))]
+
+        if date_time2 in ['last', 'LAST']:
+            date_time2 = [max((d.DATTIM2 for d in matched))]
+        elif date_time2 in ['first', 'FIRST']:
+            date_time2 = [min((d.DATTIM2 for d in matched))]
 
         if parameter is not None:
             matched = filter(
@@ -2052,7 +2061,7 @@ class GempakSounding(GempakFile):
             if 'TXPB' in snd:
                 wmo_text['txpb'] = snd.pop('TXPB')
             if wmo_text:
-                attrs['WMO_CODES'] = wmo_text
+                attrs['wmo_codes'] = wmo_text
 
             dt = datetime.combine(snd.pop('DATE'), snd.pop('TIME'))
             if vcoord == 'pres':
