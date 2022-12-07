@@ -6,10 +6,10 @@
 from setuptools import find_packages, setup
 
 NAME = 'gempakio'
-VERSION = '0.8.1'
+VERSION = '0.8.2'
 DESCR = 'Read GEMPAK data with pure Python.'
 URL = 'https://github.com/nawendt/gempakio'
-REQUIRES = ['pyproj', 'xarray']
+REQUIRES = ['numpy', 'pandas', 'pyproj', 'xarray']
 AUTHOR = 'Nathan Wendt'
 EMAIL = 'nathan.wendt@noaa.gov'
 LICENSE = 'BSD 3-clause'
@@ -20,19 +20,24 @@ EXTRAS = {
         'cartopy',
     ],
     'lint': [
-        'flake8',
+        'flake8'
+        'pycodestyle',
+        'pyflakes',
         'flake8-bugbear',
         'flake8-builtins',
         'flake8-comprehensions',
+        'flake8-continuation',
         'flake8-copyright',
         'flake8-isort',
         'isort',
         'flake8-mutable',
-        'flake8-pep3101',
+        'flake8-pie',
         'flake8-print',
         'flake8-quotes',
+        'flake8-requirements',
         'flake8-simplify',
-        'pep8-naming',
+        'flake8-docstrings',
+        'pydocstyle',
     ],
     'test': ['pytest'],
 }

@@ -76,17 +76,18 @@ def test_ship_surface():
                 np.testing.assert_allclose(decoded_vals, actual_vals)
 
 
-@pytest.mark.parametrize('text_type,date_time', [
-    ('text', '202109070000'), ('spcl', '202109071600')
+@pytest.mark.parametrize('text_type,date_time,speci', [
+    ('text', '202109070000', False), ('spcl', '202109071600', True)
 ])
-def test_surface_text(text_type, date_time):
+def test_surface_text(text_type, date_time, speci):
     """Test text decoding of surface hourly and special observations."""
-
     g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
     d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
 
     gsf = GempakSurface(g)
-    text = gsf.nearest_time(date_time, station_id='MSN')[0]['values'][text_type]
+    text = gsf.nearest_time(date_time,
+                            station_id='MSN',
+                            include_special=speci)[0]['values'][text_type]
 
     gempak = pd.read_csv(d)
     gem_text = gempak.loc[:, text_type.upper()][0]
@@ -96,13 +97,12 @@ def test_surface_text(text_type, date_time):
 
 def test_multiple_special_observations():
     """Test text decoding of surface file with multiple special reports in single time."""
-
     g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
     d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
 
     gsf = GempakSurface(g)
     #  Report text that is too long will end up truncated in surface files
-    nearest = gsf.nearest_time('202109071605', station_id='MSN')
+    nearest = gsf.nearest_time('202109071605', station_id='MSN', include_special=True)
     text = nearest[0]['values']['spcl']
     date_time = nearest[0]['properties']['date_time']
 
@@ -114,13 +114,13 @@ def test_multiple_special_observations():
 
 
 @pytest.mark.parametrize('keyword,date_time', [
-    ('FIRST', '202109062353'), ('LAST', '202109071604')
+    ('FIRST', '202109070000'), ('LAST', '202109071604')
 ])
 def test_time_keywords(keyword, date_time):
     """Test time keywords FIRST and LAST."""
     g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
 
-    gsf = GempakSurface(g).sfjson(date_time=keyword)[-1]
+    gsf = GempakSurface(g).sfjson(date_time=keyword, include_special=True)[-1]
     expected = datetime.strptime(date_time, '%Y%m%d%H%M')
     surface_dt = gsf['properties']['date_time']
 

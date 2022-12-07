@@ -78,7 +78,6 @@ def test_merged():
 @pytest.mark.parametrize('text_type', ['txta', 'txtb', 'txtc', 'txpb'])
 def test_sounding_text(text_type):
     """Test for proper decoding of coded message text."""
-
     g = Path(__file__).parent / 'data' / 'unmerged_with_text.snd'
     d = Path(__file__).parent / 'data' / 'unmerged_with_text.csv'
 

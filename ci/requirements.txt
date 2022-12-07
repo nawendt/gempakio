@@ -1,2 +1,4 @@
-xarray
+numpy
+pandas
 pyproj
+xarray

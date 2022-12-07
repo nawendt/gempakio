@@ -2218,20 +2218,18 @@ class GempakSurface(GempakFile):
 
     def _key_types(self, keys):
         """Determine header information from a set of keys."""
-        header_info = [(key, '4s', self._decode_strip) if key == 'STID'
-                       else (key, 'i') if key == 'STNM'
-                       else (key, 'i', lambda x: x / 100) if key == 'SLAT'
-                       else (key, 'i', lambda x: x / 100) if key == 'SLON'
-                       else (key, 'i') if key == 'SELV'
-                       else (key, '4s', self._decode_strip) if key == 'STAT'
-                       else (key, '4s', self._decode_strip) if key == 'COUN'
-                       else (key, '4s', self._decode_strip) if key == 'STD2'
-                       else (key, 'i', self._make_date) if key == 'DATE'
-                       else (key, 'i', self._make_time) if key == 'TIME'
-                       else (key, 'i')
-                       for key in keys]
-
-        return header_info
+        return [(key, '4s', self._decode_strip) if key == 'STID'
+                else (key, 'i') if key == 'STNM'
+                else (key, 'i', lambda x: x / 100) if key == 'SLAT'
+                else (key, 'i', lambda x: x / 100) if key == 'SLON'
+                else (key, 'i') if key == 'SELV'
+                else (key, '4s', self._decode_strip) if key == 'STAT'
+                else (key, '4s', self._decode_strip) if key == 'COUN'
+                else (key, '4s', self._decode_strip) if key == 'STD2'
+                else (key, 'i', self._make_date) if key == 'DATE'
+                else (key, 'i', self._make_time) if key == 'TIME'
+                else (key, 'i')
+                for key in keys]
 
     def _unpack_climate(self, sfcno):
         """Unpack a climate surface data file."""
@@ -2444,14 +2442,14 @@ class GempakSurface(GempakFile):
                     for iprm, param in enumerate(parameters['name']):
                         values[param] = packed_buffer[iprm]
 
-            processed = self._process_metar_report(report, values)
+            processed = self._process_report_text(report, values)
 
             for rpt in processed:
                 reports.append(rpt)
         return reports
 
     @staticmethod
-    def _process_metar_report(report, values):
+    def _process_report_text(report, values):
         """Process METAR and SPECI text.
 
         This method will parse the METAR/SPECI text to ensure that all reports
@@ -2502,11 +2500,12 @@ class GempakSurface(GempakFile):
                     else:
                         time_group = timestamp.groupdict()
 
-                    dt = datetime(year, month, int(time_group['day']),
-                                  int(time_group['hour']), int(time_group['minute']))
                     new_report = deepcopy(report)
-                    new_report['DATE'] = dt.date()
-                    new_report['TIME'] = dt.time()
+                    if param == 'SPCL':  # Do not update standard METAR time
+                        dt = datetime(year, month, int(time_group['day']),
+                                      int(time_group['hour']), int(time_group['minute']))
+                        new_report['DATE'] = dt.date()
+                        new_report['TIME'] = dt.time()
 
                     if ((param == 'TEXT' and values)
                        or (param == 'SPCL' and not text and values)):
@@ -2522,7 +2521,7 @@ class GempakSurface(GempakFile):
         return processed
 
     def nearest_time(self, date_time, station_id=None, station_number=None, state=None,
-                     country=None, bbox=None):
+                     country=None, bbox=None, include_special=False):
         """Get nearest observation to given time for selected stations.
 
         Parameters
@@ -2546,6 +2545,10 @@ class GempakSurface(GempakFile):
         bbox: floats (left, right, bottom, top)
             Bounding area where surface stations are located.
 
+        include_special : bool
+            If True, parse special observations that are stored
+            as raw METAR text. Default is False.
+
         Returns
         -------
         list
@@ -2561,8 +2564,11 @@ class GempakSurface(GempakFile):
 
         nargs = sum(map(bool, [station_id, station_number, state, country, bbox]))
 
-        if nargs == 0 or nargs > 1:
-            raise ValueError('Invalid filter options.')
+        if nargs == 0:
+            raise ValueError('Must have one filter.')
+
+        if nargs > 1:
+            raise NotImplementedError('Multiple filters are not supported.')
 
         if station_id is not None:
             if (not isinstance(station_id, Iterable)
@@ -2605,7 +2611,7 @@ class GempakSurface(GempakFile):
         time_matched = []
         if station_id:
             for stn in station_id:
-                matched = self.sfjson(station_id=stn)
+                matched = self.sfjson(station_id=stn, include_special=include_special)
 
                 nearest = min(
                     matched,
@@ -2616,7 +2622,7 @@ class GempakSurface(GempakFile):
 
         if station_number:
             for stn in station_number:
-                matched = self.sfjson(station_number=stn)
+                matched = self.sfjson(station_number=stn, include_special=include_special)
 
                 nearest = min(
                     matched,
@@ -2627,8 +2633,8 @@ class GempakSurface(GempakFile):
 
         return time_matched
 
-    def sfjson(self, station_id=None, station_number=None,
-               date_time=None, state=None, country=None, bbox=None):
+    def sfjson(self, station_id=None, station_number=None, date_time=None, state=None,
+               country=None, bbox=None, include_special=False):
         """Select surface stations and output as list of JSON objects.
 
         Subset the data by parameter values. The default is to not
@@ -2656,6 +2662,10 @@ class GempakSurface(GempakFile):
 
         bbox: floats (left, right, bottom, top)
             Bounding area where surface stations are located.
+
+        include_special : bool
+            If True, parse special observations that are stored
+            as raw METAR text. Default is False.
 
         Returns
         -------
@@ -2759,6 +2769,8 @@ class GempakSurface(GempakFile):
         stnarr = []
         for stn in data:
             if stn:
+                if not include_special and 'SPCL' in stn:
+                    continue
                 stnobj = {
                     'properties': {
                         'date_time': datetime.combine(stn.pop('DATE'),
