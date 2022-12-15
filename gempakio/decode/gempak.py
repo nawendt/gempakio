@@ -2502,8 +2502,13 @@ class GempakSurface(GempakFile):
 
                     new_report = deepcopy(report)
                     if param == 'SPCL':  # Do not update standard METAR time
-                        dt = datetime(year, month, int(time_group['day']),
-                                      int(time_group['hour']), int(time_group['minute']))
+                        try:
+                            dt = datetime(year, month, int(time_group['day']),
+                                          int(time_group['hour']), int(time_group['minute']))
+                        except ValueError:
+                            # Some text reports contain bad date/time. In these cases
+                            # replace with the GEMPAK date and time.
+                            dt = datetime(year, month, gem_day, gem_hour, gem_minute)
                         new_report['DATE'] = dt.date()
                         new_report['TIME'] = dt.time()
 
