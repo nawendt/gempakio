@@ -41,3 +41,16 @@ def test_time_keywords(keyword, date_time):
     expected = datetime.strptime(date_time, '%Y%m%d%H%M')
 
     assert grid_dt == expected
+
+
+def test_multi_time_grid():
+    """Test files with multiple times on a single grid."""
+    g = Path(__file__).parent / 'data' / 'multi_time.grd'
+
+    grid = GempakGrid(g)
+    grid_info = grid.gdinfo()[0]
+    dattim1 = grid_info.DATTIM1
+    dattim2 = grid_info.DATTIM2
+
+    assert dattim1 == datetime(1991, 8, 19, 0, 0)
+    assert dattim2 == datetime(1991, 8, 20, 0, 0)

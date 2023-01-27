@@ -6,7 +6,7 @@
 from setuptools import find_packages, setup
 
 NAME = 'gempakio'
-VERSION = '0.8.2'
+VERSION = '0.8.3'
 DESCR = 'Read GEMPAK data with pure Python.'
 URL = 'https://github.com/nawendt/gempakio'
 REQUIRES = ['numpy', 'pandas', 'pyproj', 'xarray']
