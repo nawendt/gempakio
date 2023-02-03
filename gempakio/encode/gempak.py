@@ -33,7 +33,7 @@ class GempakStream(BytesIO):
 
     def write_string(self, string):
         """Write string word."""
-        self.write(struct.pack('4s', bytes(f'{string:<4s}', 'utf-8')))
+        self.write(struct.pack('<4s', bytes(f'{string:<4s}', 'utf-8')))
 
     def write_int(self, i):
         """Write integer word."""
@@ -164,6 +164,7 @@ class DataManagementFile:
             self.next_free_word = self.data_block_ptr + nparts * self.rows * self.columns
 
     def _write_label(self, stream):
+        """Write file label to a stream."""
         stream.write_struct(
             self.label_struct,
             dm_head=bytes(GEMPAK_HEADER, 'utf-8'),
@@ -191,6 +192,7 @@ class DataManagementFile:
         )
 
     def _write_data_management(self, stream):
+        """Write data management block to a stream."""
         stream.write_struct(
             self.data_mgmt_struct,
             next_free_word=self.next_free_word,
@@ -200,14 +202,17 @@ class DataManagementFile:
         )
 
     def _write_row_keys(self, stream):
+        """Write row keys to a stream."""
         for rn in self.row_names:
             stream.write_string(rn)
 
     def _write_column_keys(self, stream):
+        """Write column keys to a stream."""
         for cn in self.column_names:
             stream.write_string(cn)
 
     def _write_parts(self, stream):
+        """Write parts to a stream."""
         for name in self.parts_dict:
             stream.write_string(name)
 
@@ -253,7 +258,20 @@ class SoundingFile(DataManagementFile):
     as a GEMPAK sounding file.
     """
 
-    def __init__(self, extra_parameters=None, pack_data=False):
+    def __init__(self, parameters, pack_data=False):
+        """Instantiate SoundingFile.
+
+        Parameters
+        ----------
+        parameters : array_like
+            Set the parameters that each sounding in the file will include.
+            GEMPAK files are structured such that parameters cannot change
+            between individual soundings within a single file.
+
+        pack_data : bool
+            Toggle data packing (i.e., real numbers packed as integers.).
+            Currently not implemented.
+        """
         super().__init__()
         self.file_type = FileTypes.sounding.value
         self.data_source = DataSource.raob_buoy.value
@@ -268,9 +286,7 @@ class SoundingFile(DataManagementFile):
                              'STAT', 'COUN', 'STD2']
         self._init_headers()
 
-        self._add_parameters(['PRES', 'HGHT', 'TEMP', 'DWPT', 'DRCT', 'SPED'])
-        if extra_parameters is not None:
-            self._add_parameters(extra_parameters)
+        self._add_parameters(parameters)
 
         self.parts_dict = {
             'SNDT': {
@@ -300,17 +316,57 @@ class SoundingFile(DataManagementFile):
 
         self._param_args = namedtuple('Parameters', self.parameter_names)
 
+    @staticmethod
+    def _validate_length(data_dict):
+        """Validate sounding parameters are of same length."""
+        sz = len(data_dict[next(iter(data_dict))])
+        return all(len(x) == sz for x in data_dict.values())
+
+    def _replace_nan(self, array):
+        """Replace nan values from an array with missing value."""
+        nan_loc = np.isnan(array)
+        array = array[nan_loc] = self.missing_float
+
     def add_sounding(self, data, slat, slon, date_time, station_info=None):
-        """Add sounding to the file."""
+        """Add sounding to the file.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary where keys are parameter names and values are the
+            associated data. Keys must match those that the sounding
+            file is created with. Should data contain `nan` values, they
+            will be replaced with the GEMPAK missing value -9999.
+
+        slat : float
+            Site latitude.
+
+        slon : float
+            Site longitude.
+
+        date_time : str or datetime
+            Sounding date and time. Valid string formats are YYYYmmddHHMM
+            or YYYYmmddHHMMFx, where x is the forecast hour from the preceding
+            date and time.
+
+        station_info : dict or None
+            A dictionary that contains station metadata. Valid keys are
+            station_id (e.g., KMSN), station_number (typically WMO ID),
+            elevation (m), state, and country.
+
+        Notes
+        -----
+        If a sounding with duplicate metadata (date, time, site, etc.) is added,
+        it will replace the previous entry in the file.
+        """
         if not isinstance(data, dict):
             raise TypeError('data must be a dict.')
 
-        data = {k.upper(): v for k, v in data.items()}
+        data = {k.upper(): self._replace_nan(np.asarray(v)) for k, v in data.items()}
         params = self._param_args(**data)
 
-        input_len = [len(x) for x in params]
-        if input_len.count(len(params.PRES)) != 6:
-            raise ValueError('All input data must be same length.')
+        if not self._validate_length(data):
+            raise ValueError('All input data must be same length.')            
 
         if not isinstance(slat, (int, float)):
             raise TypeError('Coordinates must be int/float.')
@@ -365,6 +421,7 @@ class SoundingFile(DataManagementFile):
             raise ValueError('Exceeded maximum number data entries.')
 
     def _write_row_headers(self, stream):
+        """Write row headers to a stream."""
         start_word = stream.word()
         # Initialize all headers to unused state
         for _r in range(self.rows):
@@ -389,6 +446,7 @@ class SoundingFile(DataManagementFile):
                         stream.write_int(getattr(rh, key))
 
     def _write_column_headers(self, stream):
+        """Write column headers to a stream."""
         start_word = stream.word()
         # Initialize all headers to unused state
         for _c in range(self.columns):
@@ -410,6 +468,7 @@ class SoundingFile(DataManagementFile):
                         stream.write_int(getattr(ch, key))
 
     def _write_data(self, stream):
+        """Write sounding to a stream."""
         for i, row in enumerate(self.row_headers):
             for j, col in enumerate(self.column_headers):
                 pointer = self.data_block_ptr + i * self.columns + j
@@ -433,6 +492,7 @@ class SoundingFile(DataManagementFile):
                         else:
                             for pval in rec:
                                 stream.write_float(pval)
+                    # Update the next free word after writing data.
                     self.next_free_word = stream.word()
 
                 else:
@@ -445,7 +505,13 @@ class SoundingFile(DataManagementFile):
                 stream.write_int(0)
 
     def write(self, file):
-        """Write sounding file to disk."""
+        """Write sounding file to disk.
+
+        Parameters
+        ----------
+        file : str or `pathlib.Path`
+            Path of file to be created.
+        """
         self._set_pointers()
 
         with GempakStream() as stream:
