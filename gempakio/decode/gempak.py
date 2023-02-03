@@ -22,15 +22,15 @@ import numpy as np
 import pyproj
 import xarray as xr
 
-from gempakio.common import (ANLB_SIZE, DataSource, DataTypes, FileTypes, ForecastType,
-                             GEMPAK_HEADER, NAVB_SIZE, PackingType, VerticalCoordinates)
+from gempakio.common import (_word_to_position, ANLB_SIZE, BYTES_PER_WORD, DataSource,
+                             DataTypes, FileTypes, ForecastType, GEMPAK_HEADER, NAVB_SIZE,
+                             PackingType, VerticalCoordinates)
 from gempakio.gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
                               interp_moist_height)
 from gempakio.tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
 
-BYTES_PER_WORD = 4
 PARAM_ATTR = [('name', (4, 's')), ('scale', (1, 'i')),
               ('offset', (1, 'i')), ('bits', (1, 'i'))]
 USED_FLAG = 9999
@@ -126,11 +126,6 @@ def _data_source(source):
         return DataSource(99)
     else:
         return DataSource(source)
-
-
-def _word_to_position(word, bytes_per_word=BYTES_PER_WORD):
-    """Return beginning position of a word in bytes."""
-    return (word * bytes_per_word) - bytes_per_word
 
 
 class GempakFile:
@@ -2000,7 +1995,7 @@ class GempakSounding(GempakFile):
                 values = np.array(values)[np.newaxis, ...]
                 maskval = np.ma.array(values, mask=values == self.prod_desc.missing_float,
                                       dtype=np.float32)
-                var[param.lower()] = (['time', 'pres'], maskval)
+                var[param.lower()] = (['time', vcoord], maskval)
 
             xrds = xr.Dataset(var,
                               coords={'time': np.atleast_1d(dt), vcoord: vcdata},

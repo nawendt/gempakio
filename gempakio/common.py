@@ -6,10 +6,36 @@
 from enum import Enum
 
 ANLB_SIZE = 128
-MBLKSZ = 128
-MMFREE = 62
-NAVB_SIZE = 256
+BYTES_PER_WORD = 4
 GEMPAK_HEADER = 'GEMPAK DATA MANAGEMENT FILE '
+HEADER_DTYPE = {
+    'STID': '4s',
+    'STNM': 'i',
+    'SLAT': 'i',
+    'SLON': 'i',
+    'SELV': 'i',
+    'STAT': '4s',
+    'COUN': '4s',
+    'STD2': '4s',
+    'DATE': 'i',
+    'TIME': 'i',
+    'GDT1': 'i',
+    'GDT2': 'i',
+    'GLV1': 'i',
+    'GLV2': 'i',
+    'GTM1': 'i',
+    'GTM2': 'i',
+    'GPM1': '4s',
+    'GPM2': '4s',
+    'GPM3': '4s'
+}
+MBLKSZ = 128
+MISSING_INT = -9999
+MISSING_FLOAT = -9999.0
+MMFREE = 62
+MMHDRS = 32000
+MMPARM = 44
+NAVB_SIZE = 256
 
 
 class FileTypes(Enum):
@@ -81,3 +107,13 @@ class DataSource(Enum):
     ship2 = 103
     raob_buoy2 = 104
     synop_raob_vas2 = 105
+
+
+def _position_to_word(position, bytes_per_word=BYTES_PER_WORD):
+    """Return beginning position of a word in bytes."""
+    return (position + bytes_per_word) // bytes_per_word
+
+
+def _word_to_position(word, bytes_per_word=BYTES_PER_WORD):
+    """Return beginning position of a word in bytes."""
+    return (word * bytes_per_word) - bytes_per_word

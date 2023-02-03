@@ -3,11 +3,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for encoding various GEMPAK file formats."""
 
-from datetime import datetime
+from collections import namedtuple
+from datetime import datetime, timedelta
 from io import BytesIO
 import struct
 
-from gempakio.common import DataSource, DataTypes, FileTypes, GEMPAK_HEADER, MBLKSZ, MMFREE
+import numpy as np
+
+from gempakio.common import (_position_to_word, _word_to_position, DataSource, DataTypes,
+                             FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MBLKSZ, MISSING_FLOAT,
+                             MISSING_INT, MMFREE, MMHDRS, MMPARM)
 from gempakio.tools import NamedStruct
 
 
@@ -16,6 +21,31 @@ class GempakStream(BytesIO):
 
     def __init__(self):
         super().__init__()
+
+    def jump_to(self, word):
+        """Jumpt to given word."""
+        # word - 1 to get word start, not end
+        self.seek(_word_to_position(word))
+
+    def word(self):
+        """Get current word."""
+        return _position_to_word(self.tell())
+
+    def write_string(self, string):
+        """Write string word."""
+        self.write(struct.pack('4s', bytes(f'{string:<4s}', 'utf-8')))
+
+    def write_int(self, i):
+        """Write integer word."""
+        self.write(struct.pack('<i', i))
+
+    def write_float(self, f):
+        """Write float word."""
+        self.write(struct.pack('<f', f))
+
+    def write_struct(self, struct_class, **kwargs):
+        """Write structure to file as bytes."""
+        self.write(struct_class.pack(**kwargs))
 
 
 class DataManagementFile:
@@ -36,68 +66,28 @@ class DataManagementFile:
          ('last_word', 'i'), (None, '464x')], '<', 'DataManagement'
     )
 
-    def __init__(self, file):
-        self._file = file
-        self._fptr = None
-
-    def __enter__(self):
-        """Enter context."""
-        self._fptr = open(self._file, 'wb')  # noqa: SIM115
-        self._tell = 0
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Exit context."""
-        self._fptr.close()
-        self._fptr = None
-        self._tell = 0
-
-    @property
-    def tell(self):
-        """Get file pointer location."""
-        return self._tell
-
-    @property
-    def word(self):
-        """Get current word."""
-        return self._tell // 4
-
-    def jump_to(self, word):
-        """Jumpt to given word."""
-        self._fptr.seek(word * 4)
-        self._tell = self._fptr.tell()
-
-    def write_string(self, string):
-        """Write string word."""
-        if len(string) != 4:
-            raise ValueError('String must be size 4.')
-        self._fptr.write(struct.pack('4s', bytes(string, 'utf-8')))
-        self._tell += 4
-
-    def write_int(self, i):
-        """Write integer word."""
-        self._fptr.write(struct.pack('<i', i))
-        self._tell += 4
-
-    def write_float(self, f):
-        """Write float word."""
-        self._fptr.write(struct.pack('<f', f))
-        self._tell += 4
-
-    def write_struct(self, struct_class, **kwargs):
-        """Write structure to file as bytes."""
-        self._fptr.write(struct_class.pack(**kwargs))
-        self._tell += struct_class.size
-
-
-class GempakData:
-    """Base class for encoding user data."""
-
     def __init__(self):
         self.version = 1
         self.machine_type = 11
-        self.missing_int = -9999
-        self.missing_float = -9999.0
+        self.missing_int = MISSING_INT
+        self.missing_float = MISSING_FLOAT
+        self.data_mgmt_ptr = 129
+        self.data_mgmt_length = MBLKSZ
+        self.max_free_pairs = MMFREE
+        self.actual_free_pairs = 0
+        self.last_word = 0
+        self.parameter_names = []
+        self.row_names = []
+        self.column_names = []
+        self.rows = 0
+        self.columns = 0
+        self.file_headers = []
+        self.parts_dict = {}
+        self.file_type = None
+        self.data_source = None
+        self.column_headers = set()
+        self.row_headers = set()
+        self.data = {}
 
     @staticmethod
     def _dmword(word):
@@ -112,64 +102,41 @@ class GempakData:
 
         return record, start
 
+    def _init_headers(self):
+        self.make_column_header = namedtuple('ColumnHeader', self.column_names)
+        self.make_row_header = namedtuple('RowHeader', self.row_names)
 
-class SoundingFile(GempakData):
-    """GEMPAK sounding file class.
-
-    This class is used to build a collection of soundings to write to disk
-    as a GEMPAK sounding file.
-    """
-
-    def __init__(self, pack_data=False):
-        super().__init__()
-        self.file_type = FileTypes.sounding.value
-        self.data_source = DataSource.raob_buoy.value
-        self._soundings = []
-
-        if pack_data:
-            self._data_type = DataTypes.realpack.value
-        else:
-            self._data_type = DataTypes.real.value
-
-    def _set_structure(self):
+    def _set_pointers(self):
         """Set pointers for the output file.
 
         Notes
         -----
-        See GEMPAK functions SN_CREF and DM_CRET.
+        See GEMPAK function DM_CRET.
         """
-        # Data Management
-        self.data_mgmt_ptr = 129
-        self.data_mgmt_length = 128
-        self.max_free_pairs = MMFREE
-        self.actual_free_pairs = 0
-        self.last_word = 0
-
         # Keys
-        self.row_names = ['DATE', 'TIME']
-        self.rows = 1
         self.row_keys = len(self.row_names)
         self.row_keys_ptr = self.data_mgmt_ptr + self.data_mgmt_length
-        self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV',
-                             'STAT', 'COUN', 'STD2']
-        self.columns = 1
+
         self.column_keys = len(self.column_names)
         self.column_keys_ptr = self.row_keys_ptr + self.row_keys
-        self.file_keys_ptr = self.column_keys_ptr + self.column_keys
 
         # Headers
-        self.file_headers = 0
-        rec, word = self._dmword(self.file_keys_ptr)
+        self.file_keys_ptr = self.column_keys_ptr + self.column_keys
+        lenfil = 0
+        for _fh, info in self.file_headers:
+            lenfil += (info['length'] + 1)
+        rec, word = self._dmword(self.file_keys_ptr + 3 * len(self.file_headers) + lenfil)
         if word != 1:
             self.row_headers_ptr = rec * MBLKSZ + 1
         else:
-            self.row_headers_ptr = self.file_keys_ptr
+            self.row_headers_ptr = self.file_keys_ptr + 3 * len(self.file_headers) + lenfil
         self.column_headers_ptr = self.row_headers_ptr + self.rows * (self.row_keys + 1)
 
         # Parts
-        self.parts = 1
-        self.part_name = 'SNDT'
-        self.part_header = 1
+        lenpart = 0
+        nparts = len(self.parts_dict)
+        for _part, info in self.parts_dict.items():
+            lenpart += len(info['parameters'])
         rec, word = self._dmword(
             self.column_headers_ptr + self.columns * (self.column_keys + 1)
         )
@@ -180,161 +147,338 @@ class SoundingFile(GempakData):
 
         # Data
         rec, word = self._dmword(
-            self.parts_ptr + 4 * self.parts + 4 * self._params  # Always 1 part for merged
+            self.parts_ptr + 4 * nparts + 4 * lenpart
         )
         if word != 1:
             self.data_block_ptr = rec * MBLKSZ + 1
         else:
-            self.data_block_ptr = self.parts_ptr + 4 * self.parts + 4 * self._params
+            self.data_block_ptr = self.parts_ptr + 4 * nparts + 4 * lenpart
 
-        # Data Management (next free word)
+        # Data Management (initial next free word)
         rec, word = self._dmword(
-            self.data_block_ptr + self.parts * self.rows * self.columns
+            self.data_block_ptr + nparts * self.rows * self.columns
         )
         if word != 1:
             self.next_free_word = rec * MBLKSZ + 1
         else:
-            self.next_free_word = self.data_block_ptr + self.parts * self.rows * self.columns
+            self.next_free_word = self.data_block_ptr + nparts * self.rows * self.columns
 
-    def add_sounding(self, sounding):
-        """Add sounding to the file."""
-        if not isinstance(sounding, Sounding):
-            raise TypeError('Input sounding must be `Sounding` class.')
+    def _write_label(self, stream):
+        stream.write_struct(
+            self.label_struct,
+            dm_head=bytes(GEMPAK_HEADER, 'utf-8'),
+            version=self.version,
+            file_headers=len(self.file_headers),
+            file_keys_ptr=self.file_keys_ptr,
+            rows=self.rows,
+            row_keys=self.row_keys,
+            row_keys_ptr=self.row_keys_ptr,
+            row_headers_ptr=self.row_headers_ptr,
+            columns=self.columns,
+            column_keys=self.column_keys,
+            column_keys_ptr=self.column_keys_ptr,
+            column_headers_ptr=self.column_headers_ptr,
+            parts=len(self.parts_dict),
+            parts_ptr=self.parts_ptr,
+            data_mgmt_ptr=self.data_mgmt_ptr,
+            data_mgmt_length=self.data_mgmt_length,
+            data_block_ptr=self.data_block_ptr,
+            file_type=self.file_type,
+            data_source=self.data_source,
+            machine_type=self.machine_type,
+            missing_int=self.missing_int,
+            missing_float=self.missing_float
+        )
 
-    def write(self, file):
-        """Write sounding file to disk."""
-        self._set_structure()
+    def _write_data_management(self, stream):
+        stream.write_struct(
+            self.data_mgmt_struct,
+            next_free_word=self.next_free_word,
+            max_free_pairs=self.max_free_pairs,
+            actual_free_pairs=self.actual_free_pairs,
+            last_word=self.last_word
+        )
 
-        with DataManagementFile(file) as dm:
-            # Write file label
-            dm.write_struct(
-                dm.label_struct,
-                dm_head=bytes(GEMPAK_HEADER, 'utf-8'),
-                version=self.version,
-                file_headers=self.file_headers,
-                file_keys_ptr=self.file_keys_ptr,
-                rows=self.rows,
-                row_keys=self.row_keys,
-                row_keys_ptr=self.row_headers_ptr,
-                row_headers_ptr=self.row_headers_ptr,
-                columns=self.columns,
-                column_keys=self.column_keys,
-                column_keys_ptr=self.column_keys_ptr,
-                column_headers_ptr=self.column_headers_ptr,
-                parts=self.parts,
-                parts_ptr=self.parts_ptr,
-                data_mgmt_ptr=self.data_mgmt_ptr,
-                data_mgmt_length=self.data_mgmt_length,
-                data_block_ptr=self.data_block_ptr,
-                file_type=self.file_type,
-                data_source=self.data_source,
-                machine_type=self.machine_type,
-                missing_int=self.missing_int,
-                missing_float=self.missing_float
-            )
+    def _write_row_keys(self, stream):
+        for rn in self.row_names:
+            stream.write_string(rn)
 
-            # Write data management record
-            dm.jump_to(self.data_mgmt_ptr)
-            dm.write_struct(
-                dm.data_mgmt_struct,
-                next_free_word=self.next_free_word,
-                max_free_pairs=self.max_free_pairs,
-                actual_free_pairs=self.actual_free_pairs,
-                last_word=self.last_word
-            )
+    def _write_column_keys(self, stream):
+        for cn in self.column_names:
+            stream.write_string(cn)
 
-            # Write row key names
-            dm.jump_to(self.row_keys_ptr)
-            for rn in self.row_names:
-                dm.write_string(rn)
+    def _write_parts(self, stream):
+        for name in self.parts_dict:
+            stream.write_string(name)
 
-            # Write column key names
-            dm.jump_to(self.column_keys_ptr)
-            for cn in self.column_names:
-                dm.write_string(cn)
+        for _name, info in self.parts_dict.items():
+            stream.write_int(info['header'])
 
-            # Write parts and parameters
-            dm.jump_to(self.parts_ptr)
-            dm.write_string(self.part_name)
-            dm.write_int(self.part_header)
-            dm.write_int(self._data_type)
-            # dm.write_int()
+        for _name, info in self.parts_dict.items():
+            stream.write_int(info['type'])
 
-            # Write row headers
-            dm.jump_to(self.row_headers_ptr)
+        for _name, info in self.parts_dict.items():
+            stream.write_int(len(info['parameters']))
+
+        for _name, info in self.parts_dict.items():
+            for param in info['parameters']:
+                stream.write_string(param)
+
+        for _name, info in self.parts_dict.items():
+            for offset in info['offset']:
+                stream.write_int(offset)
+
+        for _name, info in self.parts_dict.items():
+            for scale in info['scale']:
+                stream.write_int(scale)
+
+        for _name, info in self.parts_dict.items():
+            for bits in info['bits']:
+                stream.write_int(bits)
+
+    def _write_row_headers(self):
+        raise NotImplementedError('Must be defined within subclass.')
+
+    def _write_column_headers(self):
+        raise NotImplementedError('Must be defined within subclass.')
+
+    def _write_data(self):
+        raise NotImplementedError('Must be defined within subclass.')
 
 
-class Sounding:
-    """User sounding data class."""
+class SoundingFile(DataManagementFile):
+    """GEMPAK sounding file class.
 
-    def __init__(self, pres, temp, dwpt, hght, drct, sped, slat, slon,
-                 date_time, station_info=None):
-        self._params = 0
-        self._data = {}
-        self._lat = slat
-        self._lon = slon
+    This class is used to build a collection of soundings to write to disk
+    as a GEMPAK sounding file.
+    """
 
-        if station_info is None:
-            self._stid = ''
-            self._stnm = self.missing_int
-            self._selv = self.missing_int
-            self._stat = ''
-            self._coun = ''
-            self._std2 = ''
+    def __init__(self, extra_parameters=None, pack_data=False):
+        super().__init__()
+        self.file_type = FileTypes.sounding.value
+        self.data_source = DataSource.raob_buoy.value
+
+        if pack_data:
+            self._data_type = DataTypes.realpack.value
         else:
-            self._stid = str(station_info.pop('station_id', '')).upper()
-            self._stnm = int(station_info.pop('station_number', self.missing_int))
-            self._selv = int(station_info.pop('elevation', self.missing_int))
-            self._stat = str(station_info.pop('state', '')).upper()[:4]
-            self._coun = str(station_info.pop('country', '')).upper()[:4]
-            self._std2 = ''
+            self._data_type = DataTypes.real.value
 
-            if len(self._stid) > 4:
-                self._std2 = self._stid[4:8]
-                self._stid = self._stid[:4]
+        self.row_names = ['DATE', 'TIME']
+        self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV',
+                             'STAT', 'COUN', 'STD2']
+        self._init_headers()
+
+        self._add_parameters(['PRES', 'HGHT', 'TEMP', 'DWPT', 'DRCT', 'SPED'])
+        if extra_parameters is not None:
+            self._add_parameters(extra_parameters)
+
+        self.parts_dict = {
+            'SNDT': {
+                'header': 1,
+                'type': self._data_type,
+                'parameters': self.parameter_names,
+                'scale': [0] * len(self.parameter_names),
+                'offset': [0] * len(self.parameter_names),
+                'bits': [0] * len(self.parameter_names),
+            }
+        }
+
+        if pack_data:
+            raise NotImplementedError('Data packing not implemented.')
+
+    def _add_parameters(self, parameters):
+        """Add parameters to sounding file."""
+        if not isinstance(parameters, (list, tuple, np.ndarray)):
+            raise TypeError('parameters should be array-like.')
+
+        if len(parameters) + len(self.parameter_names) > MMPARM:
+            raise ValueError('Reached maximum parameter limit.')
+
+        for param in parameters:
+            if param not in self.parameter_names:
+                self.parameter_names.append(param.upper())
+
+        self._param_args = namedtuple('Parameters', self.parameter_names)
+
+    def add_sounding(self, data, slat, slon, date_time, station_info=None):
+        """Add sounding to the file."""
+        if not isinstance(data, dict):
+            raise TypeError('data must be a dict.')
+
+        data = {k.upper(): v for k, v in data.items()}
+        params = self._param_args(**data)
+
+        input_len = [len(x) for x in params]
+        if input_len.count(len(params.PRES)) != 6:
+            raise ValueError('All input data must be same length.')
+
+        if not isinstance(slat, (int, float)):
+            raise TypeError('Coordinates must be int/float.')
+
+        if not isinstance(slon, (int, float)):
+            raise TypeError('Coordinates must be int/float.')
 
         if isinstance(date_time, str):
-            self._datetime = datetime.strftime('%Y%m%d%H%M')
+            date_time = date_time.upper()
+            if 'F' in date_time:
+                init, fhr = date_time.split('F')
+                self._datetime = (datetime.strptime(init, '%Y%m%d%H%M')
+                                  + timedelta(hours=int(fhr)))
+            else:
+                self._datetime = datetime.strptime(date_time, '%Y%m%d%H%M')
         elif isinstance(date_time, datetime):
             self._datetime = date_time
         else:
             raise TypeError('date_time must be string or datetime.')
 
-        # Check input data
-        input_len = [len(x) for x in [pres, temp, dwpt, hght, drct, sped]]
-        if input_len.count(len(pres)) != 6:
-            raise ValueError('All input data must be same length.')
+        if station_info is None:
+            stid = ''
+            stnm = self.missing_int
+            selv = self.missing_int
+            stat = ''
+            coun = ''
+            std2 = ''
+        else:
+            stid = str(station_info.get('station_id', '')).upper()
+            stnm = int(station_info.get('station_number', self.missing_int))
+            selv = int(station_info.get('elevation', self.missing_int))
+            stat = str(station_info.get('state', '')).upper()[:4]
+            coun = str(station_info.get('country', '')).upper()[:4]
+            std2 = ''
 
-        # QC input data
+            if len(stid) > 4:
+                std2 = stid[4:8]
+                stid = stid[:4]
 
-        # Add input data parameters
-        self.add_parameters(
-            {
-                'PRES': pres,
-                'HGHT': hght,
-                'TEMP': temp,
-                'DWPT': dwpt,
-                'DRCT': drct,
-                'SPED': sped
-            }
-        )
+        new_row = (date_time.date(), date_time.time())
+        self.row_headers.add(self.make_row_header(*new_row))
 
-    def _qc_input(self):
-        """QC the required input data."""
+        new_column = (stid, stnm, slat, slon, selv, stat, coun, std2)
+        self.column_headers.add(self.make_column_header(*new_column))
 
-    def add_parameters(self, parameters):
-        """Add parameters to sounding."""
-        for key, values in parameters.items():
-            if key not in self._data:
-                self._params += 1
-            self._data[key.upper()] = values
+        self.data[(new_row, new_column)] = params._asdict()
 
-    def remove_parameters(self, parameters):
-        """Remove parameters from sounding."""
-        if not isinstance(parameters, list):
-            parameters = [parameters]
+        self.rows = len(self.row_headers)
+        self.columns = len(self.column_headers)
 
-        for param in parameters:
-            if param.upper() in self._data:
-                self._params -= 1
-                self._data.pop(param.upper())
+        if self.rows + self.columns > MMHDRS:
+            raise ValueError('Exceeded maximum number data entries.')
+
+    def _write_row_headers(self, stream):
+        start_word = stream.word()
+        # Initialize all headers to unused state
+        for _r in range(self.rows):
+            for _k in range(self.row_keys + 1):
+                stream.write_int(self.missing_int)
+
+        stream.jump_to(start_word)
+        for rh in sorted(self.row_headers):
+            stream.write_int(-self.missing_int)
+            for key in rh._fields:
+                dtype = HEADER_DTYPE[key]
+                if 's' in dtype:
+                    stream.write_string(getattr(rh, key))
+                elif 'i' in dtype:
+                    if key == 'DATE':
+                        idate = int(rh.DATE.strftime('%y%m%d'))
+                        stream.write_int(idate)
+                    elif key == 'TIME':
+                        itime = int(rh.TIME.strftime('%H%M'))
+                        stream.write_int(itime)
+                    else:
+                        stream.write_int(getattr(rh, key))
+
+    def _write_column_headers(self, stream):
+        start_word = stream.word()
+        # Initialize all headers to unused state
+        for _c in range(self.columns):
+            for _k in range(self.column_keys + 1):
+                stream.write_int(self.missing_int)
+
+        stream.jump_to(start_word)
+        for ch in self.column_headers:
+            stream.write_int(-self.missing_int)
+            for key in ch._fields:
+                dtype = HEADER_DTYPE[key]
+                if 's' in dtype:
+                    stream.write_string(getattr(ch, key))
+                elif 'i' in dtype:
+                    if key in ['SLAT', 'SLON']:
+                        coord = int(getattr(ch, key) * 100)
+                        stream.write_int(coord)
+                    else:
+                        stream.write_int(getattr(ch, key))
+
+    def _write_data(self, stream):
+        for i, row in enumerate(self.row_headers):
+            for j, col in enumerate(self.column_headers):
+                pointer = self.data_block_ptr + i * self.columns + j
+                stream.jump_to(pointer)
+                if (row, col) in self.data:
+                    stream.write_int(self.next_free_word)
+                    params = self.data[(row, col)]
+                    # Need data length, so just grab first parameter
+                    lendat = (self.parts_dict['SNDT']['header']
+                              + len(params[next(iter(params))]) * len(params))
+                    itime = int(row.TIME.strftime('%H%M'))
+                    stream.jump_to(self.next_free_word)
+                    stream.write_int(lendat)
+                    stream.write_int(itime)
+
+                    for rec in zip(*params.values()):
+                        if self._data_type == DataTypes.realpack.value:
+                            for _param, _pval in zip(self.parameter_names, rec):
+                                # pack values
+                                pass
+                        else:
+                            for pval in rec:
+                                stream.write_float(pval)
+                    self.next_free_word = stream.word()
+
+                else:
+                    stream.write_int(0)
+
+        _rec, word = self._dmword(stream.word())
+        # Fill out the remainder of the block, if needed
+        if word != 1:
+            for _n in range(MBLKSZ - word + 1):
+                stream.write_int(0)
+
+    def write(self, file):
+        """Write sounding file to disk."""
+        self._set_pointers()
+
+        with GempakStream() as stream:
+            # Write file label
+            self._write_label(stream)
+
+            # Write row key names
+            stream.jump_to(self.row_keys_ptr)
+            self._write_row_keys(stream)
+
+            # Write column key names
+            stream.jump_to(self.column_keys_ptr)
+            self._write_column_keys(stream)
+
+            # Write parts and parameters
+            stream.jump_to(self.parts_ptr)
+            self._write_parts(stream)
+
+            # Write row headers
+            stream.jump_to(self.row_headers_ptr)
+            self._write_row_headers(stream)
+
+            # Write column headers
+            stream.jump_to(self.column_headers_ptr)
+            self._write_column_headers(stream)
+
+            # Write data
+            stream.jump_to(self.data_block_ptr)
+            self._write_data(stream)
+
+            # Write data management record
+            stream.jump_to(self.data_mgmt_ptr)
+            self._write_data_management(stream)
+
+            with open(file, 'wb') as out:
+                out.write(stream.getbuffer())
