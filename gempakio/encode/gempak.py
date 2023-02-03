@@ -24,7 +24,6 @@ class GempakStream(BytesIO):
 
     def jump_to(self, word):
         """Jumpt to given word."""
-        # word - 1 to get word start, not end
         self.seek(_word_to_position(word))
 
     def word(self):
