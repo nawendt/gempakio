@@ -12,7 +12,7 @@ import numpy as np
 
 from gempakio.common import (_position_to_word, _word_to_position, DataSource, DataTypes,
                              FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MBLKSZ, MISSING_FLOAT,
-                             MISSING_INT, MMFREE, MMHDRS, MMPARM)
+                             MISSING_INT, MMFREE, MMHDRS, MMPARM, PackingType)
 from gempakio.tools import NamedStruct
 
 
@@ -65,6 +65,30 @@ class DataManagementFile:
          ('last_word', 'i'), (None, '464x')], '<', 'DataManagement'
     )
 
+    grid_nav_fmt = [('grid_definition_type', 'f'), ('projection', '3sx'),
+                    ('left_grid_number', 'f'), ('bottom_grid_number', 'f'),
+                    ('right_grid_number', 'f'), ('top_grid_number', 'f'),
+                    ('lower_left_lat', 'f'), ('lower_left_lon', 'f'), ('upper_right_lat', 'f'),
+                    ('upper_right_lon', 'f'), ('proj_angle1', 'f'), ('proj_angle2', 'f'),
+                    ('proj_angle3', 'f'), (None, '972x')]
+
+    grid_anl_fmt1 = [('analysis_type', 'f'), ('delta_n', 'f'), ('delta_x', 'f'),
+                     ('delta_y', 'f'), (None, '4x'), ('garea_llcr_lat', 'f'),
+                     ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'), ('garea_urcr_lon', 'f'),
+                     ('extarea_llcr_lat', 'f'), ('extarea_llcr_lon', 'f'),
+                     ('extarea_urcr_lat', 'f'), ('extarea_urcr_lon', 'f'),
+                     ('datarea_llcr_lat', 'f'), ('datarea_llcr_lon', 'f'),
+                     ('datarea_urcr_lat', 'f'), ('datarea_urcrn_lon', 'f'), (None, '444x')]
+
+    grid_anl_fmt2 = [('analysis_type', 'f'), ('delta_n', 'f'), ('grid_ext_left', 'f'),
+                     ('grid_ext_down', 'f'), ('grid_ext_right', 'f'), ('grid_ext_up', 'f'),
+                     ('garea_llcr_lat', 'f'), ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'),
+                     ('garea_urcr_lon', 'f'), ('extarea_llcr_lat', 'f'),
+                     ('extarea_llcr_lon', 'f'), ('extarea_urcr_lat', 'f'),
+                     ('extarea_urcr_lon', 'f'), ('datarea_llcr_lat', 'f'),
+                     ('datarea_llcr_lon', 'f'), ('datarea_urcr_lat', 'f'),
+                     ('datarea_urcrn_lon', 'f'), (None, '440x')]
+
     def __init__(self):
         self.version = 1
         self.machine_type = 11
@@ -86,6 +110,7 @@ class DataManagementFile:
         self.data_source = None
         self.column_headers = set()
         self.row_headers = set()
+        self.packing_type = None
         self.data = {}
 
     @staticmethod
@@ -250,6 +275,41 @@ class DataManagementFile:
         raise NotImplementedError('Must be defined within subclass.')
 
 
+class GridFile(DataManagementFile):
+    """GEMPAK grid file class.
+
+    This class is used to build a collection of grids to write to disk
+    as a GEMPAK grid file.
+    """
+
+    def __init__(self, nx, ny):
+        super().__init__()
+        self.nx = nx
+        self.ny = ny
+        self.file_type = FileTypes.grid.value
+        self.data_source = DataSource.grid.value
+        self.packing_type = PackingType.grib.value
+        self._data_type = DataTypes.grid.value
+        self.file_headers = 2
+        self.rows = 1
+        self.columns = 1
+
+        self.row_names = ['GRID']
+        self.column_names = ['GDT1', 'GTM1', 'GDT2', 'GTM2', 'GLV1', 'GLV2', 'GVCD', 'GPM1',
+                             'GPM2', 'GPM3']
+
+        self.parts_dict = {
+            'GRID': {
+                'header': 1,
+                'type': self._data_type,
+                'parameters': self.parameter_names,
+                'scale': [0] * len(self.parameter_names),
+                'offset': [0] * len(self.parameter_names),
+                'bits': [0] * len(self.parameter_names),
+            }
+        }
+
+
 class SoundingFile(DataManagementFile):
     """GEMPAK sounding file class.
 
@@ -365,7 +425,7 @@ class SoundingFile(DataManagementFile):
         params = self._param_args(**data)
 
         if not self._validate_length(data):
-            raise ValueError('All input data must be same length.')            
+            raise ValueError('All input data must be same length.')
 
         if not isinstance(slat, (int, float)):
             raise TypeError('Coordinates must be int/float.')
