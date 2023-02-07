@@ -135,18 +135,18 @@ class GempakFile:
     each file).
     """
 
-    prod_desc_fmt = [('version', 'i'), ('file_headers', 'i'),
-                     ('file_keys_ptr', 'i'), ('rows', 'i'),
-                     ('row_keys', 'i'), ('row_keys_ptr', 'i'),
-                     ('row_headers_ptr', 'i'), ('columns', 'i'),
-                     ('column_keys', 'i'), ('column_keys_ptr', 'i'),
-                     ('column_headers_ptr', 'i'), ('parts', 'i'),
-                     ('parts_ptr', 'i'), ('data_mgmt_ptr', 'i'),
-                     ('data_mgmt_length', 'i'), ('data_block_ptr', 'i'),
-                     ('file_type', 'i', FileTypes),
-                     ('data_source', 'i', _data_source),
-                     ('machine_type', 'i'), ('missing_int', 'i'),
-                     (None, '12x'), ('missing_float', 'f')]
+    dm_label_fmt = [('version', 'i'), ('file_headers', 'i'),
+                    ('file_keys_ptr', 'i'), ('rows', 'i'),
+                    ('row_keys', 'i'), ('row_keys_ptr', 'i'),
+                    ('row_headers_ptr', 'i'), ('columns', 'i'),
+                    ('column_keys', 'i'), ('column_keys_ptr', 'i'),
+                    ('column_headers_ptr', 'i'), ('parts', 'i'),
+                    ('parts_ptr', 'i'), ('data_mgmt_ptr', 'i'),
+                    ('data_mgmt_length', 'i'), ('data_block_ptr', 'i'),
+                    ('file_type', 'i', FileTypes),
+                    ('data_source', 'i', _data_source),
+                    ('machine_type', 'i'), ('missing_int', 'i'),
+                    (None, '12x'), ('missing_float', 'f')]
 
     grid_nav_fmt = [('grid_definition_type', 'f'),
                     ('projection', '3sx', bytes.decode),
@@ -202,22 +202,22 @@ class GempakFile:
         self._buffer.jump_to(meta)
 
         # Process main metadata header
-        self.prod_desc = self._buffer.read_struct(NamedStruct(self.prod_desc_fmt,
-                                                              self.prefmt,
-                                                              'ProductDescription'))
+        self.dm_label = self._buffer.read_struct(NamedStruct(self.dm_label_fmt,
+                                                             self.prefmt,
+                                                             'ProductDescription'))
 
         # File Keys
         # Surface and upper-air files will not have the file headers, so we need to check.
-        if self.prod_desc.file_headers > 0:
+        if self.dm_label.file_headers > 0:
             # This would grab any file headers, but NAVB and ANLB are the only ones used.
             fkey_prod = product(['header_name', 'header_length', 'header_type'],
-                                range(1, self.prod_desc.file_headers + 1))
+                                range(1, self.dm_label.file_headers + 1))
             fkey_names = [f'{x[0]}{x[1]}' for x in fkey_prod]
             fkey_info = list(zip(fkey_names, np.repeat(('4s', 'i', 'i'),
-                                                       self.prod_desc.file_headers)))
+                                                       self.dm_label.file_headers)))
             self.file_keys_format = NamedStruct(fkey_info, self.prefmt, 'FileKeys')
 
-            self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.file_keys_ptr))
+            self._buffer.jump_to(self._start, _word_to_position(self.dm_label.file_keys_ptr))
             self.file_keys = self._buffer.read_struct(self.file_keys_format)
 
             # file_key_blocks = self._buffer.set_mark()
@@ -261,50 +261,50 @@ class GempakFile:
             self.navigation_block = None
 
         # Data Management
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.data_mgmt_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.data_mgmt_ptr))
         self.data_management = self._buffer.read_struct(NamedStruct(self.data_management_fmt,
                                                                     self.prefmt,
                                                                     'DataManagement'))
 
         # Row Keys
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.row_keys_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.row_keys_ptr))
         row_key_info = [(f'row_key{n}', '4s', self._decode_strip)
-                        for n in range(1, self.prod_desc.row_keys + 1)]
+                        for n in range(1, self.dm_label.row_keys + 1)]
         row_key_info.extend([(None, None)])
         row_keys_fmt = NamedStruct(row_key_info, self.prefmt, 'RowKeys')
         self.row_keys = self._buffer.read_struct(row_keys_fmt)
 
         # Column Keys
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.column_keys_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.column_keys_ptr))
         column_key_info = [(f'column_key{n}', '4s', self._decode_strip)
-                           for n in range(1, self.prod_desc.column_keys + 1)]
+                           for n in range(1, self.dm_label.column_keys + 1)]
         column_key_info.extend([(None, None)])
         column_keys_fmt = NamedStruct(column_key_info, self.prefmt, 'ColumnKeys')
         self.column_keys = self._buffer.read_struct(column_keys_fmt)
 
         # Parts
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.parts_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.parts_ptr))
         # parts = self._buffer.set_mark()
         self.parts = []
         parts_info = [('name', '4s', self._decode_strip),
-                      (None, f'{(self.prod_desc.parts - 1) * BYTES_PER_WORD}x'),
+                      (None, f'{(self.dm_label.parts - 1) * BYTES_PER_WORD}x'),
                       ('header_length', 'i'),
-                      (None, f'{(self.prod_desc.parts - 1) * BYTES_PER_WORD}x'),
+                      (None, f'{(self.dm_label.parts - 1) * BYTES_PER_WORD}x'),
                       ('data_type', 'i', DataTypes),
-                      (None, f'{(self.prod_desc.parts - 1) * BYTES_PER_WORD}x'),
+                      (None, f'{(self.dm_label.parts - 1) * BYTES_PER_WORD}x'),
                       ('parameter_count', 'i')]
         parts_info.extend([(None, None)])
         parts_fmt = NamedStruct(parts_info, self.prefmt, 'Parts')
-        for n in range(1, self.prod_desc.parts + 1):
+        for n in range(1, self.dm_label.parts + 1):
             self.parts.append(self._buffer.read_struct(parts_fmt))
-            self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.parts_ptr + n))
+            self._buffer.jump_to(self._start, _word_to_position(self.dm_label.parts_ptr + n))
 
         # Parameters
         # No need to jump to any position as this follows parts information
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.parts_ptr
-                                                            + self.prod_desc.parts * 4))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.parts_ptr
+                                                            + self.dm_label.parts * 4))
         self.parameters = [{key: [] for key, _ in PARAM_ATTR}
-                           for n in range(self.prod_desc.parts)]
+                           for n in range(self.dm_label.parts)]
         for attr, fmt in PARAM_ATTR:
             fmt = (fmt[0], self.prefmt + fmt[1] if fmt[1] != 's' else fmt[1])
             for n, part in enumerate(self.parts):
@@ -423,7 +423,7 @@ class GempakFile:
 
         pwords = (sum(parameters['bits']) - 1) // 32 + 1
         npack = (length - 1) // pwords + 1
-        unpacked = np.ones(npack * nparms, dtype=np.float32) * self.prod_desc.missing_float
+        unpacked = np.ones(npack * nparms, dtype=np.float32) * self.dm_label.missing_float
         if npack * pwords != length:
             raise ValueError('Unpacking length mismatch.')
 
@@ -458,7 +458,7 @@ class GempakFile:
                     ifield |= iword
 
                 if ifield == imissc:
-                    rdat[idata] = self.prod_desc.missing_float
+                    rdat[idata] = self.dm_label.missing_float
                 else:
                     rdat[idata] = (ifield + offset) * scale
                 itotal += bits
@@ -486,17 +486,17 @@ class GempakGrid(GempakFile):
         # This appears to be a flag value to say a header is used or not. 9999
         # means its in use, otherwise -9999. GEMPAK allows empty grids, etc., but
         # no real need to keep track of that in Python.
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.row_headers_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.row_headers_ptr))
         self.row_headers = []
         row_headers_info = [(key, 'i') for key in self.row_keys]
         row_headers_info.extend([(None, None)])
         row_headers_fmt = NamedStruct(row_headers_info, self.prefmt, 'RowHeaders')
-        for _ in range(1, self.prod_desc.rows + 1):
+        for _ in range(1, self.dm_label.rows + 1):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.row_headers.append(self._buffer.read_struct(row_headers_fmt))
 
         # Column Headers
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.column_headers_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.column_headers_ptr))
         self.column_headers = []
         column_headers_info = [(key, 'i', self._convert_level) if key in level_names
                                else (key, 'i', self._convert_vertical_coord) if key == 'GVCD'
@@ -507,7 +507,7 @@ class GempakGrid(GempakFile):
                                for key in self.column_keys]
         column_headers_info.extend([(None, None)])
         column_headers_fmt = NamedStruct(column_headers_info, self.prefmt, 'ColumnHeaders')
-        for _ in range(1, self.prod_desc.columns + 1):
+        for _ in range(1, self.dm_label.columns + 1):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.column_headers.append(self._buffer.read_struct(column_headers_fmt))
 
@@ -711,7 +711,7 @@ class GempakGrid(GempakFile):
                             iword += 1
 
                         if (self.grid_meta_int.missing_flag and idat == imiss):
-                            grid[j, i] = self.prod_desc.missing_float
+                            grid[j, i] = self.dm_label.missing_float
                         else:
                             if first:
                                 grid[j, i] = self.grid_meta_real.reference
@@ -765,7 +765,7 @@ class GempakGrid(GempakFile):
                         idat |= idat2
 
                     if (idat == imax) and self.grid_meta_int.missing_flag:
-                        grid[cell] = self.prod_desc.missing_float
+                        grid[cell] = self.dm_label.missing_float
                     else:
                         grid[cell] = (self.grid_meta_real.reference
                                       + (idat * self.grid_meta_real.scale))
@@ -944,9 +944,9 @@ class GempakGrid(GempakFile):
         for icol in gridno:
             col_head = self.column_headers[icol]
             for iprt, part in enumerate(self.parts):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts + iprt))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts + iprt))
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 self.data_ptr = self._buffer.read_int(4, self.endian, False)
                 self._buffer.jump_to(self._start, _word_to_position(self.data_ptr))
@@ -968,10 +968,10 @@ class GempakGrid(GempakFile):
                 if data is not None:
                     if data.ndim < 2:
                         data = np.ma.array(data.reshape((self.ky, self.kx)),
-                                           mask=data == self.prod_desc.missing_float,
+                                           mask=data == self.dm_label.missing_float,
                                            dtype=np.float32)
                     else:
-                        data = np.ma.array(data, mask=data == self.prod_desc.missing_float,
+                        data = np.ma.array(data, mask=data == self.dm_label.missing_float,
                                            dtype=np.float32)
 
                     xrda = xr.DataArray(
@@ -1006,7 +1006,7 @@ class GempakSounding(GempakFile):
         super().__init__(file)
 
         # Row Headers
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.row_headers_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.row_headers_ptr))
         self.row_headers = []
         row_headers_info = [(key, 'i', self._make_date) if key == 'DATE'
                             else (key, 'i', self._make_time) if key == 'TIME'
@@ -1014,12 +1014,12 @@ class GempakSounding(GempakFile):
                             for key in self.row_keys]
         row_headers_info.extend([(None, None)])
         row_headers_fmt = NamedStruct(row_headers_info, self.prefmt, 'RowHeaders')
-        for _ in range(1, self.prod_desc.rows + 1):
+        for _ in range(1, self.dm_label.rows + 1):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.row_headers.append(self._buffer.read_struct(row_headers_fmt))
 
         # Column Headers
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.column_headers_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.column_headers_ptr))
         self.column_headers = []
         column_headers_info = [(key, '4s', self._decode_strip) if key == 'STID'
                                else (key, 'i') if key == 'STNM'
@@ -1033,7 +1033,7 @@ class GempakSounding(GempakFile):
                                for key in self.column_keys]
         column_headers_info.extend([(None, None)])
         column_headers_fmt = NamedStruct(column_headers_info, self.prefmt, 'ColumnHeaders')
-        for _ in range(1, self.prod_desc.columns + 1):
+        for _ in range(1, self.dm_label.columns + 1):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.column_headers.append(self._buffer.read_struct(column_headers_fmt))
 
@@ -1042,9 +1042,9 @@ class GempakSounding(GempakFile):
         self._sninfo = set()
         for irow, row_head in enumerate(self.row_headers):
             for icol, col_head in enumerate(self.column_headers):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts))
 
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 data_ptr = self._buffer.read_int(4, self.endian, False)
@@ -1087,9 +1087,9 @@ class GempakSounding(GempakFile):
                 'TIME': row_head.TIME,
             }
             for iprt, part in enumerate(self.parts):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts + iprt))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts + iprt))
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 self.data_ptr = self._buffer.read_int(4, self.endian, False)
                 if not self.data_ptr:
@@ -1154,9 +1154,9 @@ class GempakSounding(GempakFile):
                 'TIME': row_head.TIME,
             }
             for iprt, part in enumerate(self.parts):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts + iprt))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts + iprt))
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 self.data_ptr = self._buffer.read_int(4, self.endian, False)
                 if not self.data_ptr:
@@ -1272,7 +1272,7 @@ class GempakSounding(GempakFile):
                 ppbb_is_z = False
             else:
                 for z in parts['PPBB']['HGHT']:
-                    if z != self.prod_desc.missing_float and z < 0:
+                    if z != self.dm_label.missing_float and z < 0:
                         ppbb_is_z = False
                         parts['PPBB']['PRES'] = parts['PPBB']['HGHT']
                         break
@@ -1283,19 +1283,19 @@ class GempakSounding(GempakFile):
                 ppdd_is_z = False
             else:
                 for z in parts['PPDD']['HGHT']:
-                    if z != self.prod_desc.missing_float and z < 0:
+                    if z != self.dm_label.missing_float and z < 0:
                         ppdd_is_z = False
                         parts['PPDD']['PRES'] = parts['PPDD']['HGHT']
                         break
 
         # Process surface data
         if num_man_levels < 1:
-            merged['PRES'].append(self.prod_desc.missing_float)
-            merged['HGHT'].append(self.prod_desc.missing_float)
-            merged['TEMP'].append(self.prod_desc.missing_float)
-            merged['DWPT'].append(self.prod_desc.missing_float)
-            merged['DRCT'].append(self.prod_desc.missing_float)
-            merged['SPED'].append(self.prod_desc.missing_float)
+            merged['PRES'].append(self.dm_label.missing_float)
+            merged['HGHT'].append(self.dm_label.missing_float)
+            merged['TEMP'].append(self.dm_label.missing_float)
+            merged['DWPT'].append(self.dm_label.missing_float)
+            merged['DRCT'].append(self.dm_label.missing_float)
+            merged['SPED'].append(self.dm_label.missing_float)
         else:
             merged['PRES'].append(parts['TTAA']['PRES'][0])
             merged['HGHT'].append(parts['TTAA']['HGHT'][0])
@@ -1306,37 +1306,37 @@ class GempakSounding(GempakFile):
 
         merged['HGHT'][0] = merged['SELV']
 
-        first_man_p = self.prod_desc.missing_float
+        first_man_p = self.dm_label.missing_float
         if num_man_levels >= 1:
             for mp, mt, mz in zip(parts['TTAA']['PRES'],
                                   parts['TTAA']['TEMP'],
                                   parts['TTAA']['HGHT']):
-                if (mp != self.prod_desc.missing_float
-                   and mt != self.prod_desc.missing_float
-                   and mz != self.prod_desc.missing_float):
+                if (mp != self.dm_label.missing_float
+                   and mt != self.dm_label.missing_float
+                   and mz != self.dm_label.missing_float):
                     first_man_p = mp
                     break
 
         surface_p = merged['PRES'][0]
         if surface_p > 1060:
-            surface_p = self.prod_desc.missing_float
+            surface_p = self.dm_label.missing_float
 
-        if (surface_p == self.prod_desc.missing_float
+        if (surface_p == self.dm_label.missing_float
            or (surface_p < first_man_p
-               and surface_p != self.prod_desc.missing_float)):
-            merged['PRES'][0] = self.prod_desc.missing_float
-            merged['HGHT'][0] = self.prod_desc.missing_float
-            merged['TEMP'][0] = self.prod_desc.missing_float
-            merged['DWPT'][0] = self.prod_desc.missing_float
-            merged['DRCT'][0] = self.prod_desc.missing_float
-            merged['SPED'][0] = self.prod_desc.missing_float
+               and surface_p != self.dm_label.missing_float)):
+            merged['PRES'][0] = self.dm_label.missing_float
+            merged['HGHT'][0] = self.dm_label.missing_float
+            merged['TEMP'][0] = self.dm_label.missing_float
+            merged['DWPT'][0] = self.dm_label.missing_float
+            merged['DRCT'][0] = self.dm_label.missing_float
+            merged['SPED'][0] = self.dm_label.missing_float
 
         if (num_sigt_levels >= 1
-           and parts['TTBB']['PRES'][0] != self.prod_desc.missing_float
-           and parts['TTBB']['TEMP'][0] != self.prod_desc.missing_float):
+           and parts['TTBB']['PRES'][0] != self.dm_label.missing_float
+           and parts['TTBB']['TEMP'][0] != self.dm_label.missing_float):
             first_man_p = merged['PRES'][0]
             first_sig_p = parts['TTBB']['PRES'][0]
-            if (first_man_p == self.prod_desc.missing_float
+            if (first_man_p == self.dm_label.missing_float
                or np.isclose(first_man_p, first_sig_p)):
                 merged['PRES'][0] = parts['TTBB']['PRES'][0]
                 merged['DWPT'][0] = parts['TTBB']['DWPT'][0]
@@ -1345,15 +1345,15 @@ class GempakSounding(GempakFile):
         if num_sigw_levels >= 1:
             if ppbb_is_z:
                 if (parts['PPBB']['HGHT'][0] == 0
-                   and parts['PPBB']['DRCT'][0] != self.prod_desc.missing_float):
+                   and parts['PPBB']['DRCT'][0] != self.dm_label.missing_float):
                     merged['DRCT'][0] = parts['PPBB']['DRCT'][0]
                     merged['SPED'][0] = parts['PPBB']['SPED'][0]
             else:
-                if (parts['PPBB']['PRES'][0] != self.prod_desc.missing_float
-                   and parts['PPBB']['DRCT'][0] != self.prod_desc.missing_float):
+                if (parts['PPBB']['PRES'][0] != self.dm_label.missing_float
+                   and parts['PPBB']['DRCT'][0] != self.dm_label.missing_float):
                     first_man_p = merged['PRES'][0]
                     first_sig_p = abs(parts['PPBB']['PRES'][0])
-                    if (first_man_p == self.prod_desc.missing_float
+                    if (first_man_p == self.dm_label.missing_float
                        or np.isclose(first_man_p, first_sig_p)):
                         merged['PRES'][0] = abs(parts['PPBB']['PRES'][0])
                         merged['DRCT'][0] = parts['PPBB']['DRCT'][0]
@@ -1363,7 +1363,7 @@ class GempakSounding(GempakFile):
         bgl = 0
         qcman = []
         if num_man_levels >= 2 or num_above_man_levels >= 1:
-            if merged['PRES'][0] == self.prod_desc.missing_float:
+            if merged['PRES'][0] == self.dm_label.missing_float:
                 plast = 2000
             else:
                 plast = merged['PRES'][0]
@@ -1371,9 +1371,9 @@ class GempakSounding(GempakFile):
         if num_man_levels >= 2:
             for i in range(1, num_man_levels):
                 if (parts['TTAA']['PRES'][i] < plast
-                   and parts['TTAA']['PRES'][i] != self.prod_desc.missing_float
-                   and parts['TTAA']['TEMP'][i] != self.prod_desc.missing_float
-                   and parts['TTAA']['HGHT'][i] != self.prod_desc.missing_float):
+                   and parts['TTAA']['PRES'][i] != self.dm_label.missing_float
+                   and parts['TTAA']['TEMP'][i] != self.dm_label.missing_float
+                   and parts['TTAA']['HGHT'][i] != self.dm_label.missing_float):
                     for pname, pval in parts['TTAA'].items():
                         merged[pname].append(pval[i])
                     plast = merged['PRES'][-1]
@@ -1383,15 +1383,15 @@ class GempakSounding(GempakFile):
                     else:
                         # GEMPAK ignores MAN data with missing TEMP/HGHT and does not
                         # interpolate for them.
-                        if parts['TTAA']['PRES'][i] != self.prod_desc.missing_float:
+                        if parts['TTAA']['PRES'][i] != self.dm_label.missing_float:
                             qcman.append(parts['TTAA']['PRES'][i])
 
         if num_above_man_levels >= 1:
             for i in range(num_above_man_levels):
                 if (parts['TTCC']['PRES'][i] < plast
-                   and parts['TTCC']['PRES'][i] != self.prod_desc.missing_float
-                   and parts['TTCC']['TEMP'][i] != self.prod_desc.missing_float
-                   and parts['TTCC']['HGHT'][i] != self.prod_desc.missing_float):
+                   and parts['TTCC']['PRES'][i] != self.dm_label.missing_float
+                   and parts['TTCC']['TEMP'][i] != self.dm_label.missing_float
+                   and parts['TTCC']['HGHT'][i] != self.dm_label.missing_float):
                     for pname, pval in parts['TTCC'].items():
                         merged[pname].append(pval[i])
                     plast = merged['PRES'][-1]
@@ -1401,7 +1401,7 @@ class GempakSounding(GempakFile):
             for iwind, pres in enumerate(parts['PPAA']['PRES']):
                 if pres in merged['PRES'][1:]:
                     loc = merged['PRES'].index(pres)
-                    if merged['DRCT'][loc] == self.prod_desc.missing_float:
+                    if merged['DRCT'][loc] == self.dm_label.missing_float:
                         merged['DRCT'][loc] = parts['PPAA']['DRCT'][iwind]
                         merged['SPED'][loc] = parts['PPAA']['SPED'][iwind]
                 else:
@@ -1411,17 +1411,17 @@ class GempakSounding(GempakFile):
                         if loc >= size + 1:
                             loc = -1
                         merged['PRES'].insert(loc, pres)
-                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
+                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
                         merged['DRCT'].insert(loc, parts['PPAA']['DRCT'][iwind])
                         merged['SPED'].insert(loc, parts['PPAA']['SPED'][iwind])
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
 
         if num_above_man_wind_levels >= 1 and num_man_levels >= 1 and len(merged['PRES']) >= 2:
             for iwind, pres in enumerate(parts['PPCC']['PRES']):
                 if pres in merged['PRES'][1:]:
                     loc = merged['PRES'].index(pres)
-                    if merged['DRCT'][loc] == self.prod_desc.missing_float:
+                    if merged['DRCT'][loc] == self.dm_label.missing_float:
                         merged['DRCT'][loc] = parts['PPCC']['DRCT'][iwind]
                         merged['SPED'][loc] = parts['PPCC']['SPED'][iwind]
                 else:
@@ -1431,15 +1431,15 @@ class GempakSounding(GempakFile):
                         if loc >= size + 1:
                             loc = -1
                         merged['PRES'].insert(loc, pres)
-                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
+                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
                         merged['DRCT'].insert(loc, parts['PPCC']['DRCT'][iwind])
                         merged['SPED'].insert(loc, parts['PPCC']['SPED'][iwind])
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
 
         # Merge TROP
         if num_trop_levels >= 1 or num_above_trop_levels >= 1:
-            if merged['PRES'][0] != self.prod_desc.missing_float:
+            if merged['PRES'][0] != self.dm_label.missing_float:
                 pbot = merged['PRES'][0]
             elif len(merged['PRES']) > 1:
                 pbot = merged['PRES'][1]
@@ -1451,20 +1451,20 @@ class GempakSounding(GempakFile):
         if num_trop_levels >= 1:
             for itrp, pres in enumerate(parts['TRPA']['PRES']):
                 pres = abs(pres)
-                if (pres != self.prod_desc.missing_float
-                   and parts['TRPA']['TEMP'][itrp] != self.prod_desc.missing_float
+                if (pres != self.dm_label.missing_float
+                   and parts['TRPA']['TEMP'][itrp] != self.dm_label.missing_float
                    and pres != 0):
                     if pres > pbot:
                         continue
                     elif pres in merged['PRES']:
                         ploc = merged['PRES'].index(pres)
-                        if merged['TEMP'][ploc] == self.prod_desc.missing_float:
+                        if merged['TEMP'][ploc] == self.dm_label.missing_float:
                             merged['TEMP'][ploc] = parts['TRPA']['TEMP'][itrp]
                             merged['DWPT'][ploc] = parts['TRPA']['DWPT'][itrp]
-                        if merged['DRCT'][ploc] == self.prod_desc.missing_float:
+                        if merged['DRCT'][ploc] == self.dm_label.missing_float:
                             merged['DRCT'][ploc] = parts['TRPA']['DRCT'][itrp]
                             merged['SPED'][ploc] = parts['TRPA']['SPED'][itrp]
-                        merged['HGHT'][ploc] = self.prod_desc.missing_float
+                        merged['HGHT'][ploc] = self.dm_label.missing_float
                     else:
                         size = len(merged['PRES'])
                         loc = size - bisect.bisect_left(merged['PRES'][::-1], pres)
@@ -1473,26 +1473,26 @@ class GempakSounding(GempakFile):
                         merged['DWPT'].insert(loc, parts['TRPA']['DWPT'][itrp])
                         merged['DRCT'].insert(loc, parts['TRPA']['DRCT'][itrp])
                         merged['SPED'].insert(loc, parts['TRPA']['SPED'][itrp])
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
                 pbot = pres
 
         if num_above_trop_levels >= 1:
             for itrp, pres in enumerate(parts['TRPC']['PRES']):
                 pres = abs(pres)
-                if (pres != self.prod_desc.missing_float
-                   and parts['TRPC']['TEMP'][itrp] != self.prod_desc.missing_float
+                if (pres != self.dm_label.missing_float
+                   and parts['TRPC']['TEMP'][itrp] != self.dm_label.missing_float
                    and pres != 0):
                     if pres > pbot:
                         continue
                     elif pres in merged['PRES']:
                         ploc = merged['PRES'].index(pres)
-                        if merged['TEMP'][ploc] == self.prod_desc.missing_float:
+                        if merged['TEMP'][ploc] == self.dm_label.missing_float:
                             merged['TEMP'][ploc] = parts['TRPC']['TEMP'][itrp]
                             merged['DWPT'][ploc] = parts['TRPC']['DWPT'][itrp]
-                        if merged['DRCT'][ploc] == self.prod_desc.missing_float:
+                        if merged['DRCT'][ploc] == self.dm_label.missing_float:
                             merged['DRCT'][ploc] = parts['TRPC']['DRCT'][itrp]
                             merged['SPED'][ploc] = parts['TRPC']['SPED'][itrp]
-                        merged['HGHT'][ploc] = self.prod_desc.missing_float
+                        merged['HGHT'][ploc] = self.dm_label.missing_float
                     else:
                         size = len(merged['PRES'])
                         loc = size - bisect.bisect_left(merged['PRES'][::-1], pres)
@@ -1501,12 +1501,12 @@ class GempakSounding(GempakFile):
                         merged['DWPT'].insert(loc, parts['TRPC']['DWPT'][itrp])
                         merged['DRCT'].insert(loc, parts['TRPC']['DRCT'][itrp])
                         merged['SPED'].insert(loc, parts['TRPC']['SPED'][itrp])
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
                 pbot = pres
 
         # Merge SIG temperature
         if num_sigt_levels >= 1 or num_above_sigt_levels >= 1:
-            if merged['PRES'][0] != self.prod_desc.missing_float:
+            if merged['PRES'][0] != self.dm_label.missing_float:
                 pbot = merged['PRES'][0]
             elif len(merged['PRES']) > 1:
                 pbot = merged['PRES'][1]
@@ -1518,14 +1518,14 @@ class GempakSounding(GempakFile):
         if num_sigt_levels >= 1:
             for isigt, pres in enumerate(parts['TTBB']['PRES']):
                 pres = abs(pres)
-                if (pres != self.prod_desc.missing_float
-                   and parts['TTBB']['TEMP'][isigt] != self.prod_desc.missing_float
+                if (pres != self.dm_label.missing_float
+                   and parts['TTBB']['TEMP'][isigt] != self.dm_label.missing_float
                    and pres != 0):
                     if pres > pbot:
                         continue
                     elif pres in merged['PRES']:
                         ploc = merged['PRES'].index(pres)
-                        if merged['TEMP'][ploc] == self.prod_desc.missing_float:
+                        if merged['TEMP'][ploc] == self.dm_label.missing_float:
                             merged['TEMP'][ploc] = parts['TTBB']['TEMP'][isigt]
                             merged['DWPT'][ploc] = parts['TTBB']['DWPT'][isigt]
                     else:
@@ -1534,22 +1534,22 @@ class GempakSounding(GempakFile):
                         merged['PRES'].insert(loc, pres)
                         merged['TEMP'].insert(loc, parts['TTBB']['TEMP'][isigt])
                         merged['DWPT'].insert(loc, parts['TTBB']['DWPT'][isigt])
-                        merged['DRCT'].insert(loc, self.prod_desc.missing_float)
-                        merged['SPED'].insert(loc, self.prod_desc.missing_float)
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['DRCT'].insert(loc, self.dm_label.missing_float)
+                        merged['SPED'].insert(loc, self.dm_label.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
                 pbot = pres
 
         if num_above_sigt_levels >= 1:
             for isigt, pres in enumerate(parts['TTDD']['PRES']):
                 pres = abs(pres)
-                if (pres != self.prod_desc.missing_float
-                   and parts['TTDD']['TEMP'][isigt] != self.prod_desc.missing_float
+                if (pres != self.dm_label.missing_float
+                   and parts['TTDD']['TEMP'][isigt] != self.dm_label.missing_float
                    and pres != 0):
                     if pres > pbot:
                         continue
                     elif pres in merged['PRES']:
                         ploc = merged['PRES'].index(pres)
-                        if merged['TEMP'][ploc] == self.prod_desc.missing_float:
+                        if merged['TEMP'][ploc] == self.dm_label.missing_float:
                             merged['TEMP'][ploc] = parts['TTDD']['TEMP'][isigt]
                             merged['DWPT'][ploc] = parts['TTDD']['DWPT'][isigt]
                     else:
@@ -1558,18 +1558,18 @@ class GempakSounding(GempakFile):
                         merged['PRES'].insert(loc, pres)
                         merged['TEMP'].insert(loc, parts['TTDD']['TEMP'][isigt])
                         merged['DWPT'].insert(loc, parts['TTDD']['DWPT'][isigt])
-                        merged['DRCT'].insert(loc, self.prod_desc.missing_float)
-                        merged['SPED'].insert(loc, self.prod_desc.missing_float)
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['DRCT'].insert(loc, self.dm_label.missing_float)
+                        merged['SPED'].insert(loc, self.dm_label.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
                 pbot = pres
 
         # Interpolate heights
-        interp_moist_height(merged, self.prod_desc.missing_float)
+        interp_moist_height(merged, self.dm_label.missing_float)
 
         # Merge SIG winds on pressure surfaces
         if not ppbb_is_z or not ppdd_is_z:
             if num_sigw_levels >= 1 or num_above_sigw_levels >= 1:
-                if merged['PRES'][0] != self.prod_desc.missing_float:
+                if merged['PRES'][0] != self.dm_label.missing_float:
                     pbot = merged['PRES'][0]
                 elif len(merged['PRES']) > 1:
                     pbot = merged['PRES'][1]
@@ -1579,16 +1579,16 @@ class GempakSounding(GempakFile):
             if num_sigw_levels >= 1 and not ppbb_is_z:
                 for isigw, pres in enumerate(parts['PPBB']['PRES']):
                     pres = abs(pres)
-                    if (pres != self.prod_desc.missing_float
-                       and parts['PPBB']['DRCT'][isigw] != self.prod_desc.missing_float
-                       and parts['PPBB']['SPED'][isigw] != self.prod_desc.missing_float
+                    if (pres != self.dm_label.missing_float
+                       and parts['PPBB']['DRCT'][isigw] != self.dm_label.missing_float
+                       and parts['PPBB']['SPED'][isigw] != self.dm_label.missing_float
                        and pres != 0):
                         if pres > pbot:
                             continue
                         elif pres in merged['PRES']:
                             ploc = merged['PRES'].index(pres)
-                            if (merged['DRCT'][ploc] == self.prod_desc.missing_float
-                               or merged['SPED'][ploc] == self.prod_desc.missing_float):
+                            if (merged['DRCT'][ploc] == self.dm_label.missing_float
+                               or merged['SPED'][ploc] == self.dm_label.missing_float):
                                 merged['DRCT'][ploc] = parts['PPBB']['DRCT'][isigw]
                                 merged['SPED'][ploc] = parts['PPBB']['SPED'][isigw]
                         else:
@@ -1597,24 +1597,24 @@ class GempakSounding(GempakFile):
                             merged['PRES'].insert(loc, pres)
                             merged['DRCT'].insert(loc, parts['PPBB']['DRCT'][isigw])
                             merged['SPED'].insert(loc, parts['PPBB']['SPED'][isigw])
-                            merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                            merged['DWPT'].insert(loc, self.prod_desc.missing_float)
-                            merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                            merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                            merged['DWPT'].insert(loc, self.dm_label.missing_float)
+                            merged['HGHT'].insert(loc, self.dm_label.missing_float)
                     pbot = pres
 
             if num_above_sigw_levels >= 1 and not ppdd_is_z:
                 for isigw, pres in enumerate(parts['PPDD']['PRES']):
                     pres = abs(pres)
-                    if (pres != self.prod_desc.missing_float
-                       and parts['PPDD']['DRCT'][isigw] != self.prod_desc.missing_float
-                       and parts['PPDD']['SPED'][isigw] != self.prod_desc.missing_float
+                    if (pres != self.dm_label.missing_float
+                       and parts['PPDD']['DRCT'][isigw] != self.dm_label.missing_float
+                       and parts['PPDD']['SPED'][isigw] != self.dm_label.missing_float
                        and pres != 0):
                         if pres > pbot:
                             continue
                         elif pres in merged['PRES']:
                             ploc = merged['PRES'].index(pres)
-                            if (merged['DRCT'][ploc] == self.prod_desc.missing_float
-                               or merged['SPED'][ploc] == self.prod_desc.missing_float):
+                            if (merged['DRCT'][ploc] == self.dm_label.missing_float
+                               or merged['SPED'][ploc] == self.dm_label.missing_float):
                                 merged['DRCT'][ploc] = parts['PPDD']['DRCT'][isigw]
                                 merged['SPED'][ploc] = parts['PPDD']['SPED'][isigw]
                         else:
@@ -1623,14 +1623,14 @@ class GempakSounding(GempakFile):
                             merged['PRES'].insert(loc, pres)
                             merged['DRCT'].insert(loc, parts['PPDD']['DRCT'][isigw])
                             merged['SPED'].insert(loc, parts['PPDD']['SPED'][isigw])
-                            merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                            merged['DWPT'].insert(loc, self.prod_desc.missing_float)
-                            merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                            merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                            merged['DWPT'].insert(loc, self.dm_label.missing_float)
+                            merged['HGHT'].insert(loc, self.dm_label.missing_float)
                     pbot = pres
 
         # Merge max winds on pressure surfaces
         if num_max_wind_levels >= 1 or num_above_max_wind_levels >= 1:
-            if merged['PRES'][0] != self.prod_desc.missing_float:
+            if merged['PRES'][0] != self.dm_label.missing_float:
                 pbot = merged['PRES'][0]
             elif len(merged['PRES']) > 1:
                 pbot = merged['PRES'][1]
@@ -1640,16 +1640,16 @@ class GempakSounding(GempakFile):
         if num_max_wind_levels >= 1:
             for imxw, pres in enumerate(parts['MXWA']['PRES']):
                 pres = abs(pres)
-                if (pres != self.prod_desc.missing_float
-                   and parts['MXWA']['DRCT'][imxw] != self.prod_desc.missing_float
-                   and parts['MXWA']['SPED'][imxw] != self.prod_desc.missing_float
+                if (pres != self.dm_label.missing_float
+                   and parts['MXWA']['DRCT'][imxw] != self.dm_label.missing_float
+                   and parts['MXWA']['SPED'][imxw] != self.dm_label.missing_float
                    and pres != 0):
                     if pres > pbot:
                         continue
                     elif pres in merged['PRES']:
                         ploc = merged['PRES'].index(pres)
-                        if (merged['DRCT'][ploc] == self.prod_desc.missing_float
-                           or merged['SPED'][ploc] == self.prod_desc.missing_float):
+                        if (merged['DRCT'][ploc] == self.dm_label.missing_float
+                           or merged['SPED'][ploc] == self.dm_label.missing_float):
                             merged['DRCT'][ploc] = parts['MXWA']['DRCT'][imxw]
                             merged['SPED'][ploc] = parts['MXWA']['SPED'][imxw]
                     else:
@@ -1658,24 +1658,24 @@ class GempakSounding(GempakFile):
                         merged['PRES'].insert(loc, pres)
                         merged['DRCT'].insert(loc, parts['MXWA']['DRCT'][imxw])
                         merged['SPED'].insert(loc, parts['MXWA']['SPED'][imxw])
-                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
                 pbot = pres
 
         if num_above_max_wind_levels >= 1:
             for imxw, pres in enumerate(parts['MXWC']['PRES']):
                 pres = abs(pres)
-                if (pres != self.prod_desc.missing_float
-                   and parts['MXWC']['DRCT'][imxw] != self.prod_desc.missing_float
-                   and parts['MXWC']['SPED'][imxw] != self.prod_desc.missing_float
+                if (pres != self.dm_label.missing_float
+                   and parts['MXWC']['DRCT'][imxw] != self.dm_label.missing_float
+                   and parts['MXWC']['SPED'][imxw] != self.dm_label.missing_float
                    and pres != 0):
                     if pres > pbot:
                         continue
                     elif pres in merged['PRES']:
                         ploc = merged['PRES'].index(pres)
-                        if (merged['DRCT'][ploc] == self.prod_desc.missing_float
-                           or merged['SPED'][ploc] == self.prod_desc.missing_float):
+                        if (merged['DRCT'][ploc] == self.dm_label.missing_float
+                           or merged['SPED'][ploc] == self.dm_label.missing_float):
                             merged['DRCT'][ploc] = parts['MXWC']['DRCT'][imxw]
                             merged['SPED'][ploc] = parts['MXWC']['SPED'][imxw]
                     else:
@@ -1684,13 +1684,13 @@ class GempakSounding(GempakFile):
                         merged['PRES'].insert(loc, pres)
                         merged['DRCT'].insert(loc, parts['MXWC']['DRCT'][imxw])
                         merged['SPED'].insert(loc, parts['MXWC']['SPED'][imxw])
-                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
-                        merged['HGHT'].insert(loc, self.prod_desc.missing_float)
+                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
+                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
                 pbot = pres
 
         # Interpolate height for SIG/MAX winds
-        interp_logp_height(merged, self.prod_desc.missing_float)
+        interp_logp_height(merged, self.dm_label.missing_float)
 
         # Merge SIG winds on height surfaces
         if ppbb_is_z or ppdd_is_z:
@@ -1706,8 +1706,8 @@ class GempakSounding(GempakFile):
             psfc = merged['PRES'][0]
             zsfc = merged['HGHT'][0]
 
-            if (size >= 2 and psfc != self.prod_desc.missing_float
-               and zsfc != self.prod_desc.missing_float):
+            if (size >= 2 and psfc != self.dm_label.missing_float
+               and zsfc != self.dm_label.missing_float):
                 more = True
                 zold = merged['HGHT'][0]
                 znxt = merged['HGHT'][1]
@@ -1718,11 +1718,11 @@ class GempakSounding(GempakFile):
                 znxt = merged['HGHT'][2]
                 ilev = 2
             else:
-                zold = self.prod_desc.missing_float
-                znxt = self.prod_desc.missing_float
+                zold = self.dm_label.missing_float
+                znxt = self.dm_label.missing_float
 
-            if (zold == self.prod_desc.missing_float
-               or znxt == self.prod_desc.missing_float):
+            if (zold == self.dm_label.missing_float
+               or znxt == self.dm_label.missing_float):
                 more = False
 
             if istart <= nsgw:
@@ -1745,15 +1745,15 @@ class GempakSounding(GempakFile):
                     sped = parts['PPDD']['SPED'][i]
                 skip = False
 
-                if ((hght == self.prod_desc.missing_float
-                   and drct == self.prod_desc.missing_float
-                   and sped == self.prod_desc.missing_float)
+                if ((hght == self.dm_label.missing_float
+                   and drct == self.dm_label.missing_float
+                   and sped == self.dm_label.missing_float)
                    or hght <= zold):
                     skip = True
                 elif abs(zold - hght) < 1:
                     skip = True
-                    if (merged['DRCT'][ilev - 1] == self.prod_desc.missing_float
-                       or merged['SPED'][ilev - 1] == self.prod_desc.missing_float):
+                    if (merged['DRCT'][ilev - 1] == self.dm_label.missing_float
+                       or merged['SPED'][ilev - 1] == self.dm_label.missing_float):
                         merged['DRCT'][ilev - 1] = drct
                         merged['SPED'][ilev - 1] = sped
                 elif hght >= znxt:
@@ -1764,13 +1764,13 @@ class GempakSounding(GempakFile):
                             more = False
                         else:
                             znxt = merged['HGHT'][ilev]
-                            if znxt == self.prod_desc.missing_float:
+                            if znxt == self.dm_label.missing_float:
                                 more = False
 
                 if more and not skip:
                     if abs(znxt - hght) < 1:
-                        if (merged['DRCT'][ilev - 1] == self.prod_desc.missing_float
-                           or merged['SPED'][ilev - 1] == self.prod_desc.missing_float):
+                        if (merged['DRCT'][ilev - 1] == self.dm_label.missing_float
+                           or merged['SPED'][ilev - 1] == self.dm_label.missing_float):
                             merged['DRCT'][ilev] = drct
                             merged['SPED'][ilev] = sped
                     else:
@@ -1778,9 +1778,9 @@ class GempakSounding(GempakFile):
                         merged['HGHT'].insert(loc, hght)
                         merged['DRCT'].insert(loc, drct)
                         merged['SPED'].insert(loc, sped)
-                        merged['PRES'].insert(loc, self.prod_desc.missing_float)
-                        merged['TEMP'].insert(loc, self.prod_desc.missing_float)
-                        merged['DWPT'].insert(loc, self.prod_desc.missing_float)
+                        merged['PRES'].insert(loc, self.dm_label.missing_float)
+                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
+                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
                         size += 1
                         ilev += 1
                         zold = hght
@@ -1793,13 +1793,13 @@ class GempakSounding(GempakFile):
                     i += 1
 
             # Interpolate misssing pressure with height
-            interp_logp_pressure(merged, self.prod_desc.missing_float)
+            interp_logp_pressure(merged, self.dm_label.missing_float)
 
         # Interpolate missing data
-        interp_missing_data(merged, self.prod_desc.missing_float)
+        interp_missing_data(merged, self.dm_label.missing_float)
 
         # Add below ground MAN data
-        if merged['PRES'][0] != self.prod_desc.missing_float and bgl > 0:
+        if merged['PRES'][0] != self.dm_label.missing_float and bgl > 0:
             for ibgl in range(1, num_man_levels):
                 pres = parts['TTAA']['PRES'][ibgl]
                 if pres > merged['PRES'][0]:
@@ -1993,7 +1993,7 @@ class GempakSounding(GempakFile):
             var = {}
             for param, values in snd.items():
                 values = np.array(values)[np.newaxis, ...]
-                maskval = np.ma.array(values, mask=values == self.prod_desc.missing_float,
+                maskval = np.ma.array(values, mask=values == self.dm_label.missing_float,
                                       dtype=np.float32)
                 var[param.lower()] = (['time', vcoord], maskval)
 
@@ -2019,22 +2019,22 @@ class GempakSurface(GempakFile):
         super().__init__(file)
 
         # Row Headers
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.row_headers_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.row_headers_ptr))
         self.row_headers = []
         row_headers_info = self._key_types(self.row_keys)
         row_headers_info.extend([(None, None)])
         row_headers_fmt = NamedStruct(row_headers_info, self.prefmt, 'RowHeaders')
-        for _ in range(1, self.prod_desc.rows + 1):
+        for _ in range(1, self.dm_label.rows + 1):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.row_headers.append(self._buffer.read_struct(row_headers_fmt))
 
         # Column Headers
-        self._buffer.jump_to(self._start, _word_to_position(self.prod_desc.column_headers_ptr))
+        self._buffer.jump_to(self._start, _word_to_position(self.dm_label.column_headers_ptr))
         self.column_headers = []
         column_headers_info = self._key_types(self.column_keys)
         column_headers_info.extend([(None, None)])
         column_headers_fmt = NamedStruct(column_headers_info, self.prefmt, 'ColumnHeaders')
-        for _ in range(1, self.prod_desc.columns + 1):
+        for _ in range(1, self.dm_label.columns + 1):
             if self._buffer.read_int(4, self.endian, False) == USED_FLAG:
                 self.column_headers.append(self._buffer.read_struct(column_headers_fmt))
 
@@ -2045,9 +2045,9 @@ class GempakSurface(GempakFile):
             for irow, row_head in enumerate(self.row_headers):
                 for icol, col_head in enumerate(self.column_headers):
                     for iprt in range(len(self.parts)):
-                        pointer = (self.prod_desc.data_block_ptr
-                                   + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                                   + (icol * self.prod_desc.parts + iprt))
+                        pointer = (self.dm_label.data_block_ptr
+                                   + (irow * self.dm_label.columns * self.dm_label.parts)
+                                   + (icol * self.dm_label.parts + iprt))
 
                         self._buffer.jump_to(self._start, _word_to_position(pointer))
                         data_ptr = self._buffer.read_int(4, self.endian, False)
@@ -2071,9 +2071,9 @@ class GempakSurface(GempakFile):
             irow = 0
             for icol, col_head in enumerate(self.column_headers):
                 for iprt in range(len(self.parts)):
-                    pointer = (self.prod_desc.data_block_ptr
-                               + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                               + (icol * self.prod_desc.parts + iprt))
+                    pointer = (self.dm_label.data_block_ptr
+                               + (irow * self.dm_label.columns * self.dm_label.parts)
+                               + (icol * self.dm_label.parts + iprt))
 
                     self._buffer.jump_to(self._start, _word_to_position(pointer))
                     data_ptr = self._buffer.read_int(4, self.endian, False)
@@ -2097,9 +2097,9 @@ class GempakSurface(GempakFile):
             for icol, col_head in enumerate(self.column_headers):
                 for irow, row_head in enumerate(self.row_headers):
                     for iprt in range(len(self.parts)):
-                        pointer = (self.prod_desc.data_block_ptr
-                                   + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                                   + (icol * self.prod_desc.parts + iprt))
+                        pointer = (self.dm_label.data_block_ptr
+                                   + (irow * self.dm_label.columns * self.dm_label.parts)
+                                   + (icol * self.dm_label.parts + iprt))
 
                         self._buffer.jump_to(self._start, _word_to_position(pointer))
                         data_ptr = self._buffer.read_int(4, self.endian, False)
@@ -2172,9 +2172,9 @@ class GempakSurface(GempakFile):
                 'TIME': col_head.TIME,
             }
             for iprt, part in enumerate(self.parts):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts + iprt))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts + iprt))
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 self.data_ptr = self._buffer.read_int(4, self.endian, False)
                 if not self.data_ptr:
@@ -2242,9 +2242,9 @@ class GempakSurface(GempakFile):
                 'TIME': col_head.TIME,
             }
             for iprt, part in enumerate(self.parts):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts + iprt))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts + iprt))
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 self.data_ptr = self._buffer.read_int(4, self.endian, False)
                 if not self.data_ptr:
@@ -2314,9 +2314,9 @@ class GempakSurface(GempakFile):
             }
             values = {}
             for iprt, part in enumerate(self.parts):
-                pointer = (self.prod_desc.data_block_ptr
-                           + (irow * self.prod_desc.columns * self.prod_desc.parts)
-                           + (icol * self.prod_desc.parts + iprt))
+                pointer = (self.dm_label.data_block_ptr
+                           + (irow * self.dm_label.columns * self.dm_label.parts)
+                           + (icol * self.dm_label.parts + iprt))
                 self._buffer.jump_to(self._start, _word_to_position(pointer))
                 self.data_ptr = self._buffer.read_int(4, self.endian, False)
                 if not self.data_ptr:

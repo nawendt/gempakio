@@ -4,15 +4,18 @@
 """Classes for encoding various GEMPAK file formats."""
 
 from collections import namedtuple
+import ctypes
 from datetime import datetime, timedelta
 from io import BytesIO
 import struct
 
 import numpy as np
+import pyproj
 
-from gempakio.common import (_position_to_word, _word_to_position, DataSource, DataTypes,
-                             FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MBLKSZ, MISSING_FLOAT,
-                             MISSING_INT, MMFREE, MMHDRS, MMPARM, PackingType)
+from gempakio.common import (_position_to_word, _word_to_position, ANLB_SIZE, DataSource,
+                             DataTypes, FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MBLKSZ,
+                             MISSING_FLOAT, MISSING_INT, MMFREE, MMHDRS, MMPARM, NAVB_SIZE,
+                             PackingType, VerticalCoordinates)
 from gempakio.tools import NamedStruct
 
 
@@ -65,29 +68,12 @@ class DataManagementFile:
          ('last_word', 'i'), (None, '464x')], '<', 'DataManagement'
     )
 
-    grid_nav_fmt = [('grid_definition_type', 'f'), ('projection', '3sx'),
-                    ('left_grid_number', 'f'), ('bottom_grid_number', 'f'),
-                    ('right_grid_number', 'f'), ('top_grid_number', 'f'),
-                    ('lower_left_lat', 'f'), ('lower_left_lon', 'f'), ('upper_right_lat', 'f'),
-                    ('upper_right_lon', 'f'), ('proj_angle1', 'f'), ('proj_angle2', 'f'),
-                    ('proj_angle3', 'f'), (None, '972x')]
-
-    grid_anl_fmt1 = [('analysis_type', 'f'), ('delta_n', 'f'), ('delta_x', 'f'),
-                     ('delta_y', 'f'), (None, '4x'), ('garea_llcr_lat', 'f'),
-                     ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'), ('garea_urcr_lon', 'f'),
-                     ('extarea_llcr_lat', 'f'), ('extarea_llcr_lon', 'f'),
-                     ('extarea_urcr_lat', 'f'), ('extarea_urcr_lon', 'f'),
-                     ('datarea_llcr_lat', 'f'), ('datarea_llcr_lon', 'f'),
-                     ('datarea_urcr_lat', 'f'), ('datarea_urcrn_lon', 'f'), (None, '444x')]
-
-    grid_anl_fmt2 = [('analysis_type', 'f'), ('delta_n', 'f'), ('grid_ext_left', 'f'),
-                     ('grid_ext_down', 'f'), ('grid_ext_right', 'f'), ('grid_ext_up', 'f'),
-                     ('garea_llcr_lat', 'f'), ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'),
-                     ('garea_urcr_lon', 'f'), ('extarea_llcr_lat', 'f'),
-                     ('extarea_llcr_lon', 'f'), ('extarea_urcr_lat', 'f'),
-                     ('extarea_urcr_lon', 'f'), ('datarea_llcr_lat', 'f'),
-                     ('datarea_llcr_lon', 'f'), ('datarea_urcr_lat', 'f'),
-                     ('datarea_urcrn_lon', 'f'), (None, '440x')]
+    grid_nav_struct = NamedStruct(
+        [('grid_definition_type', 'f'), ('projection', '3sx'), ('left_grid_number', 'f'),
+         ('bottom_grid_number', 'f'), ('right_grid_number', 'f'), ('top_grid_number', 'f'),
+         ('lower_left_lat', 'f'), ('lower_left_lon', 'f'), ('upper_right_lat', 'f'),
+         ('upper_right_lon', 'f'), ('proj_angle1', 'f'), ('proj_angle2', 'f'),
+         ('proj_angle3', 'f'), (None, '972x')])
 
     def __init__(self):
         self.version = 1
@@ -104,7 +90,7 @@ class DataManagementFile:
         self.column_names = []
         self.rows = 0
         self.columns = 0
-        self.file_headers = []
+        self.file_headers = {}
         self.parts_dict = {}
         self.file_type = None
         self.data_source = None
@@ -125,6 +111,30 @@ class DataManagementFile:
         start = word - (record - 1) * MBLKSZ
 
         return record, start
+
+    @staticmethod
+    def _encode_vertical_coordinate(coord):
+        try:
+            return VerticalCoordinates[coord.lower()].value
+        except KeyError:
+            raise KeyError(f'`{coord}` has no numeric value.')
+
+    @staticmethod
+    def _fortran_ishift(i, shift):
+        """Python-friendly bit shifting."""
+        mask = 0xffffffff
+        if shift > 0:
+            shifted = ctypes.c_int32(i << shift).value
+        elif shift < 0:
+            if i < 0:
+                shifted = (i & mask) >> abs(shift)
+            else:
+                shifted = i >> abs(shift)
+        elif shift == 0:
+            shifted = i
+        else:
+            raise ValueError(f'Bad shift value {shift}.')
+        return shifted
 
     def _init_headers(self):
         self.make_column_header = namedtuple('ColumnHeader', self.column_names)
@@ -147,7 +157,7 @@ class DataManagementFile:
         # Headers
         self.file_keys_ptr = self.column_keys_ptr + self.column_keys
         lenfil = 0
-        for _fh, info in self.file_headers:
+        for _fh, info in self.file_headers.items():
             lenfil += (info['length'] + 1)
         rec, word = self._dmword(self.file_keys_ptr + 3 * len(self.file_headers) + lenfil)
         if word != 1:
@@ -225,6 +235,17 @@ class DataManagementFile:
             last_word=self.last_word
         )
 
+    def _write_file_keys(self, stream):
+        """Write file headers to a stream."""
+        for name in self.file_headers:
+            stream.write_string(name)
+
+        for _name, info in self.file_headers.items():
+            stream.write_int(info['length'])
+
+        for _name, info in self.file_headers.items():
+            stream.write_int(info['type'])
+
     def _write_row_keys(self, stream):
         """Write row keys to a stream."""
         for rn in self.row_names:
@@ -265,6 +286,9 @@ class DataManagementFile:
             for bits in info['bits']:
                 stream.write_int(bits)
 
+    def _write_file_headers(self):
+        raise NotImplementedError('Must be defined within subclass.')
+
     def _write_row_headers(self):
         raise NotImplementedError('Must be defined within subclass.')
 
@@ -274,6 +298,57 @@ class DataManagementFile:
     def _write_data(self):
         raise NotImplementedError('Must be defined within subclass.')
 
+    def to_gempak(self, file):
+        """Write GEMPAK file to disk.
+
+        Parameters
+        ----------
+        file : str or `pathlib.Path`
+            Path of file to be created.
+        """
+        self._set_pointers()
+
+        with GempakStream() as stream:
+            # Write file label
+            self._write_label(stream)
+
+            # Write row key names
+            stream.jump_to(self.row_keys_ptr)
+            self._write_row_keys(stream)
+
+            # Write column key names
+            stream.jump_to(self.column_keys_ptr)
+            self._write_column_keys(stream)
+
+            # Write file keys/headers, if present
+            if self.file_headers:
+                stream.jump_to(self.file_keys_ptr)
+                self._write_file_keys(stream)
+                self._write_file_headers(stream)
+
+            # Write parts and parameters
+            stream.jump_to(self.parts_ptr)
+            self._write_parts(stream)
+
+            # Write row headers
+            stream.jump_to(self.row_headers_ptr)
+            self._write_row_headers(stream)
+
+            # Write column headers
+            stream.jump_to(self.column_headers_ptr)
+            self._write_column_headers(stream)
+
+            # Write data
+            stream.jump_to(self.data_block_ptr)
+            self._write_data(stream)
+
+            # Write data management record
+            stream.jump_to(self.data_mgmt_ptr)
+            self._write_data_management(stream)
+
+            with open(file, 'wb') as out:
+                out.write(stream.getbuffer())
+
 
 class GridFile(DataManagementFile):
     """GEMPAK grid file class.
@@ -282,25 +357,69 @@ class GridFile(DataManagementFile):
     as a GEMPAK grid file.
     """
 
-    def __init__(self, nx, ny):
+    def __init__(self, lon, lat, projection, use_xy=False, rotation=0):
+        """Instantiate GridFile.
+
+        Parameters
+        ----------
+        lon : `numpy.ndarray`
+            Longitude of the grid. Dimension order (y, x). If use_xy is
+            True, this will be interpreted as x projected coordinate
+            and will be one-dimensional (x,).
+
+        lat : `numpy.ndarray`
+            Latitude of the grid. Dimension order (y, x). If use_xy is
+            True, this will be interpreted as y projected coordinate
+            and will be one-dimensional (y,).
+
+        projection : `pyproj.Proj`
+            Data projection. Valid options are:
+                Mercator
+                Stereographic
+                Lambert Conformal Conic
+                Equidistant Cylindrical
+                Orthographic
+                Azimuthal Equidistant
+                Lambert Azimuthal Equal Area
+                Gnomonic
+                Transverse Mercator
+                Universal Transverse Mercator
+
+        use_xy : bool
+            Input coordinates are projected (x and y). Default is False.
+
+        rotation : float
+            Angle (in degrees) by which to rotate the projection. Default
+            is 0.
+        """
         super().__init__()
-        self.nx = nx
-        self.ny = ny
         self.file_type = FileTypes.grid.value
         self.data_source = DataSource.grid.value
         self.packing_type = PackingType.grib.value
         self._data_type = DataTypes.grid.value
-        self.file_headers = 2
         self.rows = 1
-        self.columns = 1
+        self.angle1 = 0
+        self.angle2 = 0
+        self.angle3 = 0
+        self.rotation = rotation
+        self.left_grid_number = 1
+        self.bottom_grid_number = 1
+        self.precision = 16
 
+        self.file_headers = {
+            'NAVB': {'length': NAVB_SIZE, 'type': 1},
+            'ANLB': {'length': ANLB_SIZE, 'type': 1}
+        }
         self.row_names = ['GRID']
         self.column_names = ['GDT1', 'GTM1', 'GDT2', 'GTM2', 'GLV1', 'GLV2', 'GVCD', 'GPM1',
                              'GPM2', 'GPM3']
+        self.parameter_names = ['GRID']
+
+        self._init_headers()
 
         self.parts_dict = {
             'GRID': {
-                'header': 1,
+                'header': 2,  # minimum required for nx, ny
                 'type': self._data_type,
                 'parameters': self.parameter_names,
                 'scale': [0] * len(self.parameter_names),
@@ -308,6 +427,431 @@ class GridFile(DataManagementFile):
                 'bits': [0] * len(self.parameter_names),
             }
         }
+
+        if lat.shape != lon.shape:
+            raise ValueError('Input coordinates must be same dimensions.')
+
+        if use_xy:
+            if len(lat.shape) != 1 or len(lon.shape) != 1:
+                raise ValueError('Projected input coordinates must one-dimensional.')
+            self.nx = len(lon)
+            self.ny = len(lat)
+            self.x = lon
+            self.y = lat
+            self.lon = None
+            self.lat = None
+            self._is_xy = True
+        else:
+            if len(lat.shape) != 2 or len(lon.shape) != 2:
+                raise ValueError('Geographic input coordinates must be two-dimensional.')
+            self.ny, self.nx = lat.shape
+            self.x = None
+            self.y = None
+            self.lon = lon
+            self.lat = lat
+            self._is_xy = False
+
+        if not isinstance(projection, pyproj.Proj):
+            raise TypeError('projection must be pyproj.Proj class.')
+
+        self.projection = projection
+
+        self._set_projection_params()
+        self._set_bbox()
+
+    def _set_bbox(self):
+        """Set bounds of data."""
+        if self._is_xy:
+            self.lower_left_lon, self.lower_left_lat = self.projection(self.x[0],
+                                                                       self.y[0],
+                                                                       inverse=True)
+            self.upper_right_lon, self.upper_right_lat = self.projection(self.x[-1],
+                                                                         self.y[-1],
+                                                                         inverse=True)
+        else:
+            self.lower_left_lon = self.lon[0, 0]
+            self.lower_left_lat = self.lat[0, 0]
+            self.upper_right_lon = self.lon[-1, -1]
+            self.upper_right_lat = self.lat[-1, -1]
+
+    def _set_projection_params(self):
+        """Set projection parameters for GridFile."""
+        params = self.projection.crs.to_cf()
+        name = params.get('grid_mapping_name', None)
+
+        if name is None:
+            method = self.projection.crs.coordinate_operation.method_name
+            if method == 'Equidistant Cylindrical':
+                name = 'equidistant_cylindrical'
+            elif method == 'Gnomonic':
+                name = 'gnomonic'
+            else:
+                name = 'unknown'
+
+        if name == 'mercator':
+            self.gemproj = 'MER'
+            self.angle1 = params['standard_parallel']
+            self.angle2 = params['longitude_of_projection_origin']
+            self.angle3 = self.rotation
+        elif name in ['stereographic', 'polar_stereographic']:
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['longitude_of_projection_origin']
+            if self.angle1 == 90:
+                self.gemproj = 'NPS'
+            elif self.angle1 == -90:
+                self.gemproj = 'SPS'
+            else:
+                self.gemproj = 'STR'
+            self.angle3 = self.rotation
+        elif name == 'lambert_conformal_conic':
+            self.angle1, self.angle3 = params['standard_parallel']
+            self.angle2 = params['longitude_of_central_meridian']
+            if self.angle1 < 0 and self.angle2 < 0:
+                self.gemproj = 'SCC'
+            else:
+                self.gemproj = 'LCC'
+        elif name == 'equidistant_cylindrical':
+            self.gemproj = 'CED'
+            self.angle1 = params['standard_parallel']
+            self.angle2 = params['longitude_of_projection_origin']
+            self.angle3 = self.rotation
+        elif name == 'orthographic':
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['longitude_of_projection_origin']
+            if self.angle1 == 90:
+                self.gemproj = 'NOR'
+            elif self.angle1 == -90:
+                self.gemproj = 'SOR'
+            else:
+                self.gemproj = 'ORT'
+            self.angle3 = self.rotation
+        elif name == 'azimuthal_equidistant':
+            self.gemproj = 'AED'
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['longitude_of_projection_origin']
+            self.angle3 = self.rotation
+        elif name == 'lambert_azimuthal_equal_area':
+            self.gemproj = 'LEA'
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['longitude_of_projection_origin']
+            self.angle3 = self.rotation
+        elif name == 'gnomonic':
+            self.gemproj = 'GNO'
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['longitude_of_projection_origin']
+            self.angle3 = self.rotation
+        elif name == 'transverse_mercator':
+            if 'zone' in self.projection.crs.coordinate_operation.name:
+                self.gemproj = 'UTM'
+            else:
+                self.gemproj = 'TVM'
+            self.angle1 = params['longitude_of_central_meridian']
+        else:
+            raise NotImplementedError(f'`{name}` projection not implemented.')
+
+    def add_grid(self, grid, parameter_name, vertical_coordinate, level, date_time,
+                 level2=None, date_time2=None):
+        """Add grid to the file.
+
+        Parameters
+        ----------
+        grid : `numpy.ndarray`
+            Grid data to be added. Dimension order (y, x).
+
+        parameter_name : str
+            Name of parameter. Note, names in GEMPAK have a maximum
+            of 12 characters.
+
+        vertical_coordinate : str or None
+            Vertical coordinate of grid. Names must 4 characters.
+
+        level : int
+            Vertical level of the grid.
+
+        date_time : str or datetime
+            Grid date and time. Valid string formats are YYYYmmddHHMM
+            or YYYYmmddHHMMFx, where x is the forecast hour from the preceding
+            initialization date and time.
+
+        level2 : int or None
+            Secondary vertical level of the grid. This is typically used for
+            layer data.
+
+        date_time2 : str or datetime or None
+            Secondary grid date and time. This is typically used for time-averaged
+            data or other time window applications. String format follows that of
+            date_time argument.
+        """
+        if not isinstance(grid, np.ndarray):
+            raise TypeError('Grid must be a numpy.ndarray.')
+
+        if grid.shape != (self.ny, self.nx):
+            raise ValueError(
+                f'Grid dimensions {grid.shape} must match dimensions '
+                f'{(self.ny, self.nx)} defined in GridFile.'
+            )
+
+        if not isinstance(parameter_name, str):
+            raise TypeError('Parameter name bust be a string.')
+
+        if len(parameter_name) > 12:
+            raise ValueError('Parameter names cannot be more than 12 characters.')
+
+        parameter_name = parameter_name.upper()
+
+        if not isinstance(vertical_coordinate, (str, type(None))):
+            raise TypeError('Vertical coordinate must be string or None.')
+
+        if vertical_coordinate is None:
+            vertical_coordinate = 'NONE'
+        else:
+            vertical_coordinate = vertical_coordinate.upper()
+
+        if len(vertical_coordinate) > 4:
+            raise ValueError('Vertical coordinate can only be 4 characters.')
+
+        if not isinstance(level, (int, float)):
+            raise TypeError('Level parameter must be an integer.')
+
+        level = int(level)
+
+        if isinstance(date_time, str):
+            date_time = date_time.upper()
+            if 'F' in date_time:
+                init, fhr = date_time.split('F')
+                self._datetime = (datetime.strptime(init, '%Y%m%d%H%M')
+                                  + timedelta(hours=int(fhr)))
+            else:
+                self._datetime = datetime.strptime(date_time, '%Y%m%d%H%M')
+        elif isinstance(date_time, datetime):
+            self._datetime = date_time
+        else:
+            raise TypeError('date_time must be string or datetime.')
+
+        if not isinstance(level2, (int, float, type(None))):
+            raise TypeError('Secondary level must be integer or None.')
+
+        if level2 is not None:
+            level2 = int(level2)
+
+        if isinstance(date_time, str):
+            date_time2 = date_time2.upper()
+            if 'F' in date_time:
+                init, fhr = date_time2.split('F')
+                self._datetime2 = (datetime.strptime(init, '%Y%m%d%H%M')
+                                   + timedelta(hours=int(fhr)))
+            else:
+                self._datetime2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
+        elif isinstance(date_time2, datetime) or date_time2 is None:
+            self._datetime2 = date_time2
+        else:
+            raise TypeError('date_time must be string or datetime or None.')
+
+        pbuff = f'{parameter_name:<12s}'
+        gpm1, gpm2, gpm3 = [pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4)]
+
+        new_column = (
+            self._datetime.date(),
+            self._datetime.time(),
+            self._datetime2.date() if date_time2 is not None else 0,
+            self._datetime2.time() if date_time2 is not None else 0,
+            level,
+            level2 if level2 is not None else -1,
+            (self._encode_vertical_coordinate(vertical_coordinate)
+             if vertical_coordinate is not None else 0),
+            gpm1,
+            gpm2,
+            gpm3
+        )
+        self.column_headers.add(self.make_column_header(*new_column))
+
+        self.data[new_column] = grid
+
+        self.columns = len(self.column_headers)
+
+        if self.rows + self.columns > MMHDRS:
+            raise ValueError('Exceeded maximum number data entries.')
+
+    def _pack_grib(self, grid, nbits=16):
+        """Pack a grid of floats into integers."""
+        kxky = np.multiply(*grid.shape)
+
+        if nbits < 1 or nbits > 31:
+            raise ValueError('Precision requested is invalid.')
+
+        lendat = (nbits * kxky) // 32
+        if lendat * 32 != nbits * kxky:
+            lendat += 1
+
+        out = np.zeros(lendat, dtype=np.int)
+
+        if (grid == self.missing_float).any():
+            has_missing = True
+        else:
+            has_missing = False
+
+        if (grid == self.missing_float).all():
+            all_missing = True
+        else:
+            all_missing = False
+
+        if all_missing:
+            qmin = self.missing_float
+            qmax = self.missing_float
+        else:
+            qmin = grid.min()
+            qmax = grid.max()
+
+        qdiff = qmax - qmin
+        idat = round(qdiff)
+        if qdiff < 0 or idat > 2147483647:  # Max 32-bit integer
+            raise ValueError('Problem packing grid.')
+
+        if qdiff == 0 and not has_missing:
+            # This is a constant grid
+            scale = 1
+        else:
+            imax = 2**nbits - 1
+            nnnn = 0
+            if abs(qdiff) > (2**-126 * imax):  # Smallest number for 32-bit float
+                if idat >= imax:
+                    while (idat >= imax):
+                        nnnn -= 1
+                        idat = qdiff * 2**nnnn
+                else:
+                    while (round(qdiff * 2**(nnnn + 1)) < imax):
+                        nnnn += 1
+
+            scale = 2**nnnn
+
+            iword = 0
+            ibit = 1
+            rgrid = grid.ravel()
+
+            for ii in range(kxky):
+                if rgrid[ii] == self.missing_float:
+                    idat = imax
+                else:
+                    gggg = rgrid[ii] - qmin if rgrid[ii] - qmin > 0 else 0
+                    idat = round(gggg * scale)
+
+                jshft = 33 - nbits - ibit
+                idat2 = self._fortran_ishift(idat, jshft)
+                out[iword] |= idat2
+
+                if jshft < 0:
+                    jshft += 32
+                    out[iword + 1] = self._fortran_ishift(idat, jshft)
+
+                ibit += nbits
+                if ibit > 32:
+                    ibit -= 32
+                    iword += 1
+
+            scale **= -1
+
+        return qmin, scale, out
+
+    def _write_row_headers(self, stream):
+        """Write row headers to a GridFile stream."""
+        # Grid row headers can be simplified as there is only
+        # one: GRID
+        stream.write_int(-self.missing_int)
+        stream.write_int(1)
+
+    def _write_column_headers(self, stream):
+        """Write column headers to a GridFile stream."""
+        start_word = stream.word()
+        # Initialize all headers to unused state
+        for _c in range(self.columns):
+            for _k in range(self.column_keys + 1):
+                stream.write_int(self.missing_int)
+
+        stream.jump_to(start_word)
+        for ch in self.column_headers:
+            stream.write_int(-self.missing_int)
+            for key in ch._fields:
+                dtype = HEADER_DTYPE[key]
+                if 's' in dtype:
+                    stream.write_string(getattr(ch, key))
+                elif 'i' in dtype:
+                    if key in ['GDT1', 'GDT2']:
+                        try:
+                            idate = int(getattr(ch, key).strftime('%y%m%d'))
+                        except AttributeError:
+                            idate = 0
+                        stream.write_int(idate)
+                    elif key in ['GTM1', 'GTM2']:
+                        try:
+                            itime = int(getattr(ch, key).strftime('%H%M'))
+                        except AttributeError:
+                            itime = 0
+                        stream.write_int(itime)
+                    else:
+                        stream.write_int(getattr(ch, key))
+
+    def _write_file_headers(self, stream):
+        """Write file headers to a GridFile stream."""
+        # Write navigation block
+        stream.write_int(NAVB_SIZE)
+        stream.write_struct(
+            self.grid_nav_struct,
+            grid_definition_type=2,  # always full map projection
+            projection=bytes(self.gemproj, 'utf-8'),
+            left_grid_number=self.left_grid_number,
+            bottom_grid_number=self.bottom_grid_number,
+            right_grid_number=self.nx,
+            top_grid_number=self.ny,
+            lower_left_lat=self.lower_left_lat,
+            lower_left_lon=self.lower_left_lon,
+            upper_right_lat=self.upper_right_lat,
+            upper_right_lon=self.upper_right_lon,
+            proj_angle1=self.angle1,
+            proj_angle2=self.angle2,
+            proj_angle3=self.angle3
+        )
+
+        # Write a blank analysis block
+        stream.write_int(ANLB_SIZE)
+        for _n in range(ANLB_SIZE):
+            stream.write_int(0)
+
+    def _write_data(self, stream):
+        """Write grid to a GridFile stream."""
+        # Only one row and part for grids, so math can be simplified
+        for j, col in enumerate(sorted(self.column_headers)):
+            pointer = self.data_block_ptr + j
+            stream.jump_to(pointer)
+            if col in self.data:
+                stream.write_int(self.next_free_word)
+                stream.jump_to(self.next_free_word)
+                if self.packing_type == PackingType.grib.value:
+                    ref, scale, packed_grid = self._pack_grib(self.data[col], self.precision)
+                    lendat = len(packed_grid)
+                    stream.write_int(lendat + self.parts_dict['GRID']['header'] + 6)
+                    stream.write_int(self.nx)
+                    stream.write_int(self.ny)
+                    stream.write_int(self.packing_type)
+                    stream.write_int(self.precision)
+                    stream.write_int(-1)
+                    stream.write_int(self.nx * self.ny)
+                    stream.write_float(ref)
+                    stream.write_float(scale)
+                    for cell in packed_grid:
+                        stream.write_int(cell)
+                else:
+                    raise NotImplementedError(
+                        f'Packing method {self.packing_type} not currently implemented.'
+                    )
+                self.next_free_word = stream.word()
+            else:
+                stream.write_int(0)
+
+        _rec, word = self._dmword(stream.word())
+        # Fill out the remainder of the block, if needed
+        if word != 1:
+            for _n in range(MBLKSZ - word + 1):
+                stream.write_int(0)
 
 
 class SoundingFile(DataManagementFile):
@@ -327,8 +871,13 @@ class SoundingFile(DataManagementFile):
             GEMPAK files are structured such that parameters cannot change
             between individual soundings within a single file.
 
+            A typical observed sounding in GEMPAK will have PRES, HGHT, TEMP,
+            DWPT, DRCT (wind direction), and SPED (wind speed). Model soundings
+            will often have several other parameters. A minimal sounding would
+            contain a vertical coordinate variable and at least one data parameter.
+
         pack_data : bool
-            Toggle data packing (i.e., real numbers packed as integers.).
+            Toggle data packing (i.e., real numbers packed as integers).
             Currently not implemented.
         """
         super().__init__()
@@ -384,7 +933,8 @@ class SoundingFile(DataManagementFile):
     def _replace_nan(self, array):
         """Replace nan values from an array with missing value."""
         nan_loc = np.isnan(array)
-        array = array[nan_loc] = self.missing_float
+        array[nan_loc] = self.missing_float
+        return array
 
     def add_sounding(self, data, slat, slon, date_time, station_info=None):
         """Add sounding to the file.
@@ -480,7 +1030,7 @@ class SoundingFile(DataManagementFile):
             raise ValueError('Exceeded maximum number data entries.')
 
     def _write_row_headers(self, stream):
-        """Write row headers to a stream."""
+        """Write row headers to a SoundingFile stream."""
         start_word = stream.word()
         # Initialize all headers to unused state
         for _r in range(self.rows):
@@ -505,7 +1055,7 @@ class SoundingFile(DataManagementFile):
                         stream.write_int(getattr(rh, key))
 
     def _write_column_headers(self, stream):
-        """Write column headers to a stream."""
+        """Write column headers to a SoundingFile stream."""
         start_word = stream.word()
         # Initialize all headers to unused state
         for _c in range(self.columns):
@@ -527,9 +1077,10 @@ class SoundingFile(DataManagementFile):
                         stream.write_int(getattr(ch, key))
 
     def _write_data(self, stream):
-        """Write sounding to a stream."""
+        """Write sounding to a SoundingFile stream."""
         for i, row in enumerate(self.row_headers):
             for j, col in enumerate(self.column_headers):
+                # Only 1 part for merged sounding, so math can be simplified
                 pointer = self.data_block_ptr + i * self.columns + j
                 stream.jump_to(pointer)
                 if (row, col) in self.data:
@@ -562,48 +1113,3 @@ class SoundingFile(DataManagementFile):
         if word != 1:
             for _n in range(MBLKSZ - word + 1):
                 stream.write_int(0)
-
-    def write(self, file):
-        """Write sounding file to disk.
-
-        Parameters
-        ----------
-        file : str or `pathlib.Path`
-            Path of file to be created.
-        """
-        self._set_pointers()
-
-        with GempakStream() as stream:
-            # Write file label
-            self._write_label(stream)
-
-            # Write row key names
-            stream.jump_to(self.row_keys_ptr)
-            self._write_row_keys(stream)
-
-            # Write column key names
-            stream.jump_to(self.column_keys_ptr)
-            self._write_column_keys(stream)
-
-            # Write parts and parameters
-            stream.jump_to(self.parts_ptr)
-            self._write_parts(stream)
-
-            # Write row headers
-            stream.jump_to(self.row_headers_ptr)
-            self._write_row_headers(stream)
-
-            # Write column headers
-            stream.jump_to(self.column_headers_ptr)
-            self._write_column_headers(stream)
-
-            # Write data
-            stream.jump_to(self.data_block_ptr)
-            self._write_data(stream)
-
-            # Write data management record
-            stream.jump_to(self.data_mgmt_ptr)
-            self._write_data_management(stream)
-
-            with open(file, 'wb') as out:
-                out.write(stream.getbuffer())
