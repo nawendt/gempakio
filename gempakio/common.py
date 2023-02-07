@@ -27,7 +27,8 @@ HEADER_DTYPE = {
     'GTM2': 'i',
     'GPM1': '4s',
     'GPM2': '4s',
-    'GPM3': '4s'
+    'GPM3': '4s',
+    'GVCD': 'i'
 }
 MBLKSZ = 128
 MISSING_INT = -9999
