@@ -1,4 +1,4 @@
-# Copyright (c) 2022 Nathan Wendt.
+# Copyright (c) 2023 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding various GEMPAK file formats."""
@@ -10,7 +10,6 @@ import contextlib
 from copy import deepcopy
 import ctypes
 from datetime import datetime, timedelta
-from enum import Enum
 from itertools import product
 import logging
 import math
@@ -23,20 +22,19 @@ import numpy as np
 import pyproj
 import xarray as xr
 
-from ..gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
-                       interp_moist_height)
-from ..tools import IOBuffer, NamedStruct
+from gempakio.common import (_word_to_position, ANLB_SIZE, BYTES_PER_WORD, DataSource,
+                             DataTypes, FileTypes, ForecastType, GEMPAK_HEADER, NAVB_SIZE,
+                             PackingType, VerticalCoordinates)
+from gempakio.gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
+                              interp_moist_height)
+from gempakio.tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
 
-ANLB_SIZE = 128
-BYTES_PER_WORD = 4
-NAVB_SIZE = 256
 PARAM_ATTR = [('name', (4, 's')), ('scale', (1, 'i')),
               ('offset', (1, 'i')), ('bits', (1, 'i'))]
 USED_FLAG = 9999
 UNUSED_FLAG = -9999
-GEMPAK_HEADER = 'GEMPAK DATA MANAGEMENT FILE '
 GEMPROJ_TO_PROJ = {
     'MER': ('merc', 'cyl'),
     'NPS': ('stere', 'azm'),
@@ -66,78 +64,6 @@ METAR_STATION_RE = re.compile(
 METAR_TIME_RE = re.compile(
     r'(?P<day>\d\d)(?P<hour>\d\d)(?P<minute>\d\d)Z'
 )
-
-
-class FileTypes(Enum):
-    """GEMPAK file type."""
-
-    surface = 1
-    sounding = 2
-    grid = 3
-
-
-class DataTypes(Enum):
-    """Data management library data types."""
-
-    real = 1
-    integer = 2
-    character = 3
-    realpack = 4
-    grid = 5
-
-
-class VerticalCoordinates(Enum):
-    """Veritical coordinates."""
-
-    none = 0
-    pres = 1
-    thta = 2
-    hght = 3
-    sgma = 4
-    dpth = 5
-    hybd = 6
-    pvab = 7
-    pvbl = 8
-
-
-class PackingType(Enum):
-    """GRIB packing type."""
-
-    none = 0
-    grib = 1
-    nmc = 2
-    diff = 3
-    dec = 4
-    grib2 = 5
-
-
-class ForecastType(Enum):
-    """Forecast type."""
-
-    analysis = 0
-    forecast = 1
-    guess = 2
-    initial = 3
-
-
-class DataSource(Enum):
-    """Data source."""
-
-    model = 0
-    airway_surface = 1
-    metar = 2
-    ship = 3
-    raob_buoy = 4
-    synop_raob_vas = 5
-    grid = 6
-    watch_by_county = 7
-    unknown = 99
-    text = 100
-    metar2 = 102
-    ship2 = 103
-    raob_buoy2 = 104
-    synop_raob_vas2 = 105
-
 
 Grid = namedtuple('Grid', [
     'GRIDNO',
@@ -202,12 +128,7 @@ def _data_source(source):
         return DataSource(source)
 
 
-def _word_to_position(word, bytes_per_word=BYTES_PER_WORD):
-    """Return beginning position of a word in bytes."""
-    return (word * bytes_per_word) - bytes_per_word
-
-
-class GempakFile():
+class GempakFile:
     """Base class for GEMPAK files.
 
     Reads ubiquitous GEMPAK file headers (i.e., the data managment portion of
@@ -2074,7 +1995,7 @@ class GempakSounding(GempakFile):
                 values = np.array(values)[np.newaxis, ...]
                 maskval = np.ma.array(values, mask=values == self.prod_desc.missing_float,
                                       dtype=np.float32)
-                var[param.lower()] = (['time', 'pres'], maskval)
+                var[param.lower()] = (['time', vcoord], maskval)
 
             xrds = xr.Dataset(var,
                               coords={'time': np.atleast_1d(dt), vcoord: vcdata},
