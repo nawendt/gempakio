@@ -140,6 +140,12 @@ class DataManagementFile:
         self.make_column_header = namedtuple('ColumnHeader', self.column_names)
         self.make_row_header = namedtuple('RowHeader', self.row_names)
 
+    def _replace_nan(self, array):
+        """Replace nan values from an array with missing value."""
+        nan_loc = np.isnan(array)
+        array[nan_loc] = self.missing_float
+        return array
+
     def _set_pointers(self):
         """Set pointers for the output file.
 
@@ -391,6 +397,10 @@ class GridFile(DataManagementFile):
         rotation : float
             Angle (in degrees) by which to rotate the projection. Default
             is 0.
+
+        Notes
+        -----
+        Grids are written with an empty analysis block.
         """
         super().__init__()
         self.file_type = FileTypes.grid.value
@@ -665,7 +675,7 @@ class GridFile(DataManagementFile):
         )
         self.column_headers.add(self.make_column_header(*new_column))
 
-        self.data[new_column] = grid
+        self.data[new_column] = self._replace_nan(grid)
 
         self.columns = len(self.column_headers)
 
@@ -875,6 +885,8 @@ class SoundingFile(DataManagementFile):
             DWPT, DRCT (wind direction), and SPED (wind speed). Model soundings
             will often have several other parameters. A minimal sounding would
             contain a vertical coordinate variable and at least one data parameter.
+            A more comprehensive list of sounding parameters can be found in the
+            GEMPAK SNPARM documentation.
 
         pack_data : bool
             Toggle data packing (i.e., real numbers packed as integers).
@@ -929,12 +941,6 @@ class SoundingFile(DataManagementFile):
         """Validate sounding parameters are of same length."""
         sz = len(data_dict[next(iter(data_dict))])
         return all(len(x) == sz for x in data_dict.values())
-
-    def _replace_nan(self, array):
-        """Replace nan values from an array with missing value."""
-        nan_loc = np.isnan(array)
-        array[nan_loc] = self.missing_float
-        return array
 
     def add_sounding(self, data, slat, slon, date_time, station_info=None):
         """Add sounding to the file.
@@ -1102,6 +1108,255 @@ class SoundingFile(DataManagementFile):
                         else:
                             for pval in rec:
                                 stream.write_float(pval)
+                    # Update the next free word after writing data.
+                    self.next_free_word = stream.word()
+
+                else:
+                    stream.write_int(0)
+
+        _rec, word = self._dmword(stream.word())
+        # Fill out the remainder of the block, if needed
+        if word != 1:
+            for _n in range(MBLKSZ - word + 1):
+                stream.write_int(0)
+
+
+class SurfaceFile(DataManagementFile):
+    """GEMPAK standard surface file class.
+
+    This class is used to build a collection of surface stations to write to disk
+    as a GEMPAK surface file.
+    """
+
+    def __init__(self, parameters, pack_data=False):
+        """Instantiate SurfaceFile.
+
+        Parameters
+        ----------
+        parameters : array_like
+            Set the parameters that each surface station in the file will include.
+            GEMPAK files are structured such that parameters cannot change
+            between individual stations within a single file.
+
+            Common parameters for surface files include PMSL, ALTI, WNUM, CHC[1-3],
+            TMPC, DWPC, SKNT, DRCT, and VSBY. See GEMPAK SFPARM documentation for
+            a more comprehensive list of parameters.
+
+        pack_data : bool
+            Toggle data packing (i.e., real numbers packed as integers).
+            Currently not implemented.
+
+        Notes
+        -----
+        Creates a standard surface file that does not contain any text
+        (e.g., TEXT/SPCL parameters).
+        """
+        super().__init__()
+        self.file_type = FileTypes.surface.value
+        self.data_source = DataSource.metar.value
+
+        if pack_data:
+            self._data_type = DataTypes.realpack.value
+        else:
+            self._data_type = DataTypes.real.value
+
+        self.row_names = ['DATE', 'TIME']
+        self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV', 'STAT',
+                             'COUN', 'STD2', 'SPRI']
+        self._init_headers()
+
+        self._add_parameters(parameters)
+
+        self.parts_dict = {
+            'SFDT': {
+                'header': 1,
+                'type': self._data_type,
+                'parameters': self.parameter_names,
+                'scale': [0] * len(self.parameter_names),
+                'offset': [0] * len(self.parameter_names),
+                'bits': [0] * len(self.parameter_names),
+            }
+        }
+
+        if pack_data:
+            raise NotImplementedError('Data packing not implemented.')
+
+    def _add_parameters(self, parameters):
+        """Add parameters to surface file."""
+        if not isinstance(parameters, (list, tuple, np.ndarray)):
+            raise TypeError('parameters should be array-like.')
+
+        if len(parameters) + len(self.parameter_names) > MMPARM:
+            raise ValueError('Reached maximum parameter limit.')
+
+        for param in parameters:
+            if param not in self.parameter_names:
+                self.parameter_names.append(param.upper())
+
+        self._param_args = namedtuple('Parameters', self.parameter_names)
+
+    @staticmethod
+    def _validate_length(data_dict):
+        """Validate surface parameters are of same length."""
+        return all(np.isscalar(x) for x in data_dict.values())
+
+    def add_station(self, data, slat, slon, date_time, station_info=None):
+        """Add station to the file.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary where keys are parameter names and values are the
+            associated (scalar) data. Keys must match those that the surface
+            file is created with. Should data contain `nan` values, they
+            will be replaced with the GEMPAK missing value -9999.
+
+        slat : float
+            Station latitude.
+
+        slon : float
+            Station longitude.
+
+        date_time : str or datetime
+            Observation date and time. Valid string formats are YYYYmmddHHMM.
+
+        station_info : dict or None
+            A dictionary that contains station metadata. Valid keys are
+            station_id (e.g., KMSN), station_number (typically WMO ID),
+            elevation (m), state, country, and priority.
+
+        Notes
+        -----
+        If a station with duplicate metadata (date, time, site, etc.) is added,
+        it will replace the previous entry in the file.
+        """
+        if not isinstance(data, dict):
+            raise TypeError('data must be a dict.')
+
+        data = {k.upper(): self.missing_float if np.isnan(v) else v for k, v in data.items()}
+        params = self._param_args(**data)
+
+        if not self._validate_length(data):
+            raise ValueError('All input data must be same length.')
+
+        if not isinstance(slat, (int, float)):
+            raise TypeError('Coordinates must be int/float.')
+
+        if not isinstance(slon, (int, float)):
+            raise TypeError('Coordinates must be int/float.')
+
+        if isinstance(date_time, str):
+            date_time = date_time.upper()
+            self._datetime = datetime.strptime(date_time, '%Y%m%d%H%M')
+        elif isinstance(date_time, datetime):
+            self._datetime = date_time
+        else:
+            raise TypeError('date_time must be string or datetime.')
+
+        if station_info is None:
+            stid = ''
+            stnm = self.missing_int
+            selv = self.missing_int
+            stat = ''
+            coun = ''
+            std2 = ''
+            spri = 0
+        else:
+            stid = str(station_info.get('station_id', '')).upper()
+            stnm = int(station_info.get('station_number', self.missing_int))
+            selv = int(station_info.get('elevation', self.missing_int))
+            stat = str(station_info.get('state', '')).upper()[:4]
+            coun = str(station_info.get('country', '')).upper()[:4]
+            std2 = ''
+            spri = station_info.get('priority', 0)
+
+            if len(stid) > 4:
+                std2 = stid[4:8]
+                stid = stid[:4]
+
+        new_row = (date_time.date(), date_time.time())
+        self.row_headers.add(self.make_row_header(*new_row))
+
+        new_column = (stid, stnm, slat, slon, selv, stat, coun, std2, spri)
+        self.column_headers.add(self.make_column_header(*new_column))
+
+        self.data[(new_row, new_column)] = params._asdict()
+
+        self.rows = len(self.row_headers)
+        self.columns = len(self.column_headers)
+
+        if self.rows + self.columns > MMHDRS:
+            raise ValueError('Exceeded maximum number data entries.')
+
+    def _write_row_headers(self, stream):
+        """Write row headers to a SurfaceFile stream."""
+        start_word = stream.word()
+        # Initialize all headers to unused state
+        for _r in range(self.rows):
+            for _k in range(self.row_keys + 1):
+                stream.write_int(self.missing_int)
+
+        stream.jump_to(start_word)
+        for rh in sorted(self.row_headers):
+            stream.write_int(-self.missing_int)
+            for key in rh._fields:
+                dtype = HEADER_DTYPE[key]
+                if 's' in dtype:
+                    stream.write_string(getattr(rh, key))
+                elif 'i' in dtype:
+                    if key == 'DATE':
+                        idate = int(rh.DATE.strftime('%y%m%d'))
+                        stream.write_int(idate)
+                    elif key == 'TIME':
+                        itime = int(rh.TIME.strftime('%H%M'))
+                        stream.write_int(itime)
+                    else:
+                        stream.write_int(getattr(rh, key))
+
+    def _write_column_headers(self, stream):
+        """Write column headers to a SurfaceFile stream."""
+        start_word = stream.word()
+        # Initialize all headers to unused state
+        for _c in range(self.columns):
+            for _k in range(self.column_keys + 1):
+                stream.write_int(self.missing_int)
+
+        stream.jump_to(start_word)
+        for ch in self.column_headers:
+            stream.write_int(-self.missing_int)
+            for key in ch._fields:
+                dtype = HEADER_DTYPE[key]
+                if 's' in dtype:
+                    stream.write_string(getattr(ch, key))
+                elif 'i' in dtype:
+                    if key in ['SLAT', 'SLON']:
+                        coord = int(getattr(ch, key) * 100)
+                        stream.write_int(coord)
+                    else:
+                        stream.write_int(getattr(ch, key))
+
+    def _write_data(self, stream):
+        """Write sounding to a SurfaceFile stream."""
+        for i, row in enumerate(self.row_headers):
+            for j, col in enumerate(self.column_headers):
+                # Only 1 part for merged sounding, so math can be simplified
+                pointer = self.data_block_ptr + i * self.columns + j
+                stream.jump_to(pointer)
+                if (row, col) in self.data:
+                    stream.write_int(self.next_free_word)
+                    params = self.data[(row, col)]
+                    # Need data length, so just grab first parameter
+                    lendat = self.parts_dict['SFDT']['header'] + 1 * len(params)
+                    itime = int(row.TIME.strftime('%H%M'))
+                    stream.jump_to(self.next_free_word)
+                    stream.write_int(lendat)
+                    stream.write_int(itime)
+
+                    for _param, pval in params.items():
+                        if self._data_type == DataTypes.realpack.value:
+                            pass
+                        else:
+                            stream.write_float(pval)
                     # Update the next free word after writing data.
                     self.next_free_word = stream.word()
 

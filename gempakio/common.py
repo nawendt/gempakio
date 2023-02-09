@@ -17,6 +17,7 @@ HEADER_DTYPE = {
     'STAT': '4s',
     'COUN': '4s',
     'STD2': '4s',
+    'SPRI': 'i',
     'DATE': 'i',
     'TIME': 'i',
     'GDT1': 'i',
