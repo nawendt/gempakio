@@ -23,6 +23,8 @@ import numpy as np
 import pyproj
 import xarray as xr
 
+from gempakio.decode.grib import Grib2
+
 from ..gemcalc import (interp_logp_height, interp_logp_pressure, interp_missing_data,
                        interp_moist_height)
 from ..tools import IOBuffer, NamedStruct
@@ -858,21 +860,65 @@ class GempakGrid(GempakFile):
 
             return grid
         elif packing_type == PackingType.grib2:
-            raise NotImplementedError('GRIB2 unpacking not supported.')
-            # integer_meta_fmt = [('iuscal', 'i'), ('kx', 'i'),
-            #                     ('ky', 'i'), ('iscan_mode', 'i')]
-            # real_meta_fmt = [('rmsval', 'f')]
-            # self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt,
-            #                                                           self.prefmt,
-            #                                                           'GridMetaInt'))
-            # self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt,
-            #                                                            self.prefmt,
-            #                                                            'GridMetaReal'))
+            # raise NotImplementedError('GRIB2 unpacking not supported.')
+            integer_meta_fmt = [('iuscal', 'i'), ('kx', 'i'),
+                                ('ky', 'i'), ('iscan_mode', 'i')]
+            real_meta_fmt = [('rmsval', 'f')]
+            self.grid_meta_int = self._buffer.read_struct(NamedStruct(integer_meta_fmt,
+                                                                      self.prefmt,
+                                                                      'GridMetaInt'))
+            self.grid_meta_real = self._buffer.read_struct(NamedStruct(real_meta_fmt,
+                                                                       self.prefmt,
+                                                                       'GridMetaReal'))
             # grid_start = self._buffer.set_mark()
+
+            lendat = self.data_header_length - part.header_length - 6
+            packed_buffer_fmt = f'{self.prefmt}{lendat}i'
+
+            grid = np.zeros(self.grid_meta_int.kx * self.grid_meta_int.ky, dtype=np.float32)
+            # packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
+            # packed_bytes = np.asarray(packed_buffer, dtype=np.float32).tobytes()
+            dt = np.dtype(np.ubyte)
+            if self.swaped_bytes:
+                dt.newbyteorder(self.prefmt)
+            packed_buffer = self._buffer.read_array(lendat * 4, dtype=dt)
+            self.test = packed_buffer
+
+            self.g2dat = Grib2(packed_buffer)
         else:
             raise NotImplementedError(
                 f'No method for unknown grid packing {packing_type.name}'
             )
+
+    @staticmethod
+    def _gbit(inbytes, skip, nbytes):
+        """Get bits."""
+        ones = [1, 3, 7, 15, 31, 63, 127, 255]
+        nbit = skip
+
+        bitcnt = nbytes
+        index = nbit // 8
+        ibit = nbit % 8
+        nbit += nbytes
+
+        tbit = bitcnt if bitcnt < (8 - ibit) else (8 - ibit)
+        itmp = inbytes[index] & ones[7 - ibit]
+        if tbit != (8 - ibit):
+            itmp >>= (8 - ibit - tbit)
+        index += 1
+        bitcnt -= tbit
+
+        while (bitcnt >= 8):
+            itmp = (itmp << 8) | inbytes[index]
+            bitcnt -= 8
+            index += 1
+
+        if (bitcnt > 0):
+            itmp = (
+                (itmp << bitcnt) | ((inbytes[index] >> (8 - bitcnt)) & ones[bitcnt - 1])
+            )
+
+        return itmp
 
     def gdxarray(self, parameter=None, date_time=None, coordinate=None,
                  level=None, date_time2=None, level2=None):
