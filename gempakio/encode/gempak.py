@@ -53,7 +53,7 @@ class GempakStream(BytesIO):
 class DataManagementFile:
     """Class to facilitate writing GEMPAK files to disk."""
 
-    label_struct = NamedStruct(
+    _label_struct = NamedStruct(
         [('dm_head', '28s'), ('version', 'i'), ('file_headers', 'i'), ('file_keys_ptr', 'i'),
          ('rows', 'i'), ('row_keys', 'i'), ('row_keys_ptr', 'i'), ('row_headers_ptr', 'i'),
          ('columns', 'i'), ('column_keys', 'i'), ('column_keys_ptr', 'i'),
@@ -63,12 +63,12 @@ class DataManagementFile:
          (None, '12x'), ('missing_float', 'f')], '<', 'Label'
     )
 
-    data_mgmt_struct = NamedStruct(
+    _data_mgmt_struct = NamedStruct(
         [('next_free_word', 'i'), ('max_free_pairs', 'i'), ('actual_free_pairs', 'i'),
          ('last_word', 'i'), (None, '464x')], '<', 'DataManagement'
     )
 
-    grid_nav_struct = NamedStruct(
+    _grid_nav_struct = NamedStruct(
         [('grid_definition_type', 'f'), ('projection', '3sx'), ('left_grid_number', 'f'),
          ('bottom_grid_number', 'f'), ('right_grid_number', 'f'), ('top_grid_number', 'f'),
          ('lower_left_lat', 'f'), ('lower_left_lon', 'f'), ('upper_right_lat', 'f'),
@@ -76,26 +76,28 @@ class DataManagementFile:
          ('proj_angle3', 'f'), (None, '972x')])
 
     def __init__(self):
-        self.version = 1
-        self.machine_type = 11
-        self.missing_int = MISSING_INT
-        self.missing_float = MISSING_FLOAT
-        self.data_mgmt_ptr = 129
-        self.data_mgmt_length = MBLKSZ
-        self.max_free_pairs = MMFREE
-        self.actual_free_pairs = 0
-        self.last_word = 0
+        self._version = 1
+        self._machine_type = 11
+        self._missing_int = MISSING_INT
+        self._missing_float = MISSING_FLOAT
+        self._data_mgmt_ptr = 129
+        self._data_mgmt_length = MBLKSZ
+        self._max_free_pairs = MMFREE
+        self._actual_free_pairs = 0
+        self._last_word = 0
         self.parameter_names = []
         self.row_names = []
         self.column_names = []
         self.rows = 0
         self.columns = 0
-        self.file_headers = {}
-        self.parts_dict = {}
+        self._file_headers = {}
+        self._parts_dict = {}
         self.file_type = None
         self.data_source = None
-        self.column_headers = set()
-        self.row_headers = set()
+        self._column_set = set()
+        self._row_set = set()
+        self.column_headers = []
+        self.row_headers = []
         self.packing_type = None
         self.data = {}
 
@@ -143,7 +145,7 @@ class DataManagementFile:
     def _replace_nan(self, array):
         """Replace nan values from an array with missing value."""
         nan_loc = np.isnan(array)
-        array[nan_loc] = self.missing_float
+        array[nan_loc] = self._missing_float
         return array
 
     def _set_pointers(self):
@@ -155,27 +157,27 @@ class DataManagementFile:
         """
         # Keys
         self.row_keys = len(self.row_names)
-        self.row_keys_ptr = self.data_mgmt_ptr + self.data_mgmt_length
+        self._row_keys_ptr = self._data_mgmt_ptr + self._data_mgmt_length
 
         self.column_keys = len(self.column_names)
-        self.column_keys_ptr = self.row_keys_ptr + self.row_keys
+        self.column_keys_ptr = self._row_keys_ptr + self.row_keys
 
         # Headers
         self.file_keys_ptr = self.column_keys_ptr + self.column_keys
         lenfil = 0
-        for _fh, info in self.file_headers.items():
+        for _fh, info in self._file_headers.items():
             lenfil += (info['length'] + 1)
-        rec, word = self._dmword(self.file_keys_ptr + 3 * len(self.file_headers) + lenfil)
+        rec, word = self._dmword(self.file_keys_ptr + 3 * len(self._file_headers) + lenfil)
         if word != 1:
             self.row_headers_ptr = rec * MBLKSZ + 1
         else:
-            self.row_headers_ptr = self.file_keys_ptr + 3 * len(self.file_headers) + lenfil
+            self.row_headers_ptr = self.file_keys_ptr + 3 * len(self._file_headers) + lenfil
         self.column_headers_ptr = self.row_headers_ptr + self.rows * (self.row_keys + 1)
 
         # Parts
         lenpart = 0
-        nparts = len(self.parts_dict)
-        for _part, info in self.parts_dict.items():
+        nparts = len(self._parts_dict)
+        for _part, info in self._parts_dict.items():
             lenpart += len(info['parameters'])
         rec, word = self._dmword(
             self.column_headers_ptr + self.columns * (self.column_keys + 1)
@@ -206,50 +208,50 @@ class DataManagementFile:
     def _write_label(self, stream):
         """Write file label to a stream."""
         stream.write_struct(
-            self.label_struct,
+            self._label_struct,
             dm_head=bytes(GEMPAK_HEADER, 'utf-8'),
-            version=self.version,
-            file_headers=len(self.file_headers),
+            version=self._version,
+            file_headers=len(self._file_headers),
             file_keys_ptr=self.file_keys_ptr,
             rows=self.rows,
             row_keys=self.row_keys,
-            row_keys_ptr=self.row_keys_ptr,
+            row_keys_ptr=self._row_keys_ptr,
             row_headers_ptr=self.row_headers_ptr,
             columns=self.columns,
             column_keys=self.column_keys,
             column_keys_ptr=self.column_keys_ptr,
             column_headers_ptr=self.column_headers_ptr,
-            parts=len(self.parts_dict),
+            parts=len(self._parts_dict),
             parts_ptr=self.parts_ptr,
-            data_mgmt_ptr=self.data_mgmt_ptr,
-            data_mgmt_length=self.data_mgmt_length,
+            data_mgmt_ptr=self._data_mgmt_ptr,
+            data_mgmt_length=self._data_mgmt_length,
             data_block_ptr=self.data_block_ptr,
             file_type=self.file_type,
             data_source=self.data_source,
-            machine_type=self.machine_type,
-            missing_int=self.missing_int,
-            missing_float=self.missing_float
+            machine_type=self._machine_type,
+            missing_int=self._missing_int,
+            missing_float=self._missing_float
         )
 
     def _write_data_management(self, stream):
         """Write data management block to a stream."""
         stream.write_struct(
-            self.data_mgmt_struct,
+            self._data_mgmt_struct,
             next_free_word=self.next_free_word,
-            max_free_pairs=self.max_free_pairs,
-            actual_free_pairs=self.actual_free_pairs,
-            last_word=self.last_word
+            max_free_pairs=self._max_free_pairs,
+            actual_free_pairs=self._actual_free_pairs,
+            last_word=self._last_word
         )
 
     def _write_file_keys(self, stream):
         """Write file headers to a stream."""
-        for name in self.file_headers:
+        for name in self._file_headers:
             stream.write_string(name)
 
-        for _name, info in self.file_headers.items():
+        for _name, info in self._file_headers.items():
             stream.write_int(info['length'])
 
-        for _name, info in self.file_headers.items():
+        for _name, info in self._file_headers.items():
             stream.write_int(info['type'])
 
     def _write_row_keys(self, stream):
@@ -264,31 +266,31 @@ class DataManagementFile:
 
     def _write_parts(self, stream):
         """Write parts to a stream."""
-        for name in self.parts_dict:
+        for name in self._parts_dict:
             stream.write_string(name)
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             stream.write_int(info['header'])
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             stream.write_int(info['type'])
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             stream.write_int(len(info['parameters']))
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             for param in info['parameters']:
                 stream.write_string(param)
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             for offset in info['offset']:
                 stream.write_int(offset)
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             for scale in info['scale']:
                 stream.write_int(scale)
 
-        for _name, info in self.parts_dict.items():
+        for _name, info in self._parts_dict.items():
             for bits in info['bits']:
                 stream.write_int(bits)
 
@@ -319,7 +321,7 @@ class DataManagementFile:
             self._write_label(stream)
 
             # Write row key names
-            stream.jump_to(self.row_keys_ptr)
+            stream.jump_to(self._row_keys_ptr)
             self._write_row_keys(stream)
 
             # Write column key names
@@ -327,7 +329,7 @@ class DataManagementFile:
             self._write_column_keys(stream)
 
             # Write file keys/headers, if present
-            if self.file_headers:
+            if self._file_headers:
                 stream.jump_to(self.file_keys_ptr)
                 self._write_file_keys(stream)
                 self._write_file_headers(stream)
@@ -349,7 +351,7 @@ class DataManagementFile:
             self._write_data(stream)
 
             # Write data management record
-            stream.jump_to(self.data_mgmt_ptr)
+            stream.jump_to(self._data_mgmt_ptr)
             self._write_data_management(stream)
 
             with open(file, 'wb') as out:
@@ -416,7 +418,7 @@ class GridFile(DataManagementFile):
         self.bottom_grid_number = 1
         self.precision = 16
 
-        self.file_headers = {
+        self._file_headers = {
             'NAVB': {'length': NAVB_SIZE, 'type': 1},
             'ANLB': {'length': ANLB_SIZE, 'type': 1}
         }
@@ -427,7 +429,7 @@ class GridFile(DataManagementFile):
 
         self._init_headers()
 
-        self.parts_dict = {
+        self._parts_dict = {
             'GRID': {
                 'header': 2,  # minimum required for nx, ny
                 'type': self._data_type,
@@ -673,14 +675,17 @@ class GridFile(DataManagementFile):
             gpm2,
             gpm3
         )
-        self.column_headers.add(self.make_column_header(*new_column))
+        self._column_set.add(self.make_column_header(*new_column))
 
         self.data[new_column] = self._replace_nan(grid)
 
-        self.columns = len(self.column_headers)
+        self.columns = len(self._column_set)
 
         if self.rows + self.columns > MMHDRS:
             raise ValueError('Exceeded maximum number data entries.')
+
+        self.column_headers = sorted(self._column_set)
+        self.row_headers = sorted(self._row_set)
 
     def _pack_grib(self, grid, nbits=16):
         """Pack a grid of floats into integers."""
@@ -695,19 +700,19 @@ class GridFile(DataManagementFile):
 
         out = np.zeros(lendat, dtype=np.int)
 
-        if (grid == self.missing_float).any():
+        if (grid == self._missing_float).any():
             has_missing = True
         else:
             has_missing = False
 
-        if (grid == self.missing_float).all():
+        if (grid == self._missing_float).all():
             all_missing = True
         else:
             all_missing = False
 
         if all_missing:
-            qmin = self.missing_float
-            qmax = self.missing_float
+            qmin = self._missing_float
+            qmax = self._missing_float
         else:
             qmin = grid.min()
             qmax = grid.max()
@@ -739,7 +744,7 @@ class GridFile(DataManagementFile):
             rgrid = grid.ravel()
 
             for ii in range(kxky):
-                if rgrid[ii] == self.missing_float:
+                if rgrid[ii] == self._missing_float:
                     idat = imax
                 else:
                     gggg = rgrid[ii] - qmin if rgrid[ii] - qmin > 0 else 0
@@ -766,7 +771,7 @@ class GridFile(DataManagementFile):
         """Write row headers to a GridFile stream."""
         # Grid row headers can be simplified as there is only
         # one: GRID
-        stream.write_int(-self.missing_int)
+        stream.write_int(-self._missing_int)
         stream.write_int(1)
 
     def _write_column_headers(self, stream):
@@ -775,11 +780,11 @@ class GridFile(DataManagementFile):
         # Initialize all headers to unused state
         for _c in range(self.columns):
             for _k in range(self.column_keys + 1):
-                stream.write_int(self.missing_int)
+                stream.write_int(self._missing_int)
 
         stream.jump_to(start_word)
         for ch in self.column_headers:
-            stream.write_int(-self.missing_int)
+            stream.write_int(-self._missing_int)
             for key in ch._fields:
                 dtype = HEADER_DTYPE[key]
                 if 's' in dtype:
@@ -805,7 +810,7 @@ class GridFile(DataManagementFile):
         # Write navigation block
         stream.write_int(NAVB_SIZE)
         stream.write_struct(
-            self.grid_nav_struct,
+            self._grid_nav_struct,
             grid_definition_type=2,  # always full map projection
             projection=bytes(self.gemproj, 'utf-8'),
             left_grid_number=self.left_grid_number,
@@ -829,7 +834,7 @@ class GridFile(DataManagementFile):
     def _write_data(self, stream):
         """Write grid to a GridFile stream."""
         # Only one row and part for grids, so math can be simplified
-        for j, col in enumerate(sorted(self.column_headers)):
+        for j, col in enumerate(self.column_headers):
             pointer = self.data_block_ptr + j
             stream.jump_to(pointer)
             if col in self.data:
@@ -838,7 +843,7 @@ class GridFile(DataManagementFile):
                 if self.packing_type == PackingType.grib.value:
                     ref, scale, packed_grid = self._pack_grib(self.data[col], self.precision)
                     lendat = len(packed_grid)
-                    stream.write_int(lendat + self.parts_dict['GRID']['header'] + 6)
+                    stream.write_int(lendat + self._parts_dict['GRID']['header'] + 6)
                     stream.write_int(self.nx)
                     stream.write_int(self.ny)
                     stream.write_int(self.packing_type)
@@ -908,7 +913,7 @@ class SoundingFile(DataManagementFile):
 
         self._add_parameters(parameters)
 
-        self.parts_dict = {
+        self._parts_dict = {
             'SNDT': {
                 'header': 1,
                 'type': self._data_type,
@@ -1004,15 +1009,15 @@ class SoundingFile(DataManagementFile):
 
         if station_info is None:
             stid = ''
-            stnm = self.missing_int
-            selv = self.missing_int
+            stnm = self._missing_int
+            selv = self._missing_int
             stat = ''
             coun = ''
             std2 = ''
         else:
             stid = str(station_info.get('station_id', '')).upper()
-            stnm = int(station_info.get('station_number', self.missing_int))
-            selv = int(station_info.get('elevation', self.missing_int))
+            stnm = int(station_info.get('station_number', self._missing_int))
+            selv = int(station_info.get('elevation', self._missing_int))
             stat = str(station_info.get('state', '')).upper()[:4]
             coun = str(station_info.get('country', '')).upper()[:4]
             std2 = ''
@@ -1022,18 +1027,21 @@ class SoundingFile(DataManagementFile):
                 stid = stid[:4]
 
         new_row = (date_time.date(), date_time.time())
-        self.row_headers.add(self.make_row_header(*new_row))
+        self._row_set.add(self.make_row_header(*new_row))
 
         new_column = (stid, stnm, slat, slon, selv, stat, coun, std2)
-        self.column_headers.add(self.make_column_header(*new_column))
+        self._column_set.add(self.make_column_header(*new_column))
 
         self.data[(new_row, new_column)] = params._asdict()
 
-        self.rows = len(self.row_headers)
-        self.columns = len(self.column_headers)
+        self.rows = len(self._row_set)
+        self.columns = len(self._column_set)
 
         if self.rows + self.columns > MMHDRS:
             raise ValueError('Exceeded maximum number data entries.')
+
+        self.column_headers = sorted(self._column_set)
+        self.row_headers = sorted(self._row_set)
 
     def _write_row_headers(self, stream):
         """Write row headers to a SoundingFile stream."""
@@ -1041,11 +1049,11 @@ class SoundingFile(DataManagementFile):
         # Initialize all headers to unused state
         for _r in range(self.rows):
             for _k in range(self.row_keys + 1):
-                stream.write_int(self.missing_int)
+                stream.write_int(self._missing_int)
 
         stream.jump_to(start_word)
-        for rh in sorted(self.row_headers):
-            stream.write_int(-self.missing_int)
+        for rh in self.row_headers:
+            stream.write_int(-self._missing_int)
             for key in rh._fields:
                 dtype = HEADER_DTYPE[key]
                 if 's' in dtype:
@@ -1066,11 +1074,11 @@ class SoundingFile(DataManagementFile):
         # Initialize all headers to unused state
         for _c in range(self.columns):
             for _k in range(self.column_keys + 1):
-                stream.write_int(self.missing_int)
+                stream.write_int(self._missing_int)
 
         stream.jump_to(start_word)
         for ch in self.column_headers:
-            stream.write_int(-self.missing_int)
+            stream.write_int(-self._missing_int)
             for key in ch._fields:
                 dtype = HEADER_DTYPE[key]
                 if 's' in dtype:
@@ -1093,7 +1101,7 @@ class SoundingFile(DataManagementFile):
                     stream.write_int(self.next_free_word)
                     params = self.data[(row, col)]
                     # Need data length, so just grab first parameter
-                    lendat = (self.parts_dict['SNDT']['header']
+                    lendat = (self._parts_dict['SNDT']['header']
                               + len(params[next(iter(params))]) * len(params))
                     itime = int(row.TIME.strftime('%H%M'))
                     stream.jump_to(self.next_free_word)
@@ -1167,7 +1175,7 @@ class SurfaceFile(DataManagementFile):
 
         self._add_parameters(parameters)
 
-        self.parts_dict = {
+        self._parts_dict = {
             'SFDT': {
                 'header': 1,
                 'type': self._data_type,
@@ -1233,7 +1241,7 @@ class SurfaceFile(DataManagementFile):
         if not isinstance(data, dict):
             raise TypeError('data must be a dict.')
 
-        data = {k.upper(): self.missing_float if np.isnan(v) else v for k, v in data.items()}
+        data = {k.upper(): self._missing_float if np.isnan(v) else v for k, v in data.items()}
         params = self._param_args(**data)
 
         if not self._validate_length(data):
@@ -1255,16 +1263,16 @@ class SurfaceFile(DataManagementFile):
 
         if station_info is None:
             stid = ''
-            stnm = self.missing_int
-            selv = self.missing_int
+            stnm = self._missing_int
+            selv = self._missing_int
             stat = ''
             coun = ''
             std2 = ''
             spri = 0
         else:
             stid = str(station_info.get('station_id', '')).upper()
-            stnm = int(station_info.get('station_number', self.missing_int))
-            selv = int(station_info.get('elevation', self.missing_int))
+            stnm = int(station_info.get('station_number', self._missing_int))
+            selv = int(station_info.get('elevation', self._missing_int))
             stat = str(station_info.get('state', '')).upper()[:4]
             coun = str(station_info.get('country', '')).upper()[:4]
             std2 = ''
@@ -1275,18 +1283,21 @@ class SurfaceFile(DataManagementFile):
                 stid = stid[:4]
 
         new_row = (date_time.date(), date_time.time())
-        self.row_headers.add(self.make_row_header(*new_row))
+        self._row_set.add(self.make_row_header(*new_row))
 
         new_column = (stid, stnm, slat, slon, selv, stat, coun, std2, spri)
-        self.column_headers.add(self.make_column_header(*new_column))
+        self._column_set.add(self.make_column_header(*new_column))
 
         self.data[(new_row, new_column)] = params._asdict()
 
-        self.rows = len(self.row_headers)
-        self.columns = len(self.column_headers)
+        self.rows = len(self._row_set)
+        self.columns = len(self._column_set)
 
         if self.rows + self.columns > MMHDRS:
             raise ValueError('Exceeded maximum number data entries.')
+
+        self.column_headers = sorted(self._column_set)
+        self.row_headers = sorted(self._row_set)
 
     def _write_row_headers(self, stream):
         """Write row headers to a SurfaceFile stream."""
@@ -1294,11 +1305,11 @@ class SurfaceFile(DataManagementFile):
         # Initialize all headers to unused state
         for _r in range(self.rows):
             for _k in range(self.row_keys + 1):
-                stream.write_int(self.missing_int)
+                stream.write_int(self._missing_int)
 
         stream.jump_to(start_word)
-        for rh in sorted(self.row_headers):
-            stream.write_int(-self.missing_int)
+        for rh in self.row_headers:
+            stream.write_int(-self._missing_int)
             for key in rh._fields:
                 dtype = HEADER_DTYPE[key]
                 if 's' in dtype:
@@ -1319,11 +1330,11 @@ class SurfaceFile(DataManagementFile):
         # Initialize all headers to unused state
         for _c in range(self.columns):
             for _k in range(self.column_keys + 1):
-                stream.write_int(self.missing_int)
+                stream.write_int(self._missing_int)
 
         stream.jump_to(start_word)
         for ch in self.column_headers:
-            stream.write_int(-self.missing_int)
+            stream.write_int(-self._missing_int)
             for key in ch._fields:
                 dtype = HEADER_DTYPE[key]
                 if 's' in dtype:
@@ -1346,7 +1357,7 @@ class SurfaceFile(DataManagementFile):
                     stream.write_int(self.next_free_word)
                     params = self.data[(row, col)]
                     # Need data length, so just grab first parameter
-                    lendat = self.parts_dict['SFDT']['header'] + 1 * len(params)
+                    lendat = self._parts_dict['SFDT']['header'] + 1 * len(params)
                     itime = int(row.TIME.strftime('%H%M'))
                     stream.jump_to(self.next_free_word)
                     stream.write_int(lendat)
