@@ -69,11 +69,21 @@ class DataManagementFile:
     )
 
     _grid_nav_struct = NamedStruct(
-        [('grid_definition_type', 'f'), ('projection', '3sx'), ('left_grid_number', 'f'),
+        [('grid_definition_type', 'f'), ('projection', '4s'), ('left_grid_number', 'f'),
          ('bottom_grid_number', 'f'), ('right_grid_number', 'f'), ('top_grid_number', 'f'),
          ('lower_left_lat', 'f'), ('lower_left_lon', 'f'), ('upper_right_lat', 'f'),
          ('upper_right_lon', 'f'), ('proj_angle1', 'f'), ('proj_angle2', 'f'),
-         ('proj_angle3', 'f'), (None, '972x')])
+         ('proj_angle3', 'f'), (None, '972x')], '<', 'Navigation')
+
+    _analysis_struct = NamedStruct(
+        [('analysis_type', 'f'), ('delta_n', 'f'), ('grid_ext_left', 'f'),
+         ('grid_ext_down', 'f'), ('grid_ext_right', 'f'), ('grid_ext_up', 'f'),
+         ('garea_llcr_lat', 'f'), ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'),
+         ('garea_urcr_lon', 'f'), ('extarea_llcr_lat', 'f'), ('extarea_llcr_lon', 'f'),
+         ('extarea_urcr_lat', 'f'), ('extarea_urcr_lon', 'f'), ('datarea_llcr_lat', 'f'),
+         ('datarea_llcr_lon', 'f'), ('datarea_urcr_lat', 'f'), ('datarea_urcrn_lon', 'f'),
+         (None, '440x')], '<', 'Analysis'
+    )
 
     def __init__(self):
         self._version = 1
@@ -118,8 +128,8 @@ class DataManagementFile:
     def _encode_vertical_coordinate(coord):
         try:
             return VerticalCoordinates[coord.lower()].value
-        except KeyError:
-            raise KeyError(f'`{coord}` has no numeric value.')
+        except KeyError as err:
+            raise KeyError(f'`{coord}` has no numeric value.') from err
 
     @staticmethod
     def _fortran_ishift(i, shift):
@@ -443,6 +453,11 @@ class GridFile(DataManagementFile):
         if lat.shape != lon.shape:
             raise ValueError('Input coordinates must be same dimensions.')
 
+        if not isinstance(projection, pyproj.Proj):
+            raise TypeError('projection must be pyproj.Proj class.')
+
+        self.projection = projection
+
         if use_xy:
             if len(lat.shape) != 1 or len(lon.shape) != 1:
                 raise ValueError('Projected input coordinates must one-dimensional.')
@@ -450,26 +465,30 @@ class GridFile(DataManagementFile):
             self.ny = len(lat)
             self.x = lon
             self.y = lat
-            self.lon = None
-            self.lat = None
+            self.lon, self.lat = self.projection(
+                *np.meshgrid(lon, lat, copy=False), inverse=True
+            )
             self._is_xy = True
         else:
             if len(lat.shape) != 2 or len(lon.shape) != 2:
                 raise ValueError('Geographic input coordinates must be two-dimensional.')
             self.ny, self.nx = lat.shape
-            self.x = None
-            self.y = None
+            _x, _y = self.projection(lon, lat)
+            self.x = _x[0, :]
+            self.y = _y[:, 0]
             self.lon = lon
             self.lat = lat
             self._is_xy = False
 
-        if not isinstance(projection, pyproj.Proj):
-            raise TypeError('projection must be pyproj.Proj class.')
-
-        self.projection = projection
-
         self._set_projection_params()
         self._set_bbox()
+
+    @staticmethod
+    def _to_dict(operation):
+        param_dict = {}
+        for param in operation.params:
+            param_dict[param.name.lower().replace(' ', '_')] = param.value
+        return param_dict
 
     def _set_bbox(self):
         """Set bounds of data."""
@@ -489,7 +508,7 @@ class GridFile(DataManagementFile):
     def _set_projection_params(self):
         """Set projection parameters for GridFile."""
         params = self.projection.crs.to_cf()
-        name = params.get('grid_mapping_name', None)
+        name = params.get('grid_mapping_name')
 
         if name is None:
             method = self.projection.crs.coordinate_operation.method_name
@@ -524,8 +543,9 @@ class GridFile(DataManagementFile):
                 self.gemproj = 'LCC'
         elif name == 'equidistant_cylindrical':
             self.gemproj = 'CED'
-            self.angle1 = params['standard_parallel']
-            self.angle2 = params['longitude_of_projection_origin']
+            params = self._to_dict(self.projection.crs.coordinate_operation)
+            self.angle1 = params['latitude_of_natural_origin']
+            self.angle2 = params['longitude_of_natural_origin']
             self.angle3 = self.rotation
         elif name == 'orthographic':
             self.angle1 = params['latitude_of_projection_origin']
@@ -646,7 +666,7 @@ class GridFile(DataManagementFile):
         if level2 is not None:
             level2 = int(level2)
 
-        if isinstance(date_time, str):
+        if isinstance(date_time2, str):
             date_time2 = date_time2.upper()
             if 'F' in date_time:
                 init, fhr = date_time2.split('F')
@@ -660,7 +680,7 @@ class GridFile(DataManagementFile):
             raise TypeError('date_time must be string or datetime or None.')
 
         pbuff = f'{parameter_name:<12s}'
-        gpm1, gpm2, gpm3 = [pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4)]
+        gpm1, gpm2, gpm3 = (pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4))
 
         new_column = (
             self._datetime.date(),
@@ -698,7 +718,7 @@ class GridFile(DataManagementFile):
         if lendat * 32 != nbits * kxky:
             lendat += 1
 
-        out = np.zeros(lendat, dtype=np.int)
+        out = np.zeros(lendat, dtype=np.int32)
 
         if (grid == self._missing_float).any():
             has_missing = True
@@ -812,7 +832,7 @@ class GridFile(DataManagementFile):
         stream.write_struct(
             self._grid_nav_struct,
             grid_definition_type=2,  # always full map projection
-            projection=bytes(self.gemproj, 'utf-8'),
+            projection=bytes(f'{self.gemproj:4s}', 'utf-8'),  # Must be 4 char w/ space
             left_grid_number=self.left_grid_number,
             bottom_grid_number=self.bottom_grid_number,
             right_grid_number=self.nx,
@@ -826,10 +846,37 @@ class GridFile(DataManagementFile):
             proj_angle3=self.angle3
         )
 
-        # Write a blank analysis block
+        # Write a basic analysis block (type 2)
+        rx1 = self.nx // 2
+        rx2 = rx1 + 1
+        ry1 = self.ny // 2
+        ry2 = ry1 + 1
+        dellon = self.lon[ry2, rx2] - self.lon[ry1, rx1]
+        dellat = self.lat[ry2, rx2] - self.lat[ry1, rx1]
+        deltan = np.sqrt(0.5 * (dellon**2 + dellat**2)) * 2
+
         stream.write_int(ANLB_SIZE)
-        for _n in range(ANLB_SIZE):
-            stream.write_int(0)
+        stream.write_struct(
+            self._analysis_struct,
+            analysis_type=2,
+            delta_n=deltan,
+            grid_ext_left=0,
+            grid_ext_down=0,
+            grid_ext_right=0,
+            grid_ext_up=0,
+            garea_llcr_lat=self.lower_left_lat,
+            garea_llcr_lon=self.lower_left_lon,
+            garea_urcr_lat=self.upper_right_lat,
+            garea_urcr_lon=self.upper_right_lon,
+            extarea_llcr_lat=self.lower_left_lat,
+            extarea_llcr_lon=self.lower_left_lon,
+            extarea_urcr_lat=self.upper_right_lat,
+            extarea_urcr_lon=self.upper_right_lon,
+            datarea_llcr_lat=self.lower_left_lat,
+            datarea_llcr_lon=self.lower_left_lon,
+            datarea_urcr_lat=self.upper_right_lat,
+            datarea_urcrn_lon=self.upper_right_lon,
+        )
 
     def _write_data(self, stream):
         """Write grid to a GridFile stream."""

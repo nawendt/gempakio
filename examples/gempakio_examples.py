@@ -2,8 +2,8 @@
 # coding: utf-8
 
 # # gempakIO Examples
-# Nathan Wendt ([email](mailto:nathan.wendt@noaa.gov)) ([@nawendt](https://www.twitter.com/nawendt))  
-# Meteorologist  
+# Nathan Wendt ([email](mailto:nathan.wendt@noaa.gov)) ([@nawendt](https://www.twitter.com/nawendt))
+# Meteorologist
 # [NWS SPC](https://www.spc.noaa.gov)
 
 # This notebook will expose you to the basic usage of gempakIO and how to load and extract data. To do that, we will go way back to April 3, 1974, the day of the Super Outbreak.
@@ -13,10 +13,10 @@
 # In[1]:
 
 
-import cartopy.crs as ccrs
 from cartopy import feature
-import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
 from matplotlib import cm, colors
+import matplotlib.pyplot as plt
 import metpy.calc as mpcalc
 from metpy.plots import Hodograph, SkewT, StationPlot
 from metpy.units import units
@@ -24,7 +24,6 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
 from gempakio import GempakGrid, GempakSounding, GempakSurface
-
 
 # ### Misc.
 

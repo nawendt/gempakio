@@ -372,13 +372,12 @@ class GempakFile:
         else:
             return None
 
-    @staticmethod
-    def _convert_vertical_coord(coord):
+    def _convert_vertical_coord(self, coord):
         """Convert integer vertical coordinate to name."""
         if coord <= 8:
             return VerticalCoordinates(coord).name.upper()
         else:
-            return struct.pack('i', coord).decode()
+            return struct.pack(f'{self.prefmt}i', coord).decode()
 
     @staticmethod
     def _fortran_ishift(i, shift):
@@ -887,14 +886,14 @@ class GempakGrid(GempakFile):
         # Do this now or the matched filter iterator will be consumed
         # prematurely.
         if date_time in ['last', 'LAST']:
-            date_time = [max((d.DATTIM1 for d in matched))]
+            date_time = [max(d.DATTIM1 for d in matched)]
         elif date_time in ['first', 'FIRST']:
-            date_time = [min((d.DATTIM1 for d in matched))]
+            date_time = [min(d.DATTIM1 for d in matched)]
 
         if date_time2 in ['last', 'LAST']:
-            date_time2 = [max((d.DATTIM2 for d in matched))]
+            date_time2 = [max(d.DATTIM2 for d in matched)]
         elif date_time2 in ['first', 'FIRST']:
-            date_time2 = [min((d.DATTIM2 for d in matched))]
+            date_time2 = [min(d.DATTIM2 for d in matched)]
 
         if parameter is not None:
             matched = filter(
@@ -1209,7 +1208,7 @@ class GempakSounding(GempakFile):
             soundings.append(self._merge_sounding(sounding))
         return soundings
 
-    def _merge_sounding(self, parts):
+    def _merge_sounding(self, parts):  # noqa:C901
         """Merge unmerged sounding data."""
         merged = {
             'STID': parts['STID'],
@@ -1898,9 +1897,9 @@ class GempakSounding(GempakFile):
         # Do this now or the matched filter iterator will be consumed
         # prematurely.
         if date_time in ['last', 'LAST']:
-            date_time = [max((d.DATTIM for d in matched))]
+            date_time = [max(d.DATTIM for d in matched)]
         elif date_time in ['first', 'FIRST']:
-            date_time = [min((d.DATTIM for d in matched))]
+            date_time = [min(d.DATTIM for d in matched)]
 
         if country is not None:
             matched = filter(
@@ -2638,9 +2637,9 @@ class GempakSurface(GempakFile):
         # Do this now or the matched filter iterator will be consumed
         # prematurely.
         if date_time in ['last', 'LAST']:
-            date_time = [max((d.DATTIM for d in matched))]
+            date_time = [max(d.DATTIM for d in matched)]
         elif date_time in ['first', 'FIRST']:
-            date_time = [min((d.DATTIM for d in matched))]
+            date_time = [min(d.DATTIM for d in matched)]
 
         if country is not None:
             matched = filter(
