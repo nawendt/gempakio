@@ -1029,7 +1029,7 @@ class SoundingFile(DataManagementFile):
         if not isinstance(data, dict):
             raise TypeError('data must be a dict.')
 
-        data = {k.upper(): self._replace_nan(np.asarray(v)) for k, v in data.items()}
+        data = {k.upper(): self._replace_nan(np.asarray(v.copy())) for k, v in data.items()}
         params = self._param_args(**data)
 
         if not self._validate_length(data):

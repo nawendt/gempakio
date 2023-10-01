@@ -15,9 +15,6 @@ from gempakio import GempakSurface
 
 def test_standard_surface():
     """Test to read a standard surface file."""
-    def dtparse(string):
-        return datetime.strptime(string, '%y%m%d/%H%M')
-
     skip = ['text', 'spcl']
 
     g = Path(__file__).parent / 'data' / 'lwc_std_sfc.sfc'
@@ -28,7 +25,7 @@ def test_standard_surface():
 
     gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
                          parse_dates=['YYMMDD/HHMM'],
-                         date_parser=dtparse)
+                         date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'})
     if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 
@@ -56,7 +53,7 @@ def test_ship_surface():
 
     gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
                          parse_dates=['YYMMDD/HHMM'],
-                         date_parser=dtparse)
+                         date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'})
     if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 

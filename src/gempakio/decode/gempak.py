@@ -809,7 +809,7 @@ class GempakGrid(GempakFile):
         date_time : datetime or array-like of datetime
             Datetime of the grid. Alternatively a string with
             the format YYYYmmddHHMM or first|FIRST or last|LAST
-            which function to retrieve the latest and oldest
+            which function to retrieve the oldest and latest
             time within the file, respectively.
 
         coordinate : str or array-like of str
@@ -821,8 +821,8 @@ class GempakGrid(GempakFile):
         date_time2 : datetime or array-like of datetime
             Secondary valid datetime of the grid. Alternatively
             a string with the format YYYYmmddHHMM or first|FIRST
-            or last|LAST which function to retrieve the latest
-            and oldest time within the file, respectively.
+            or last|LAST which function to retrieve the oldest
+            and latest time within the file, respectively.
 
         level2: float or array_like of float
             Secondary vertical level. Typically used for layers.
@@ -1841,7 +1841,7 @@ class GempakSounding(GempakFile):
         date_time : datetime or array-like of datetime
             Datetime of the sounding. Alternatively a string with
             the format YYYYmmddHHMM or first|FIRST or last|LAST
-            which function to retrieve the latest and oldest
+            which function to retrieve the oldest and latest
             time within the file, respectively.
 
         state : str or array-like of str
@@ -2362,10 +2362,14 @@ class GempakSurface(GempakFile):
                     for iprm, param in enumerate(parameters['name']):
                         values[param] = packed_buffer[iprm]
 
-            processed = self._process_report_text(report, values)
+            if 'TEXT' in values or 'SPCL' in values:
+                processed = self._process_report_text(report, values)
+                for rpt in processed:
+                    reports.append(rpt)
+            else:
+                report.update(**values)
+                reports.append(report)
 
-            for rpt in processed:
-                reports.append(rpt)
         return reports
 
     @staticmethod
@@ -2576,8 +2580,8 @@ class GempakSurface(GempakFile):
         date_time : datetime or array-like of datetime
             Datetime of the surface observation. Alternatively
             a string with the format YYYYmmddHHMM or first|FIRST
-            or last|LAST which function to retrieve the latest
-            and oldest time within the file, respectively.
+            or last|LAST which function to retrieve the oldest
+            and latest time within the file, respectively.
 
         state : str or array-like of str
             State where surface station is located.
