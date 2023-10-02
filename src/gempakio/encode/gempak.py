@@ -1073,7 +1073,7 @@ class SoundingFile(DataManagementFile):
                 std2 = stid[4:8]
                 stid = stid[:4]
 
-        new_row = (date_time.date(), date_time.time())
+        new_row = (self._datetime.date(), self._datetime.time())
         self._row_set.add(self.make_row_header(*new_row))
 
         new_column = (stid, stnm, slat, slon, selv, stat, coun, std2)
