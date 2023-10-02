@@ -33,8 +33,8 @@ def interp_logp_height(sounding, missing=-9999):
         if sounding['HGHT'][idx] != missing:
             maxlev = size + idx
             break
-        else:
-            idx -= 1
+
+        idx -= 1
 
     pbot = missing
     for i in range(maxlev):
