@@ -3,7 +3,22 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Setup script for installing gempakIO."""
 
-from setuptools import setup
+import numpy as np
+from setuptools import Extension, setup
 
 if __name__ == '__main__':
-    setup()
+    c_decode = Extension(
+        'gempakio.decode.c_decode',
+        ['src/gempakio/decode/c_decode.c'],
+        include_dirs=[np.get_include()]
+    )
+
+    c_gemlib = Extension(
+        'gempakio.c_gemlib',
+        ['src/gempakio/c_gemlib.c'],
+        include_dirs=[np.get_include()]
+    )
+
+    setup(
+        ext_modules=[c_decode]
+    )
