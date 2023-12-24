@@ -67,8 +67,12 @@ static PyObject *interp_logp_height(PyObject *self, PyObject *args) {
             &missing
             )
         ) {
-        PyErr_SetString(PyExc_TypeError, "Check input types.");
-        return NULL;
+            if (PyErr_Occurred()) {
+                return NULL;
+            } else {
+                PyErr_SetString(PyExc_TypeError, "Check input types.");
+                return NULL;
+            }
     }
 
     size = PyList_Size(PyDict_GetItemWithError(sounding, PyUnicode_FromString("HGHT")));
