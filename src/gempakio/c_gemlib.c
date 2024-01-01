@@ -37,6 +37,7 @@ static PyObject *interp_logp_height(PyObject *self, PyObject *args) {
     double density;
     double curve_scale;
     double t;
+    double zc;
     size_t i;
     size_t j;
     size_t k;
@@ -60,6 +61,7 @@ static PyObject *interp_logp_height(PyObject *self, PyObject *args) {
     PyObject *out;
     PyObject *err;
     PyObject *hght;
+    PyObject *z;
 
     if (!PyArg_ParseTuple(
             args, "O!|d",
@@ -75,17 +77,25 @@ static PyObject *interp_logp_height(PyObject *self, PyObject *args) {
             }
     }
 
-    size = PyList_Size(PyDict_GetItemWithError(sounding, PyUnicode_FromString("HGHT")));
+    hght = PyDict_GetItemWithError(sounding, PyUnicode_FromString("HGHT"));
+    if (!hght) {
+        return NULL;
+    }
+
+    size = PyList_Size(hght);
     if (PyErr_Occurred()) {
-        PyErr_SetString(PyExc_KeyError, "HGHT not in sounding object.");
-        err = PyErr_GetRaisedException();
         return NULL;
     }
 
     idx = -1;
     maxlev = -1;
     while (size + idx != 0) {
-        hght = PyList_GetItem(PyDict_GetItem(sounding, PyUnicode_FromString("HGHT")), idx);
+        hght = PyDict_GetItemWithError(sounding, PyUnicode_FromString("HGHT"));
+        z = PyList_GetItem(hght, idx);
+        if (!z) {
+            return NULL;
+        }
+        zc = PyFloat_AsDouble(z);
     }
     
 
