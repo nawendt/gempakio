@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Nathan Wendt.
+# Copyright (c) 2024 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK calculations."""
@@ -359,10 +359,7 @@ def mixing_ratio(dwpc, pres, missing=-9999):
         else:
             corr = (1.001 + ((pres - 100.) / 900.) * 0.0034)
             e = corr * vapr
-            if e > (0.5 * pres):
-                mixr = missing
-            else:
-                mixr = 0.62197 * (e / (pres - e)) * 1000.
+            mixr = missing if e > 0.5 * pres else 0.62197 * (e / (pres - e)) * 1000.0
     return mixr
 
 
@@ -472,10 +469,7 @@ def vapor_pressure(dwpc, missing=-9999):
     -----
     See GEMPAK function PR_VAPR
     """
-    if dwpc == missing:
-        vapr = missing
-    else:
-        vapr = 6.112 * np.exp((17.67 * dwpc) / (dwpc + 243.5))
+    vapr = missing if dwpc == missing else 6.112 * np.exp(17.67 * dwpc / (dwpc + 243.5))
     return vapr
 
 

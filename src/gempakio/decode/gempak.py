@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2024 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding various GEMPAK file formats."""
@@ -386,10 +386,7 @@ class GempakFile:
         if shift > 0:
             shifted = ctypes.c_int32(i << shift).value
         elif shift < 0:
-            if i < 0:
-                shifted = (i & mask) >> abs(shift)
-            else:
-                shifted = i >> abs(shift)
+            shifted = (i & mask) >> abs(shift) if i < 0 else i >> abs(shift)
         elif shift == 0:
             shifted = i
         else:
@@ -1944,10 +1941,7 @@ class GempakSounding(GempakFile):
 
         sndno = [(s.DTNO, s.SNDNO) for s in matched]
 
-        if self.merged:
-            data = self._unpack_merged(sndno)
-        else:
-            data = self._unpack_unmerged(sndno)
+        data = self._unpack_merged(sndno) if self.merged else self._unpack_unmerged(sndno)
 
         soundings = []
         for snd in data:
@@ -2395,12 +2389,9 @@ class GempakSurface(GempakFile):
         for param, txt in zip(['TEXT', 'SPCL'], [text, spcl]):
             if txt:
                 station = METAR_STATION_RE.search(txt)
-                if station is None:
-                    # If no station can be parsed, at least ensure the text
-                    # will be kept with the report we return.
-                    stnstr = '----'
-                else:
-                    stnstr = station.groupdict()['station']
+                # If no station can be parsed, at least ensure the text
+                # will be kept with the report we return.
+                stnstr = '----' if station is None else station.groupdict()['station']
 
                 if txt.count(stnstr) > 1:
                     # GEMPAK sometimes has more than one text report attached. We can
@@ -2530,12 +2521,12 @@ class GempakSurface(GempakFile):
         if country:
             station_id = set()
             for cty in country:
-                station_id.update(stn.ID for stn in self._sfinfo if stn.COUNTRY == cty)
+                station_id.update(stn.ID for stn in self._sfinfo if cty == stn.COUNTRY)
 
         if state:
             station_id = set()
             for st in state:
-                station_id.update(stn.ID for stn in self._sfinfo if stn.STATE == st)
+                station_id.update(stn.ID for stn in self._sfinfo if st == stn.STATE)
 
         time_matched = []
         if station_id:
