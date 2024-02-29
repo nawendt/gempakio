@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2024 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for encoding various GEMPAK file formats."""
@@ -138,10 +138,7 @@ class DataManagementFile:
         if shift > 0:
             shifted = ctypes.c_int32(i << shift).value
         elif shift < 0:
-            if i < 0:
-                shifted = (i & mask) >> abs(shift)
-            else:
-                shifted = i >> abs(shift)
+            shifted = (i & mask) >> abs(shift) if i < 0 else i >> abs(shift)
         elif shift == 0:
             shifted = i
         else:
@@ -720,15 +717,9 @@ class GridFile(DataManagementFile):
 
         out = np.zeros(lendat, dtype=np.int32)
 
-        if (grid == self._missing_float).any():
-            has_missing = True
-        else:
-            has_missing = False
+        has_missing = bool((grid == self._missing_float).any())
 
-        if (grid == self._missing_float).all():
-            all_missing = True
-        else:
-            all_missing = False
+        all_missing = bool((grid == self._missing_float).all())
 
         if all_missing:
             qmin = self._missing_float

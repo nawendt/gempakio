@@ -1,5 +1,5 @@
+# Copyright (c) 2024 Nathan Wendt.
 # Copyright (c) 2009,2016,2019 MetPy Developers.
-# Copyright (c) 2021 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tools for reading GEMPAK files."""
@@ -10,8 +10,8 @@ import struct
 import numpy as np
 
 
-class NamedStruct(struct.Struct):
-    """Parse bytes using `Struct` but provide named fields.
+class NamedStruct:
+    """Parse bytes using :class:`Struct` but provide named fields.
 
     Class from MetPy.
     """
@@ -29,7 +29,12 @@ class NamedStruct(struct.Struct):
             elif not i[0]:  # Skip items with no name
                 conv_off += 1
         self._tuple = namedtuple(tuple_name, ' '.join(n for n in names if n))
-        super().__init__(prefmt + ''.join(f for f in fmts if f))
+        self._struct = struct.Struct(prefmt + ''.join(f for f in fmts if f))
+
+    @property
+    def size(self):
+        """Return the size of the struct in bytes."""
+        return self._struct.size
 
     def _create(self, items):
         if self.converters:
@@ -46,11 +51,11 @@ class NamedStruct(struct.Struct):
 
     def unpack(self, s):
         """Parse bytes and return a namedtuple."""
-        return self._create(super().unpack(s))
+        return self._create(self._struct.unpack(s))
 
     def unpack_from(self, buff, offset=0):
         """Read bytes from a buffer and return as a namedtuple."""
-        return self._create(super().unpack_from(buff, offset))
+        return self._create(self._struct.unpack_from(buff, offset))
 
     def unpack_file(self, fobj):
         """Unpack the next bytes from a file object."""
@@ -59,7 +64,7 @@ class NamedStruct(struct.Struct):
     def pack(self, **kwargs):
         """Pack the arguments into bytes using the structure."""
         t = self.make_tuple(**kwargs)
-        return super().pack(*t)
+        return self._struct.pack(*t)
 
 
 class IOBuffer:

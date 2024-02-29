@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2024 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for encoding GEMPAK sounding files."""
@@ -56,9 +56,9 @@ def test_surface_write():
         test_obj = in_sfc.sfjson()
 
         for ob1, ob2 in zip(sfc_obj, test_obj):
-            for prop in ob1['properties'].keys():
+            for prop in ob1['properties']:
                 assert ob1['properties'][prop] == ob2['properties'][prop]
-            for param in ob1['values'].keys():
+            for param in ob1['values']:
                 assert ob1['values'][param] == ob2['values'][param]
     finally:
         gem.unlink()
