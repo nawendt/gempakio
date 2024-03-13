@@ -13,6 +13,18 @@ import pytest
 from gempakio import GempakGrid
 
 
+@pytest.mark.parametrize('order', ['little', 'big'])
+def test_byte_swap(order):
+    """"Test byte swapping."""
+    g = Path(__file__).parent / 'data' / f'{order}_endian.grd'
+
+    grid = GempakGrid(g).gdxarray()[0].squeeze()
+
+    reference = np.ones((113, 151), dtype='int32')
+
+    np.testing.assert_equal(grid, reference)
+
+
 @pytest.mark.parametrize('grid_name', ['none', 'diff', 'dec', 'grib'])
 def test_grid_loading(grid_name):
     """Test reading grids with various packing."""
@@ -25,6 +37,22 @@ def test_grid_loading(grid_name):
     gempak = np.load(d)['values']
 
     np.testing.assert_allclose(gio, gempak, rtol=1e-6, atol=0)
+
+
+def test_multi_level_multi_time_access():
+    """Test accessing data with multiple levels and times."""
+    g = Path(__file__).parent / 'data' / 'multilevel_multidate.grd'
+
+    grid = GempakGrid(g)
+
+    grid.gdxarray(
+        parameter='STPC',
+        date_time='202403040000',
+        coordinate='HGHT',
+        level=0,
+        date_time2='202403050000',
+        level2=1
+    )
 
 
 @pytest.mark.parametrize('keyword,date_time', [
