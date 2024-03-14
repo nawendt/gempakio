@@ -10,6 +10,3 @@ gempakIO uses three decoding classes (`GempakGrid`, `GempakSounding`, and `Gempa
 *  GEMPAK grids packed with the NMC method cannot be read. I have not found a file to test in the wild so this may not get added.
 *  GEMPAK had conversion methods for floating point number representations (e.g., IBM, IEEE, etc.). This package assumes IEEE. As it is relatively unlikely that there are much data not using IEEE floats, there is no plan to add conversions from other formats unless the need arises.
 *  GEMPAK sounding and surface files can have their parameter data packed/compressed, but this is not currently implemented. GEMPAK grids do have basic GRIB packing by default, but GRIB2 packing is not implemented at this time.
-
-### Things Implemented With Limited Testing
-*  Climate surface file type (see [GEMPAK Surface Library](https://github.com/Unidata/gempak/blob/master/gempak/txt/gemlib/sflib.txt) documentation). This is another situation where I have no files to test.

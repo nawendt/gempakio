@@ -75,6 +75,20 @@ def test_merged():
     np.testing.assert_allclose(gdtar, ddtar, rtol=1e-10, atol=1e-2)
 
 
+@pytest.mark.parametrize('access_type', ['STID', 'STNM'])
+def test_sounding_access(access_type):
+    """Test for proper sounding retrieval with multi-parameter filter."""
+    g = Path(__file__).parent / 'data' / 'merged_nopack.snd'
+    gso = GempakSounding(g)
+
+    if access_type == 'STID':
+        gso.snxarray(station_id='OUN', country='US', state='OK',
+                     date_time='202101200000')
+    elif access_type == 'STNM':
+        gso.snxarray(station_number=72357, country='US', state='OK',
+                     date_time='202101200000')
+
+
 @pytest.mark.parametrize('text_type', ['txta', 'txtb', 'txtc', 'txpb'])
 def test_sounding_text(text_type):
     """Test for proper decoding of coded message text."""

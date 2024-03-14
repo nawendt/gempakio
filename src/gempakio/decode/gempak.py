@@ -224,7 +224,7 @@ class GempakFile:
             # Navigation Block
             navb_size = self._buffer.read_int(4, self.endian, False)
             if navb_size != NAVB_SIZE:
-                raise ValueError('Navigation block size does not match GEMPAK specification')
+                raise ValueError('Navigation block size does not match GEMPAK specification.')
             else:
                 self.navigation_block = (
                     self._buffer.read_struct(NamedStruct(self.grid_nav_fmt,
@@ -238,7 +238,7 @@ class GempakFile:
             anlb_size = self._buffer.read_int(4, self.endian, False)
             anlb_start = self._buffer.set_mark()
             if anlb_size != ANLB_SIZE:
-                raise ValueError('Analysis block size does not match GEMPAK specification')
+                raise ValueError('Analysis block size does not match GEMPAK specification.')
             else:
                 anlb_type = self._buffer.read_struct(struct.Struct(self.prefmt + 'f'))[0]
                 self._buffer.jump_to(anlb_start)
@@ -318,9 +318,9 @@ class GempakFile:
 
     def _swap_bytes(self, binary):
         """Swap between little and big endian."""
-        self.swaped_bytes = (struct.pack('@i', 1) != binary)
+        self.swapped_bytes = (struct.pack('@i', 1) != binary)
 
-        if self.swaped_bytes:
+        if self.swapped_bytes:
             if sys.byteorder == 'little':
                 self.prefmt = '>'
                 self.endian = 'big'
@@ -1100,15 +1100,12 @@ class GempakSounding(GempakFile):
                 fmt_code = {
                     DataTypes.real: 'f',
                     DataTypes.realpack: 'i',
-                    DataTypes.character: 's',
                 }.get(part.data_type)
 
                 if fmt_code is None:
                     raise NotImplementedError(
                         f'No methods for data type {part.data_type}'
                     )
-                if fmt_code == 's':
-                    lendat *= BYTES_PER_WORD
 
                 packed_buffer = (
                     self._buffer.read_struct(
@@ -2120,12 +2117,19 @@ class GempakSurface(GempakFile):
         return sorted(self._sfinfo)
 
     def _get_surface_type(self):
-        """Determine type of surface file."""
-        if len(self.row_headers) == 1:
+        """Determine type of surface file.
+
+        Notes
+        -----
+        See GEMPAK SFLIB documentation for type definitions.
+        """
+        if (len(self.row_headers) == 1
+            and 'DATE' in self.column_keys
+            and 'STID' in self.column_keys):
             self.surface_type = 'ship'
-        elif 'DATE' in self.row_keys:
+        elif 'DATE' in self.row_keys and 'STID' in self.column_keys:
             self.surface_type = 'standard'
-        elif 'DATE' in self.column_keys:
+        elif 'DATE' in self.column_keys and 'STID' in self.row_keys:
             self.surface_type = 'climate'
         else:
             raise TypeError('Unknown surface data type')
@@ -2626,7 +2630,6 @@ class GempakSurface(GempakFile):
             country = [c.upper() for c in country]
 
         # Figure out which columns to extract from the file
-        # matched = self._sfinfo.copy()
         matched = sorted(self._sfinfo)
 
         # Do this now or the matched filter iterator will be consumed

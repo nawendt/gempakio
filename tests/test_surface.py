@@ -13,12 +13,10 @@ import pytest
 from gempakio import GempakSurface
 
 
-def test_standard_surface():
-    """Test to read a standard surface file."""
-    skip = ['text', 'spcl']
-
-    g = Path(__file__).parent / 'data' / 'lwc_std_sfc.sfc'
-    d = Path(__file__).parent / 'data' / 'lwc_std_sfc.csv'
+def test_climate_surface():
+    """Test to read a climate surface file."""
+    g = Path(__file__).parent / 'data' / 'climate.sfc'
+    d = Path(__file__).parent / 'data' / 'climate.csv'
 
     gsf = GempakSurface(g)
     gstns = gsf.sfjson()
@@ -35,15 +33,29 @@ def test_standard_surface():
         gemsfc = gempak.loc[idx_key, :]
 
         for param, val in stn['values'].items():
-            if param not in skip:
-                assert val == pytest.approx(gemsfc[param.upper()])
+            assert val == pytest.approx(gemsfc[param.upper()])
+
+
+def test_multiple_special_observations():
+    """Test text decoding of surface file with multiple special reports in single time."""
+    g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
+    d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
+
+    gsf = GempakSurface(g)
+    #  Report text that is too long will end up truncated in surface files
+    nearest = gsf.nearest_time('202109071605', station_id='MSN', include_special=True)
+    text = nearest[0]['values']['spcl']
+    date_time = nearest[0]['properties']['date_time']
+
+    gempak = pd.read_csv(d)
+    gem_text = gempak.loc[:, 'SPCL_TRUNC'][0]
+
+    assert date_time == datetime(2021, 9, 7, 16, 4)
+    assert text == gem_text
 
 
 def test_ship_surface():
     """Test to read a ship surface file."""
-    def dtparse(string):
-        return datetime.strptime(string, '%y%m%d/%H%M')
-
     skip = ['text', 'spcl']
 
     g = Path(__file__).parent / 'data' / 'ship_sfc.sfc'
@@ -73,6 +85,46 @@ def test_ship_surface():
                 np.testing.assert_allclose(decoded_vals, actual_vals)
 
 
+def test_standard_surface():
+    """Test to read a standard surface file."""
+    skip = ['text', 'spcl']
+
+    g = Path(__file__).parent / 'data' / 'lwc_std_sfc.sfc'
+    d = Path(__file__).parent / 'data' / 'lwc_std_sfc.csv'
+
+    gsf = GempakSurface(g)
+    gstns = gsf.sfjson()
+
+    gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
+                         parse_dates=['YYMMDD/HHMM'],
+                         date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'})
+    if not gempak.index.is_monotonic_increasing:
+        gempak.sort_index(inplace=True)
+
+    for stn in gstns:
+        idx_key = (stn['properties']['station_id'],
+                   stn['properties']['date_time'])
+        gemsfc = gempak.loc[idx_key, :]
+
+        for param, val in stn['values'].items():
+            if param not in skip:
+                assert val == pytest.approx(gemsfc[param.upper()])
+
+
+@pytest.mark.parametrize('access_type', ['STID', 'STNM'])
+def test_surface_access(access_type):
+    """Test for proper surface retrieval with multi-parameter filter."""
+    g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
+    gsf = GempakSurface(g)
+
+    if access_type == 'STID':
+        gsf.sfjson(station_id='MSN', country='US', state='WI',
+                   date_time='202109070000')
+    elif access_type == 'STNM':
+        gsf.sfjson(station_number=726410, country='US', state='WI',
+                   date_time='202109070000')
+
+
 @pytest.mark.parametrize('text_type,date_time,speci', [
     ('text', '202109070000', False), ('spcl', '202109071600', True)
 ])
@@ -89,24 +141,6 @@ def test_surface_text(text_type, date_time, speci):
     gempak = pd.read_csv(d)
     gem_text = gempak.loc[:, text_type.upper()][0]
 
-    assert text == gem_text
-
-
-def test_multiple_special_observations():
-    """Test text decoding of surface file with multiple special reports in single time."""
-    g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
-    d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
-
-    gsf = GempakSurface(g)
-    #  Report text that is too long will end up truncated in surface files
-    nearest = gsf.nearest_time('202109071605', station_id='MSN', include_special=True)
-    text = nearest[0]['values']['spcl']
-    date_time = nearest[0]['properties']['date_time']
-
-    gempak = pd.read_csv(d)
-    gem_text = gempak.loc[:, 'SPCL_TRUNC'][0]
-
-    assert date_time == datetime(2021, 9, 7, 16, 4)
     assert text == gem_text
 
 
