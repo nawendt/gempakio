@@ -7,4 +7,4 @@ from gempakio.decode.gempak import GempakGrid, GempakSounding, GempakSurface
 from gempakio.decode.vgf import VectorGraphicFile
 from gempakio.encode.gempak import GridFile, SoundingFile, SurfaceFile
 
-__version__ = '1.0.2'
+__version__ = '1.1.0'
