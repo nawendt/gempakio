@@ -10,11 +10,11 @@
 # %% [markdown]
 # ### Imports
 
+from cartopy import feature
 # %%
 import cartopy.crs as ccrs
-from cartopy import feature
-import matplotlib.pyplot as plt
 from matplotlib import colors
+import matplotlib.pyplot as plt
 import metpy.calc as mpcalc
 from metpy.plots import Hodograph, SkewT, StationPlot
 from metpy.units import units
@@ -22,7 +22,8 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import pyproj
 
-from gempakio import GempakGrid, GempakSounding, GempakSurface, GridFile, SoundingFile, SurfaceFile
+from gempakio import (GempakGrid, GempakSounding, GempakSurface, GridFile, SoundingFile,
+                      SurfaceFile)
 
 # %% [markdown]
 # ### Misc.
