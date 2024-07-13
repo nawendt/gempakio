@@ -1,0 +1,8 @@
+[paths]
+source =
+    src/
+    /*/site-packages
+
+[run]
+source = tests
+source_pkgs = gempakio

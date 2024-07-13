@@ -30,6 +30,7 @@ lint = [
 ]
 test = [
     'pytest',
+    'pytest-cov'
 ]
 
 [build-system]
@@ -55,12 +56,14 @@ combine_star = true
 [tool.ruff]
 line-length = 95
 exclude = ['examples']
+
+[tool.ruff.lint]
 select = ['A', 'B', 'C', 'CPY001', 'D', 'E', 'E226', 'F', 'G', 'I', 'N', 'NPY', 'Q', 'R', 'S', 'SIM', 'T', 'U', 'W']
 ignore = ['F405', 'I001', 'RET504', 'RET505', 'RET506', 'RET507', 'RUF100']
 preview = true
 explicit-preview-rules = true
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 'src/gempakio/__init__.py' = ['F401']
 'tests/*.py' = ['S101']
 
@@ -68,11 +71,11 @@ explicit-preview-rules = true
 notice-rgx = '(?i)Copyright\s+(\(C\)\s+)?\d{4}'
 author = 'Nathan Wendt'
 
-[tool.ruff.flake8-quotes]
+[tool.ruff.lint.flake8-quotes]
 inline-quotes = 'single'
 multiline-quotes = 'double'
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ['gempakio']
 force-single-line = false
 relative-imports-order = 'closest-to-furthest'
@@ -80,10 +83,10 @@ force-sort-within-sections = true
 order-by-type = false
 combine-as-imports = true
 
-[tool.ruff.mccabe]
+[tool.ruff.lint.mccabe]
 max-complexity = 61
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = 'numpy'
 
 [tool.setuptools]
