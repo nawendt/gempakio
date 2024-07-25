@@ -341,7 +341,12 @@ class GempakFile:
 
     @staticmethod
     def _convert_dattim(dattim):
-        """Convert GEMPAK DATTIM integer to datetime object."""
+        """Convert GEMPAK DATTIM integer to datetime object.
+
+        Notes
+        -----
+        See GEMPAK subroutine TG_FTOI.
+        """
         if dattim:
             if dattim < 100000000:
                 dt = datetime.strptime(f'{dattim:06d}', '%y%m%d')
@@ -353,7 +358,12 @@ class GempakFile:
 
     @staticmethod
     def _convert_ftime(ftime):
-        """Convert GEMPAK forecast time and type integer."""
+        """Convert GEMPAK forecast time and type integer.
+
+        Notes
+        -----
+        See GEMPAK subroutine TG_CFTM.
+        """
         if ftime >= 0:
             iftype = ForecastType(ftime // 100000)
             iftime = ftime - iftype.value * 100000

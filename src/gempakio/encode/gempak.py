@@ -7,6 +7,7 @@ from collections import namedtuple
 import ctypes
 from datetime import datetime, timedelta
 from io import BytesIO
+import re
 import struct
 
 import numpy as np
@@ -599,8 +600,17 @@ class GridFile(DataManagementFile):
 
         date_time : str or datetime
             Grid date and time. Valid string formats are YYYYmmddHHMM
-            or YYYYmmddHHMMFx, where x is the forecast hour from the preceding
-            initialization date and time.
+            or YYYYmmddHHMMTx, where T is the grid type and x is the forecast
+            hour from the preceding initialization date and time.
+
+            Valid types:
+                A : Analysis
+                F : Forecast
+                V : Valid
+                G : Guess
+                I : Initial
+
+            An analysis (A) is assumed if no type is designated.
 
         level2 : int or None
             Secondary vertical level of the grid. This is typically used for
@@ -644,16 +654,36 @@ class GridFile(DataManagementFile):
 
         level = int(level)
 
+        forecast_hour = 0
+        forecast_minute = 0
+        grid_type = 0
         if isinstance(date_time, str):
             date_time = date_time.upper()
-            if 'F' in date_time:
-                init, fhr = date_time.split('F')
-                self._datetime = (datetime.strptime(init, '%Y%m%d%H%M')
-                                  + timedelta(hours=int(fhr)))
+            split_time = re.split('([AFVIG])', date_time)
+            if len(split_time) == 3:
+                init, gtype, fhr = split_time
+                if len(fhr) > 3:
+                    fmin = fhr[3:]
+                    fhr = fhr[:3]
+                    init_date = datetime.strptime(init, '%Y%m%d%H%M')
+                    forecast_hour = int(fhr)
+                    forecast_minute = int(fmin)
+                else:
+                    init_date = datetime.strptime(init, '%Y%m%d%H%M')
+                    forecast_hour = int(fhr)
+                grid_type = {
+                    'A': 0,
+                    'F': 1,
+                    'V': 1,
+                    'G': 2,
+                    'I': 3
+                }.get(gtype)
             else:
-                self._datetime = datetime.strptime(date_time, '%Y%m%d%H%M')
+                init_date = datetime.strptime(date_time, '%Y%m%d%H%M')
+                forecast_hour = int(init_date.strftime('%H'))
+                forecast_minute = int(init_date.strftime('%M'))
         elif isinstance(date_time, datetime):
-            self._datetime = date_time
+            init_date = date_time
         else:
             raise TypeError('date_time must be string or datetime.')
 
@@ -663,16 +693,36 @@ class GridFile(DataManagementFile):
         if level2 is not None:
             level2 = int(level2)
 
+        forecast_hour2 = 0
+        forecast_minute2 = 0
+        grid_type2 = 0
         if isinstance(date_time2, str):
             date_time2 = date_time2.upper()
-            if 'F' in date_time:
-                init, fhr = date_time2.split('F')
-                self._datetime2 = (datetime.strptime(init, '%Y%m%d%H%M')
-                                   + timedelta(hours=int(fhr)))
+            split_time = re.split('([AFVIG])', date_time2)
+            if len(split_time) == 3:
+                init, gtype, fhr = split_time
+                if len(fhr) > 3:
+                    fmin = fhr[3:]
+                    fhr = fhr[:3]
+                    init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
+                    forecast_hour2 = int(fhr)
+                    forecast_minute2 = int(fmin)
+                else:
+                    init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
+                    forecast_hour2 = int(fhr)
+                grid_type2 = {
+                    'A': 0,
+                    'F': 1,
+                    'V': 1,
+                    'G': 2,
+                    'I': 3
+                }.get(gtype)
             else:
-                self._datetime2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
+                init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
+                forecast_hour2 = int(init_date.strftime('%H'))
+                forecast_minute2 = int(init_date.strftime('%M'))
         elif isinstance(date_time2, datetime) or date_time2 is None:
-            self._datetime2 = date_time2
+            init_date2 = date_time2
         else:
             raise TypeError('date_time must be string or datetime or None.')
 
@@ -680,10 +730,10 @@ class GridFile(DataManagementFile):
         gpm1, gpm2, gpm3 = (pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4))
 
         new_column = (
-            self._datetime.date(),
-            self._datetime.time(),
-            self._datetime2.date() if date_time2 is not None else 0,
-            self._datetime2.time() if date_time2 is not None else 0,
+            init_date.date(),
+            (grid_type, forecast_hour, forecast_minute),
+            init_date2.date() if date_time2 is not None else 0,
+            (grid_type2, forecast_hour2, forecast_minute2),
             level,
             level2 if level2 is not None else -1,
             (self._encode_vertical_coordinate(vertical_coordinate)
@@ -808,11 +858,9 @@ class GridFile(DataManagementFile):
                             idate = 0
                         stream.write_int(idate)
                     elif key in ['GTM1', 'GTM2']:
-                        try:
-                            itime = int(getattr(ch, key).strftime('%H%M'))
-                        except AttributeError:
-                            itime = 0
-                        stream.write_int(itime)
+                        itype, ihr, imin = getattr(ch, key)
+                        ftime = itype * 100000 + int(f'{ihr:03d}{imin:02d}')
+                        stream.write_int(ftime)
                     else:
                         stream.write_int(getattr(ch, key))
 
