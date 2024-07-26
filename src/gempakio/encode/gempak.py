@@ -660,16 +660,16 @@ class GridFile(DataManagementFile):
         if isinstance(date_time, str):
             date_time = date_time.upper()
             split_time = re.split('([AFVIG])', date_time)
+            print(split_time)
             if len(split_time) == 3:
                 init, gtype, fhr = split_time
+                init_date = datetime.strptime(init, '%Y%m%d%H%M')
                 if len(fhr) > 3:
                     fmin = fhr[3:]
                     fhr = fhr[:3]
-                    init_date = datetime.strptime(init, '%Y%m%d%H%M')
                     forecast_hour = int(fhr)
                     forecast_minute = int(fmin)
                 else:
-                    init_date = datetime.strptime(init, '%Y%m%d%H%M')
                     forecast_hour = int(fhr)
                 grid_type = {
                     'A': 0,
@@ -701,14 +701,13 @@ class GridFile(DataManagementFile):
             split_time = re.split('([AFVIG])', date_time2)
             if len(split_time) == 3:
                 init, gtype, fhr = split_time
+                init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
                 if len(fhr) > 3:
                     fmin = fhr[3:]
                     fhr = fhr[:3]
-                    init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
                     forecast_hour2 = int(fhr)
                     forecast_minute2 = int(fmin)
                 else:
-                    init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
                     forecast_hour2 = int(fhr)
                 grid_type2 = {
                     'A': 0,
@@ -717,6 +716,8 @@ class GridFile(DataManagementFile):
                     'G': 2,
                     'I': 3
                 }.get(gtype)
+                if grid_type != grid_type2:
+                    raise ValueError('Grid type mismatch in date_time and date_time2.')
             else:
                 init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
                 forecast_hour2 = int(init_date.strftime('%H'))
@@ -730,9 +731,9 @@ class GridFile(DataManagementFile):
         gpm1, gpm2, gpm3 = (pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4))
 
         new_column = (
-            init_date.date(),
+            (grid_type, init_date),
             (grid_type, forecast_hour, forecast_minute),
-            init_date2.date() if date_time2 is not None else 0,
+            (grid_type2, init_date2) if date_time2 is not None else 0,
             (grid_type2, forecast_hour2, forecast_minute2),
             level,
             level2 if level2 is not None else -1,
@@ -852,14 +853,22 @@ class GridFile(DataManagementFile):
                     stream.write_string(getattr(ch, key))
                 elif 'i' in dtype:
                     if key in ['GDT1', 'GDT2']:
-                        try:
-                            idate = int(getattr(ch, key).strftime('%y%m%d'))
-                        except AttributeError:
+                        value = getattr(ch, key)
+                        if value != 0:
+                            itype, dattim = value
+                            if itype == 0:
+                                idate = int(dattim.strftime('%y%m%d'))
+                            else:
+                                idate = int(dattim.strftime('%m%d%y%H%M'))
+                        else:
                             idate = 0
                         stream.write_int(idate)
                     elif key in ['GTM1', 'GTM2']:
                         itype, ihr, imin = getattr(ch, key)
-                        ftime = itype * 100000 + int(f'{ihr:03d}{imin:02d}')
+                        if itype == 0:
+                            ftime = int(f'{ihr:02d}{imin:02d}')
+                        else:
+                            ftime = itype * 100000 + int(f'{ihr:03d}{imin:02d}')
                         stream.write_int(ftime)
                     else:
                         stream.write_int(getattr(ch, key))

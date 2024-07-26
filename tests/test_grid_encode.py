@@ -8,8 +8,26 @@ import tempfile
 
 import numpy as np
 import pyproj
+import pytest
 
 from gempakio import GempakGrid, GridFile
+
+
+def test_grid_type_mismatch():
+    """Test for grid type mismatches."""
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 '
+                       '+lat_2=25.0 +ellps=sphere +R=6371200.0')
+
+    grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
+
+    with np.load(grid) as dat:
+        tmpc = dat['tmpc']
+        lat = dat['lat']
+        lon = dat['lon']
+    out_grid = GridFile(lon, lat, proj)
+
+    with pytest.raises(ValueError):
+        out_grid.add_grid(tmpc, 'tmpc', None, 0, '202211130200', 0, '202211130000F002')
 
 
 def test_grid_write():
@@ -69,6 +87,7 @@ def test_grid_write_minutes():
             gem = Path(tmp.name)
 
         in_grid = GempakGrid(gem)
+        print(in_grid.gdxarray())
         test_tmpc = in_grid.gdxarray(parameter='tmpc', date_time='202211130215',
                                      coordinate=None, level=0)[0].squeeze()
         test_lat = test_tmpc.lat
