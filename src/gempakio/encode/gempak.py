@@ -660,7 +660,6 @@ class GridFile(DataManagementFile):
         if isinstance(date_time, str):
             date_time = date_time.upper()
             split_time = re.split('([AFVIG])', date_time)
-            print(split_time)
             if len(split_time) == 3:
                 init, gtype, fhr = split_time
                 init_date = datetime.strptime(init, '%Y%m%d%H%M')

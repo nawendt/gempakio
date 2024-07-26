@@ -87,7 +87,6 @@ def test_grid_write_minutes():
             gem = Path(tmp.name)
 
         in_grid = GempakGrid(gem)
-        print(in_grid.gdxarray())
         test_tmpc = in_grid.gdxarray(parameter='tmpc', date_time='202211130215',
                                      coordinate=None, level=0)[0].squeeze()
         test_lat = test_tmpc.lat
