@@ -683,6 +683,8 @@ class GridFile(DataManagementFile):
                 forecast_minute = int(init_date.strftime('%M'))
         elif isinstance(date_time, datetime):
             init_date = date_time
+            forecast_hour = int(init_date.strftime('%H'))
+            forecast_minute = int(init_date.strftime('%M'))
         else:
             raise TypeError('date_time must be string or datetime.')
 
@@ -695,36 +697,39 @@ class GridFile(DataManagementFile):
         forecast_hour2 = 0
         forecast_minute2 = 0
         grid_type2 = 0
-        if isinstance(date_time2, str):
-            date_time2 = date_time2.upper()
-            split_time = re.split('([AFVIG])', date_time2)
-            if len(split_time) == 3:
-                init, gtype, fhr = split_time
-                init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
-                if len(fhr) > 3:
-                    fmin = fhr[3:]
-                    fhr = fhr[:3]
-                    forecast_hour2 = int(fhr)
-                    forecast_minute2 = int(fmin)
+        if date_time2 is not None:
+            if isinstance(date_time2, str):
+                date_time2 = date_time2.upper()
+                split_time = re.split('([AFVIG])', date_time2)
+                if len(split_time) == 3:
+                    init, gtype, fhr = split_time
+                    init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
+                    if len(fhr) > 3:
+                        fmin = fhr[3:]
+                        fhr = fhr[:3]
+                        forecast_hour2 = int(fhr)
+                        forecast_minute2 = int(fmin)
+                    else:
+                        forecast_hour2 = int(fhr)
+                    grid_type2 = {
+                        'A': 0,
+                        'F': 1,
+                        'V': 1,
+                        'G': 2,
+                        'I': 3
+                    }.get(gtype)
+                    if grid_type != grid_type2:
+                        raise ValueError('Grid type mismatch in date_time and date_time2.')
                 else:
-                    forecast_hour2 = int(fhr)
-                grid_type2 = {
-                    'A': 0,
-                    'F': 1,
-                    'V': 1,
-                    'G': 2,
-                    'I': 3
-                }.get(gtype)
-                if grid_type != grid_type2:
-                    raise ValueError('Grid type mismatch in date_time and date_time2.')
+                    init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
+                    forecast_hour2 = int(init_date2.strftime('%H'))
+                    forecast_minute2 = int(init_date2.strftime('%M'))
+            elif isinstance(date_time2, datetime):
+                init_date2 = date_time2
+                forecast_hour2 = int(init_date2.strftime('%H'))
+                forecast_minute2 = int(init_date2.strftime('%M'))
             else:
-                init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
-                forecast_hour2 = int(init_date.strftime('%H'))
-                forecast_minute2 = int(init_date.strftime('%M'))
-        elif isinstance(date_time2, datetime) or date_time2 is None:
-            init_date2 = date_time2
-        else:
-            raise TypeError('date_time must be string or datetime or None.')
+                raise TypeError('date_time must be string or datetime or None.')
 
         pbuff = f'{parameter_name:<12s}'
         gpm1, gpm2, gpm3 = (pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4))
