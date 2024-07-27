@@ -600,10 +600,11 @@ class GridFile(DataManagementFile):
 
         date_time : str or datetime
             Grid date and time. Valid string formats are YYYYmmddHHMM
-            or YYYYmmddHHMMTx, where T is the grid type and x is the forecast
-            hour from the preceding initialization date and time.
+            or YYYYmmddHHMMThhhmm, where T is the grid type and hhhmm is the forecast
+            hour/minute from the preceding initialization date and time. mm can be omitted
+            not used. If hhh is also missing, 0 will be assumed.
 
-            Valid types:
+            Valid types (T):
                 A : Analysis
                 F : Forecast
                 V : Valid
@@ -658,6 +659,8 @@ class GridFile(DataManagementFile):
         forecast_minute = 0
         grid_type = 0
         if isinstance(date_time, str):
+            if len(date_time) < 12:
+                raise ValueError(f'{date_time} does not match minimum format of YYYYmmddHHMM.')
             date_time = date_time.upper()
             split_time = re.split('([AFVIG])', date_time)
             if len(split_time) == 3:
@@ -677,6 +680,8 @@ class GridFile(DataManagementFile):
                     'G': 2,
                     'I': 3
                 }.get(gtype)
+            elif len(split_time) > 3:
+                raise ValueError(f'Cannot parse malformed date_time input {date_time}.')
             else:
                 init_date = datetime.strptime(date_time, '%Y%m%d%H%M')
                 forecast_hour = int(init_date.strftime('%H'))
@@ -699,6 +704,9 @@ class GridFile(DataManagementFile):
         grid_type2 = 0
         if date_time2 is not None:
             if isinstance(date_time2, str):
+                if len(date_time) < 12:
+                    raise ValueError(f'{date_time2} does not match minimum format of '
+                                     'YYYYmmddHHMM.')
                 date_time2 = date_time2.upper()
                 split_time = re.split('([AFVIG])', date_time2)
                 if len(split_time) == 3:
@@ -720,6 +728,8 @@ class GridFile(DataManagementFile):
                     }.get(gtype)
                     if grid_type != grid_type2:
                         raise ValueError('Grid type mismatch in date_time and date_time2.')
+                elif len(split_time) > 3:
+                    raise ValueError(f'Cannot parse malformed date_time2 input {date_time2}.')
                 else:
                     init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
                     forecast_hour2 = int(init_date2.strftime('%H'))
