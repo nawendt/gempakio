@@ -448,7 +448,7 @@ class GridFile(DataManagementFile):
             }
         }
 
-        if lat.shape != lon.shape:
+        if not use_xy and lat.shape != lon.shape:
             raise ValueError('Input coordinates must be same dimensions.')
 
         if not isinstance(projection, pyproj.Proj):
@@ -510,7 +510,7 @@ class GridFile(DataManagementFile):
 
         if name is None:
             method = self.projection.crs.coordinate_operation.method_name
-            if method == 'Equidistant Cylindrical':
+            if 'Equidistant Cylindrical' in method:
                 name = 'equidistant_cylindrical'
             elif method == 'Gnomonic':
                 name = 'gnomonic'
@@ -522,15 +522,19 @@ class GridFile(DataManagementFile):
             self.angle1 = params['standard_parallel']
             self.angle2 = params['longitude_of_projection_origin']
             self.angle3 = self.rotation
-        elif name in ['stereographic', 'polar_stereographic']:
+        elif name == 'polar_stereographic':
             self.angle1 = params['latitude_of_projection_origin']
-            self.angle2 = params['longitude_of_projection_origin']
+            self.angle2 = params['straight_vertical_longitude_from_pole']
             if self.angle1 == 90:
                 self.gemproj = 'NPS'
             elif self.angle1 == -90:
                 self.gemproj = 'SPS'
             else:
-                self.gemproj = 'STR'
+                raise ValueError('Polar stereographic projections must have angle1 90 or -90.')
+        elif name in ['stereographic', 'polar_stereographic']:
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['longitude_of_projection_origin']
+            self.gemproj = 'STR'
             self.angle3 = self.rotation
         elif name == 'lambert_conformal_conic':
             self.angle1, self.angle3 = params['standard_parallel']

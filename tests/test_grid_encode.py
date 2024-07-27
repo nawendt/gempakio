@@ -453,3 +453,40 @@ def test_grid_write_initial():
         np.testing.assert_allclose(test_lon, lon, rtol=1e-6, atol=0)
     finally:
         gem.unlink()
+
+
+@pytest.mark.parametrize('proj_type', ['conical', 'cylindrical', 'azimuthal'])
+def test_grid_write_projected_using_xy(proj_type):
+    """Test projections and coordinates."""
+    g = Path(__file__).parent / 'data' / f'{proj_type}.grd'
+    d = Path(__file__).parent / 'data' / f'{proj_type}.npz'
+
+    grid = GempakGrid(g)
+    y = grid.y
+    x = grid.x
+    tmpk = grid.gdxarray()[0].squeeze().values
+    proj = pyproj.Proj(grid.crs)
+
+    out_grid = GridFile(x, y, proj, use_xy=True)
+    out_grid.add_grid(tmpk, 'tmpk', 'pres', 850, '199108190000F024')
+
+    kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
+    try:
+        with tempfile.NamedTemporaryFile(**kwargs) as tmp:
+            out_grid.to_gempak(tmp.name)
+            gem = Path(tmp.name)
+
+        in_grid = GempakGrid(gem)
+        test_tmpk = in_grid.gdxarray(parameter='tmpk', date_time='199108200000',
+                                     coordinate='pres', level=850)[0].squeeze()
+        test_lat = test_tmpk.lat
+        test_lon = test_tmpk.lon
+
+        gempak = np.load(d)
+        true_lat = gempak['lat']
+        true_lon = gempak['lon']
+
+        np.testing.assert_allclose(test_lat, true_lat, rtol=1e-3, atol=0)
+        np.testing.assert_allclose(test_lon, true_lon, rtol=1e-3, atol=0)
+    finally:
+        gem.unlink()
