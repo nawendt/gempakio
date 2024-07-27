@@ -669,7 +669,7 @@ class GridFile(DataManagementFile):
                     forecast_hour = int(fhr)
                     forecast_minute = int(fmin)
                 else:
-                    forecast_hour = int(fhr)
+                    forecast_hour = 0 if fhr == '' else int(fhr)
                 grid_type = {
                     'A': 0,
                     'F': 1,
@@ -710,7 +710,7 @@ class GridFile(DataManagementFile):
                         forecast_hour2 = int(fhr)
                         forecast_minute2 = int(fmin)
                     else:
-                        forecast_hour2 = int(fhr)
+                        forecast_hour2 = 0 if fhr == '' else int(fhr)
                     grid_type2 = {
                         'A': 0,
                         'F': 1,
