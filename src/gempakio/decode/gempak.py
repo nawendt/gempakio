@@ -49,9 +49,7 @@ GEMPROJ_TO_PROJ = {
     'AED': ('aeqd', 'azm'),
     'ORT': ('ortho', 'azm'),
     'LEA': ('laea', 'azm'),
-    'GNO': ('gnom', 'azm'),
-    'TVM': ('tmerc', 'obq'),
-    'UTM': ('utm', 'obq'),
+    'GNO': ('gnom', 'azm')
 }
 GVCORD_TO_VAR = {
     'PRES': 'p',
@@ -618,20 +616,6 @@ class GempakGrid(GempakFile):
                                              'lat_2': lat_2,
                                              'ellps': ellps,
                                              'R': earth_radius})
-
-        elif ptype == 'obq':
-            lon_0 = self.navigation_block.proj_angle1
-            if gemproj == 'UTM':
-                zone = np.digitize((lon_0 % 360) / 6 + 1, range(1, 61), right=True)
-                self.crs = pyproj.CRS.from_dict({'proj': proj,
-                                                 'zone': zone,
-                                                 'ellps': ellps,
-                                                 'R': earth_radius})
-            else:
-                self.crs = pyproj.CRS.from_dict({'proj': proj,
-                                                 'lon_0': lon_0,
-                                                 'ellps': ellps,
-                                                 'R': earth_radius})
 
     def _set_coordinates(self):
         """Use GEMPAK navigation block to define coordinates.

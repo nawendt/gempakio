@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2024 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for encoding GEMPAK grid files."""
@@ -455,7 +455,8 @@ def test_grid_write_initial():
         gem.unlink()
 
 
-@pytest.mark.parametrize('proj_type', ['conical', 'cylindrical', 'azimuthal'])
+@pytest.mark.parametrize('proj_type', ['lcc', 'ced', 'stereographic', 'aed', 'gnomonic', 'lea',
+                                       'mercator', 'orthographic'])
 def test_grid_write_projected_using_xy(proj_type):
     """Test projections and coordinates."""
     g = Path(__file__).parent / 'data' / f'{proj_type}.grd'

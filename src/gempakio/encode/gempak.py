@@ -514,6 +514,10 @@ class GridFile(DataManagementFile):
                 name = 'equidistant_cylindrical'
             elif method == 'Gnomonic':
                 name = 'gnomonic'
+                params = params['crs_wkt']  # Not converted to CF by pyproj/PROJ
+            elif 'Lambert Azimuthal Equal Area' in method:
+                name = 'lambert_azimuthal_equal_area'
+                params = params['crs_wkt']  # Not converted to CF by pyproj/PROJ
             else:
                 name = 'unknown'
 
@@ -525,13 +529,8 @@ class GridFile(DataManagementFile):
         elif name == 'polar_stereographic':
             self.angle1 = params['latitude_of_projection_origin']
             self.angle2 = params['straight_vertical_longitude_from_pole']
-            if self.angle1 == 90:
-                self.gemproj = 'NPS'
-            elif self.angle1 == -90:
-                self.gemproj = 'SPS'
-            else:
-                raise ValueError('Polar stereographic projections must have angle1 90 or -90.')
-        elif name in ['stereographic', 'polar_stereographic']:
+            self.gemproj = 'STR'
+        elif name == 'stereographic':
             self.angle1 = params['latitude_of_projection_origin']
             self.angle2 = params['longitude_of_projection_origin']
             self.gemproj = 'STR'
@@ -539,10 +538,7 @@ class GridFile(DataManagementFile):
         elif name == 'lambert_conformal_conic':
             self.angle1, self.angle3 = params['standard_parallel']
             self.angle2 = params['longitude_of_central_meridian']
-            if self.angle1 < 0 and self.angle2 < 0:
-                self.gemproj = 'SCC'
-            else:
-                self.gemproj = 'LCC'
+            self.gemproj = 'LCC'
         elif name == 'equidistant_cylindrical':
             self.gemproj = 'CED'
             params = self._to_dict(self.projection.crs.coordinate_operation)
@@ -552,12 +548,7 @@ class GridFile(DataManagementFile):
         elif name == 'orthographic':
             self.angle1 = params['latitude_of_projection_origin']
             self.angle2 = params['longitude_of_projection_origin']
-            if self.angle1 == 90:
-                self.gemproj = 'NOR'
-            elif self.angle1 == -90:
-                self.gemproj = 'SOR'
-            else:
-                self.gemproj = 'ORT'
+            self.gemproj = 'ORT'
             self.angle3 = self.rotation
         elif name == 'azimuthal_equidistant':
             self.gemproj = 'AED'
@@ -566,20 +557,26 @@ class GridFile(DataManagementFile):
             self.angle3 = self.rotation
         elif name == 'lambert_azimuthal_equal_area':
             self.gemproj = 'LEA'
-            self.angle1 = params['latitude_of_projection_origin']
-            self.angle2 = params['longitude_of_projection_origin']
+            self.angle1 = float(re.search(
+                r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))',
+                params
+            ).groupdict()['lat_0'])
+            self.angle2 = float(re.search(
+                r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))',
+                params
+            ).groupdict()['lon_0'])
             self.angle3 = self.rotation
         elif name == 'gnomonic':
             self.gemproj = 'GNO'
-            self.angle1 = params['latitude_of_projection_origin']
-            self.angle2 = params['longitude_of_projection_origin']
+            self.angle1 = float(re.search(
+                r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))',
+                params
+            ).groupdict()['lat_0'])
+            self.angle2 = float(re.search(
+                r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))',
+                params
+            ).groupdict()['lon_0'])
             self.angle3 = self.rotation
-        elif name == 'transverse_mercator':
-            if 'zone' in self.projection.crs.coordinate_operation.name:
-                self.gemproj = 'UTM'
-            else:
-                self.gemproj = 'TVM'
-            self.angle1 = params['longitude_of_central_meridian']
         else:
             raise NotImplementedError(f'`{name}` projection not implemented.')
 
