@@ -49,9 +49,7 @@ GEMPROJ_TO_PROJ = {
     'AED': ('aeqd', 'azm'),
     'ORT': ('ortho', 'azm'),
     'LEA': ('laea', 'azm'),
-    'GNO': ('gnom', 'azm'),
-    'TVM': ('tmerc', 'obq'),
-    'UTM': ('utm', 'obq'),
+    'GNO': ('gnom', 'azm')
 }
 GVCORD_TO_VAR = {
     'PRES': 'p',
@@ -341,7 +339,12 @@ class GempakFile:
 
     @staticmethod
     def _convert_dattim(dattim):
-        """Convert GEMPAK DATTIM integer to datetime object."""
+        """Convert GEMPAK DATTIM integer to datetime object.
+
+        Notes
+        -----
+        See GEMPAK subroutine TG_FTOI.
+        """
         if dattim:
             if dattim < 100000000:
                 dt = datetime.strptime(f'{dattim:06d}', '%y%m%d')
@@ -353,7 +356,12 @@ class GempakFile:
 
     @staticmethod
     def _convert_ftime(ftime):
-        """Convert GEMPAK forecast time and type integer."""
+        """Convert GEMPAK forecast time and type integer.
+
+        Notes
+        -----
+        See GEMPAK subroutine TG_CFTM.
+        """
         if ftime >= 0:
             iftype = ForecastType(ftime // 100000)
             iftime = ftime - iftype.value * 100000
@@ -608,20 +616,6 @@ class GempakGrid(GempakFile):
                                              'lat_2': lat_2,
                                              'ellps': ellps,
                                              'R': earth_radius})
-
-        elif ptype == 'obq':
-            lon_0 = self.navigation_block.proj_angle1
-            if gemproj == 'UTM':
-                zone = np.digitize((lon_0 % 360) / 6 + 1, range(1, 61), right=True)
-                self.crs = pyproj.CRS.from_dict({'proj': proj,
-                                                 'zone': zone,
-                                                 'ellps': ellps,
-                                                 'R': earth_radius})
-            else:
-                self.crs = pyproj.CRS.from_dict({'proj': proj,
-                                                 'lon_0': lon_0,
-                                                 'ellps': ellps,
-                                                 'R': earth_radius})
 
     def _set_coordinates(self):
         """Use GEMPAK navigation block to define coordinates.

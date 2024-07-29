@@ -7,6 +7,7 @@ from collections import namedtuple
 import ctypes
 from datetime import datetime, timedelta
 from io import BytesIO
+import re
 import struct
 
 import numpy as np
@@ -447,7 +448,7 @@ class GridFile(DataManagementFile):
             }
         }
 
-        if lat.shape != lon.shape:
+        if not use_xy and lat.shape != lon.shape:
             raise ValueError('Input coordinates must be same dimensions.')
 
         if not isinstance(projection, pyproj.Proj):
@@ -509,10 +510,14 @@ class GridFile(DataManagementFile):
 
         if name is None:
             method = self.projection.crs.coordinate_operation.method_name
-            if method == 'Equidistant Cylindrical':
+            if 'Equidistant Cylindrical' in method:
                 name = 'equidistant_cylindrical'
             elif method == 'Gnomonic':
                 name = 'gnomonic'
+                params = params['crs_wkt']  # Not converted to CF by pyproj/PROJ
+            elif 'Lambert Azimuthal Equal Area' in method:
+                name = 'lambert_azimuthal_equal_area'
+                params = params['crs_wkt']  # Not converted to CF by pyproj/PROJ
             else:
                 name = 'unknown'
 
@@ -521,23 +526,19 @@ class GridFile(DataManagementFile):
             self.angle1 = params['standard_parallel']
             self.angle2 = params['longitude_of_projection_origin']
             self.angle3 = self.rotation
-        elif name in ['stereographic', 'polar_stereographic']:
+        elif name == 'polar_stereographic':
+            self.angle1 = params['latitude_of_projection_origin']
+            self.angle2 = params['straight_vertical_longitude_from_pole']
+            self.gemproj = 'STR'
+        elif name == 'stereographic':
             self.angle1 = params['latitude_of_projection_origin']
             self.angle2 = params['longitude_of_projection_origin']
-            if self.angle1 == 90:
-                self.gemproj = 'NPS'
-            elif self.angle1 == -90:
-                self.gemproj = 'SPS'
-            else:
-                self.gemproj = 'STR'
+            self.gemproj = 'STR'
             self.angle3 = self.rotation
         elif name == 'lambert_conformal_conic':
             self.angle1, self.angle3 = params['standard_parallel']
             self.angle2 = params['longitude_of_central_meridian']
-            if self.angle1 < 0 and self.angle2 < 0:
-                self.gemproj = 'SCC'
-            else:
-                self.gemproj = 'LCC'
+            self.gemproj = 'LCC'
         elif name == 'equidistant_cylindrical':
             self.gemproj = 'CED'
             params = self._to_dict(self.projection.crs.coordinate_operation)
@@ -547,12 +548,7 @@ class GridFile(DataManagementFile):
         elif name == 'orthographic':
             self.angle1 = params['latitude_of_projection_origin']
             self.angle2 = params['longitude_of_projection_origin']
-            if self.angle1 == 90:
-                self.gemproj = 'NOR'
-            elif self.angle1 == -90:
-                self.gemproj = 'SOR'
-            else:
-                self.gemproj = 'ORT'
+            self.gemproj = 'ORT'
             self.angle3 = self.rotation
         elif name == 'azimuthal_equidistant':
             self.gemproj = 'AED'
@@ -561,20 +557,26 @@ class GridFile(DataManagementFile):
             self.angle3 = self.rotation
         elif name == 'lambert_azimuthal_equal_area':
             self.gemproj = 'LEA'
-            self.angle1 = params['latitude_of_projection_origin']
-            self.angle2 = params['longitude_of_projection_origin']
+            self.angle1 = float(re.search(
+                r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))',
+                params
+            ).groupdict()['lat_0'])
+            self.angle2 = float(re.search(
+                r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))',
+                params
+            ).groupdict()['lon_0'])
             self.angle3 = self.rotation
         elif name == 'gnomonic':
             self.gemproj = 'GNO'
-            self.angle1 = params['latitude_of_projection_origin']
-            self.angle2 = params['longitude_of_projection_origin']
+            self.angle1 = float(re.search(
+                r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))',
+                params
+            ).groupdict()['lat_0'])
+            self.angle2 = float(re.search(
+                r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))',
+                params
+            ).groupdict()['lon_0'])
             self.angle3 = self.rotation
-        elif name == 'transverse_mercator':
-            if 'zone' in self.projection.crs.coordinate_operation.name:
-                self.gemproj = 'UTM'
-            else:
-                self.gemproj = 'TVM'
-            self.angle1 = params['longitude_of_central_meridian']
         else:
             raise NotImplementedError(f'`{name}` projection not implemented.')
 
@@ -599,8 +601,18 @@ class GridFile(DataManagementFile):
 
         date_time : str or datetime
             Grid date and time. Valid string formats are YYYYmmddHHMM
-            or YYYYmmddHHMMFx, where x is the forecast hour from the preceding
-            initialization date and time.
+            or YYYYmmddHHMMThhhmm, where T is the grid type and hhhmm is the forecast
+            hour/minute from the preceding initialization date and time. mm can be omitted
+            not used. If hhh is also missing, 0 will be assumed.
+
+            Valid types (T):
+                A : Analysis
+                F : Forecast
+                V : Valid
+                G : Guess
+                I : Initial
+
+            An analysis (A) is assumed if no type is designated.
 
         level2 : int or None
             Secondary vertical level of the grid. This is typically used for
@@ -644,16 +656,41 @@ class GridFile(DataManagementFile):
 
         level = int(level)
 
+        forecast_hour = 0
+        forecast_minute = 0
+        grid_type = 0
         if isinstance(date_time, str):
+            if len(date_time) < 12:
+                raise ValueError(f'{date_time} does not match minimum format of YYYYmmddHHMM.')
             date_time = date_time.upper()
-            if 'F' in date_time:
-                init, fhr = date_time.split('F')
-                self._datetime = (datetime.strptime(init, '%Y%m%d%H%M')
-                                  + timedelta(hours=int(fhr)))
+            split_time = re.split('([AFVIG])', date_time)
+            if len(split_time) == 3:
+                init, gtype, fhr = split_time
+                init_date = datetime.strptime(init, '%Y%m%d%H%M')
+                if len(fhr) > 3:
+                    fmin = fhr[3:]
+                    fhr = fhr[:3]
+                    forecast_hour = int(fhr)
+                    forecast_minute = int(fmin)
+                else:
+                    forecast_hour = 0 if fhr == '' else int(fhr)
+                grid_type = {
+                    'A': 0,
+                    'F': 1,
+                    'V': 1,
+                    'G': 2,
+                    'I': 3
+                }.get(gtype)
+            elif len(split_time) > 3:
+                raise ValueError(f'Cannot parse malformed date_time input {date_time}.')
             else:
-                self._datetime = datetime.strptime(date_time, '%Y%m%d%H%M')
+                init_date = datetime.strptime(date_time, '%Y%m%d%H%M')
+                forecast_hour = int(init_date.strftime('%H'))
+                forecast_minute = int(init_date.strftime('%M'))
         elif isinstance(date_time, datetime):
-            self._datetime = date_time
+            init_date = date_time
+            forecast_hour = int(init_date.strftime('%H'))
+            forecast_minute = int(init_date.strftime('%M'))
         else:
             raise TypeError('date_time must be string or datetime.')
 
@@ -663,27 +700,56 @@ class GridFile(DataManagementFile):
         if level2 is not None:
             level2 = int(level2)
 
-        if isinstance(date_time2, str):
-            date_time2 = date_time2.upper()
-            if 'F' in date_time:
-                init, fhr = date_time2.split('F')
-                self._datetime2 = (datetime.strptime(init, '%Y%m%d%H%M')
-                                   + timedelta(hours=int(fhr)))
+        forecast_hour2 = 0
+        forecast_minute2 = 0
+        grid_type2 = 0
+        if date_time2 is not None:
+            if isinstance(date_time2, str):
+                if len(date_time) < 12:
+                    raise ValueError(f'{date_time2} does not match minimum format of '
+                                     'YYYYmmddHHMM.')
+                date_time2 = date_time2.upper()
+                split_time = re.split('([AFVIG])', date_time2)
+                if len(split_time) == 3:
+                    init, gtype, fhr = split_time
+                    init_date2 = datetime.strptime(init, '%Y%m%d%H%M')
+                    if len(fhr) > 3:
+                        fmin = fhr[3:]
+                        fhr = fhr[:3]
+                        forecast_hour2 = int(fhr)
+                        forecast_minute2 = int(fmin)
+                    else:
+                        forecast_hour2 = 0 if fhr == '' else int(fhr)
+                    grid_type2 = {
+                        'A': 0,
+                        'F': 1,
+                        'V': 1,
+                        'G': 2,
+                        'I': 3
+                    }.get(gtype)
+                    if grid_type != grid_type2:
+                        raise ValueError('Grid type mismatch in date_time and date_time2.')
+                elif len(split_time) > 3:
+                    raise ValueError(f'Cannot parse malformed date_time2 input {date_time2}.')
+                else:
+                    init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
+                    forecast_hour2 = int(init_date2.strftime('%H'))
+                    forecast_minute2 = int(init_date2.strftime('%M'))
+            elif isinstance(date_time2, datetime):
+                init_date2 = date_time2
+                forecast_hour2 = int(init_date2.strftime('%H'))
+                forecast_minute2 = int(init_date2.strftime('%M'))
             else:
-                self._datetime2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
-        elif isinstance(date_time2, datetime) or date_time2 is None:
-            self._datetime2 = date_time2
-        else:
-            raise TypeError('date_time must be string or datetime or None.')
+                raise TypeError('date_time must be string or datetime or None.')
 
         pbuff = f'{parameter_name:<12s}'
         gpm1, gpm2, gpm3 = (pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4))
 
         new_column = (
-            self._datetime.date(),
-            self._datetime.time(),
-            self._datetime2.date() if date_time2 is not None else 0,
-            self._datetime2.time() if date_time2 is not None else 0,
+            (grid_type, init_date),
+            (grid_type, forecast_hour, forecast_minute),
+            (grid_type2, init_date2) if date_time2 is not None else 0,
+            (grid_type2, forecast_hour2, forecast_minute2),
             level,
             level2 if level2 is not None else -1,
             (self._encode_vertical_coordinate(vertical_coordinate)
@@ -802,17 +868,23 @@ class GridFile(DataManagementFile):
                     stream.write_string(getattr(ch, key))
                 elif 'i' in dtype:
                     if key in ['GDT1', 'GDT2']:
-                        try:
-                            idate = int(getattr(ch, key).strftime('%y%m%d'))
-                        except AttributeError:
+                        value = getattr(ch, key)
+                        if value != 0:
+                            itype, dattim = value
+                            if itype == 0:
+                                idate = int(dattim.strftime('%y%m%d'))
+                            else:
+                                idate = int(dattim.strftime('%m%d%y%H%M'))
+                        else:
                             idate = 0
                         stream.write_int(idate)
                     elif key in ['GTM1', 'GTM2']:
-                        try:
-                            itime = int(getattr(ch, key).strftime('%H%M'))
-                        except AttributeError:
-                            itime = 0
-                        stream.write_int(itime)
+                        itype, ihr, imin = getattr(ch, key)
+                        if itype == 0:
+                            ftime = int(f'{ihr:02d}{imin:02d}')
+                        else:
+                            ftime = itype * 100000 + int(f'{ihr:03d}{imin:02d}')
+                        stream.write_int(ftime)
                     else:
                         stream.write_int(getattr(ch, key))
 
