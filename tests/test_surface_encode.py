@@ -55,7 +55,7 @@ def test_surface_write():
         in_sfc = GempakSurface(gem)
         test_obj = in_sfc.sfjson()
 
-        for ob1, ob2 in zip(sfc_obj, test_obj):
+        for ob1, ob2 in zip(sfc_obj, test_obj, strict=True):
             for prop in ob1['properties']:
                 assert ob1['properties'][prop] == ob2['properties'][prop]
             for param in ob1['values']:

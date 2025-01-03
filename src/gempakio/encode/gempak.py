@@ -640,7 +640,7 @@ class GridFile(DataManagementFile):
 
         parameter_name = parameter_name.upper()
 
-        if not isinstance(vertical_coordinate, (str, type(None))):
+        if not isinstance(vertical_coordinate, str | type(None)):
             raise TypeError('Vertical coordinate must be string or None.')
 
         if vertical_coordinate is None:
@@ -651,7 +651,7 @@ class GridFile(DataManagementFile):
         if len(vertical_coordinate) > 4:
             raise ValueError('Vertical coordinate can only be 4 characters.')
 
-        if not isinstance(level, (int, float)):
+        if not isinstance(level, int | float):
             raise TypeError('Level parameter must be an integer.')
 
         level = int(level)
@@ -694,7 +694,7 @@ class GridFile(DataManagementFile):
         else:
             raise TypeError('date_time must be string or datetime.')
 
-        if not isinstance(level2, (int, float, type(None))):
+        if not isinstance(level2, int | float | type(None)):
             raise TypeError('Secondary level must be integer or None.')
 
         if level2 is not None:
@@ -1039,7 +1039,7 @@ class SoundingFile(DataManagementFile):
 
     def _add_parameters(self, parameters):
         """Add parameters to sounding file."""
-        if not isinstance(parameters, (list, tuple, np.ndarray)):
+        if not isinstance(parameters, list | tuple | np.ndarray):
             raise TypeError('parameters should be array-like.')
 
         if len(parameters) + len(self.parameter_names) > MMPARM:
@@ -1098,10 +1098,10 @@ class SoundingFile(DataManagementFile):
         if not self._validate_length(data):
             raise ValueError('All input data must be same length.')
 
-        if not isinstance(slat, (int, float)):
+        if not isinstance(slat, int | float):
             raise TypeError('Coordinates must be int/float.')
 
-        if not isinstance(slon, (int, float)):
+        if not isinstance(slon, int | float):
             raise TypeError('Coordinates must be int/float.')
 
         if isinstance(date_time, str):
@@ -1218,9 +1218,9 @@ class SoundingFile(DataManagementFile):
                     stream.write_int(lendat)
                     stream.write_int(itime)
 
-                    for rec in zip(*params.values()):
+                    for rec in zip(*params.values(), strict=True):
                         if self._data_type == DataTypes.realpack.value:
-                            for _param, _pval in zip(self.parameter_names, rec):
+                            for _param, _pval in zip(self.parameter_names, rec, strict=True):
                                 # pack values
                                 pass
                         else:
@@ -1301,7 +1301,7 @@ class SurfaceFile(DataManagementFile):
 
     def _add_parameters(self, parameters):
         """Add parameters to surface file."""
-        if not isinstance(parameters, (list, tuple, np.ndarray)):
+        if not isinstance(parameters, list | tuple | np.ndarray):
             raise TypeError('parameters should be array-like.')
 
         if len(parameters) + len(self.parameter_names) > MMPARM:
@@ -1357,10 +1357,10 @@ class SurfaceFile(DataManagementFile):
         if not self._validate_length(data):
             raise ValueError('All input data must be same length.')
 
-        if not isinstance(slat, (int, float)):
+        if not isinstance(slat, int | float):
             raise TypeError('Coordinates must be int/float.')
 
-        if not isinstance(slon, (int, float)):
+        if not isinstance(slon, int | float):
             raise TypeError('Coordinates must be int/float.')
 
         if isinstance(date_time, str):

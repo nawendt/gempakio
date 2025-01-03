@@ -210,8 +210,9 @@ class GempakFile:
             fkey_prod = product(['header_name', 'header_length', 'header_type'],
                                 range(1, self.dm_label.file_headers + 1))
             fkey_names = [f'{x[0]}{x[1]}' for x in fkey_prod]
-            fkey_info = list(zip(fkey_names, np.repeat(('4s', 'i', 'i'),
-                                                       self.dm_label.file_headers)))
+            fkey_info = list(zip(fkey_names,
+                                 np.repeat(('4s', 'i', 'i'), self.dm_label.file_headers),
+                                 strict=True))
             self.file_keys_format = NamedStruct(fkey_info, self.prefmt, 'FileKeys')
 
             self._buffer.jump_to(self._start, _word_to_position(self.dm_label.file_keys_ptr))
@@ -374,7 +375,7 @@ class GempakFile:
     @staticmethod
     def _convert_level(level):
         """Convert levels."""
-        if isinstance(level, (int, float)) and level >= 0:
+        if isinstance(level, int | float) and level >= 0:
             return level
         else:
             return None
@@ -1296,7 +1297,7 @@ class GempakSounding(GempakFile):
         if num_man_levels >= 1:
             for mp, mt, mz in zip(parts['TTAA']['PRES'],
                                   parts['TTAA']['TEMP'],
-                                  parts['TTAA']['HGHT']):
+                                  parts['TTAA']['HGHT'], strict=True):
                 if (mp != self.dm_label.missing_float
                    and mt != self.dm_label.missing_float
                    and mz != self.dm_label.missing_float):
@@ -2383,7 +2384,7 @@ class GempakSurface(GempakFile):
         text = values.pop('TEXT', None)
         spcl = values.pop('SPCL', None)
 
-        for param, txt in zip(['TEXT', 'SPCL'], [text, spcl]):
+        for param, txt in zip(['TEXT', 'SPCL'], [text, spcl], strict=True):
             if txt:
                 station = METAR_STATION_RE.search(txt)
                 # If no station can be parsed, at least ensure the text
