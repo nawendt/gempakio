@@ -20,7 +20,7 @@ class NamedStruct:
         """Initialize the NamedStruct."""
         if tuple_name is None:
             tuple_name = 'NamedStruct'
-        names, fmts = zip(*info, strict=True)
+        names, fmts = zip(*info, strict=False)
         self.converters = {}
         conv_off = 0
         for ind, i in enumerate(info):
