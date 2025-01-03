@@ -6,7 +6,6 @@
 import bisect
 from collections import namedtuple
 from collections.abc import Iterable
-import contextlib
 from copy import deepcopy
 import ctypes
 from datetime import datetime, timedelta
@@ -185,7 +184,7 @@ class GempakFile:
         if isinstance(file, Path):
             file = str(file)
 
-        with contextlib.closing(open(file, 'rb')) as fobj:  # noqa: SIM115
+        with open(file, 'rb') as fobj:
             self._buffer = IOBuffer.fromfile(fobj)
 
         # Save file start position as pointers use this as reference
