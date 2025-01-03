@@ -2576,16 +2576,10 @@ class VectorGraphicFile:
         Returns
         -------
         List of `mdgpu.io.vgf.SpecialLineElement`.
-
-        Notes
-        -----
-        This will exclude the MD area line.
         """
         if self.has_special_lines:
-            special_lines = self.filter_elements(vg_class=VGClass.lines.value,
-                                                 vg_type=VGType.special_line.value)
-            return [x for x in special_lines
-                    if x.line_type != SpecialLineType.scallop.value]
+            return self.filter_elements(vg_class=VGClass.lines.value,
+                                        vg_type=VGType.special_line.value)
 
         return None
 

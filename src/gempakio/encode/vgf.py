@@ -350,6 +350,9 @@ class LineBase(Element):
         if len(lon) > MAX_POINTS:
             raise ValueError(f'number of points in line must not exceed {MAX_POINTS}')
 
+        if len(lon) < 2:
+            raise ValueError('Line must have at least two points.')
+
         self._lon = np.asarray(lon).astype('float32')
         self._lat = np.asarray(lat).astype('float32')
         self._number_points = len(lon)
@@ -376,10 +379,6 @@ class LineBase(Element):
             raise ValueError('Line width must be in range [1, 10].')
         self._width = value
 
-    def flip(self):
-        """Flip line direction."""
-        self._direction *= -1
-
 
 class TextBase(Element):
     """Base text class."""
@@ -394,17 +393,22 @@ class TextBase(Element):
         self._max_lon = lon
         self._max_lat = lat
         self.size = size
-        self.text = text + '\x00'  # add null character
         self.text_color = text_color
         self.major_color = text_color
         self.minor_color = text_color
+        self.text_flag = text_flag
         self.font = font
         self._width = width
         self.align = align
         self._rotation = rotation
         self._offset_x = offset_x
         self._offset_y = offset_y
-        self._text_flag = text_flag
+
+        if not isinstance(text, str):
+            raise TypeError('text must be a string.')
+        elif len(text + '\x00') > 255:
+            raise ValueError('text string exceeds 255 character limit.')
+        self._text = text + '\x00'
 
     @staticmethod
     def points_to_size(points):
@@ -439,15 +443,6 @@ class TextBase(Element):
     def text(self):
         """Get text."""
         return self._text
-
-    @text.setter
-    def text(self, value):
-        """Set text."""
-        if not isinstance(value, str):
-            raise TypeError('text must be a string.')
-        elif len(value) > 255:
-            raise ValueError('text string exceeds 255 character limit.')
-        self._text = value
 
     @property
     def font(self):
@@ -524,6 +519,7 @@ class TextBase(Element):
         """Set text flag."""
         if value not in [1, 2]:
             raise ValueError('Invalid text flag.')
+        self._text_flag = value
 
 
 class Line(LineBase):
@@ -729,6 +725,9 @@ class Front(Element):
         if len(lon) > MAX_POINTS:
             raise ValueError(f'number of points in line must not exceed {MAX_POINTS}')
 
+        if len(lon) < 2:
+            raise ValueError('Front must have at least two points.')
+
         self._vg_class = 1
         self._vg_type = 2
         self._lon = np.asarray(lon).astype('float32')
@@ -765,10 +764,25 @@ class Front(Element):
 
     @width.setter
     def width(self, value):
-        """Set line width."""
+        """Set line width.
+
+        Notes
+        -----
+        As width is defined by front intensity, changing the width will change
+        the front code accordinly.
+        """
         if value not in range(1, 9):
             raise ValueError('Front width must be in range [1, 8].')
         self._width = value
+
+        _code = f'{self._front_code:03d}'
+        self._front_type = int(_code[0])
+        self._front_intensity = value
+        self._front_character = int(_code[2])
+
+        self._front_code = int(
+            f'{self._front_type}{self._front_intensity}{self._front_character}'
+        )
 
     def flip(self):
         """Flip front direction."""
@@ -781,10 +795,22 @@ class Front(Element):
 
     @front_code.setter
     def front_code(self, value):
-        """Set front code."""
+        """Set front code.
+
+        Notes
+        -----
+        As width is defined by front intensity, changing the front code will change
+        the width accordingly.
+        """
         if value not in range(1000):
             raise ValueError('Invalid front code.')
         self._front_code = value
+
+        _code = f'{self._front_code:03d}'
+        self._front_type = int(_code[0])
+        self._front_intensity = int(_code[1])
+        self._front_character = int(_code[2])
+        self._width = self._front_intensity
 
     @property
     def pip_size(self):
@@ -971,6 +997,10 @@ class SpecialLine(LineBase):
             raise ValueError('Line direction must be 1 (CW) or -1 (CCW).')
         self._direction = value
 
+    def flip(self):
+        """Flip line direction."""
+        self._direction *= -1
+
     @property
     def size(self):
         """Get pattern size."""
@@ -1121,10 +1151,16 @@ class SpecialText(TextBase):
 
     @text_type.setter
     def text_type(self, value):
-        """Set text type."""
+        """Set text type.
+
+        Notes
+        -----
+        The turbulence symbol will be reset to zero when changing text types.
+        """
         if value not in range(17):
             raise ValueError('Invalid text type.')
         self._text_type = value
+        self._turbulence_symbol = 0
 
     @property
     def edgecolor(self):
