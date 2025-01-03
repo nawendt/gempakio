@@ -379,6 +379,10 @@ class LineBase(Element):
             raise ValueError('Line width must be in range [1, 10].')
         self._width = value
 
+    def flip(self):
+        """Flip line direction."""
+        self._direction *= -1
+
 
 class TextBase(Element):
     """Base text class."""
@@ -443,6 +447,15 @@ class TextBase(Element):
     def text(self):
         """Get text."""
         return self._text
+
+    @text.setter
+    def text(self, value):
+        """Set text."""
+        if not isinstance(value, str):
+            raise TypeError('text must be a string.')
+        elif len(value) > 255:
+            raise ValueError('text string exceeds 255 character limit.')
+        self._text = value
 
     @property
     def font(self):
