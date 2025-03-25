@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2024 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK comman data definitions and structures."""
@@ -31,6 +31,14 @@ HEADER_DTYPE = {
     'GPM3': '4s',
     'GVCD': 'i'
 }
+LIST_MEMBER_SIZE = 9
+MAX_ASH = 50
+MAX_COUNTIES = 400
+MAX_JET_POINTS = 50
+MAX_POINTS = 500
+MAX_SGWX_POINTS = 256
+MAX_SIGMET = 100
+MAX_TRACKS = 50
 MBLKSZ = 128
 MISSING_INT = -9999
 MISSING_FLOAT = -9999.0
@@ -38,6 +46,8 @@ MMFREE = 62
 MMHDRS = 32000
 MMPARM = 44
 NAVB_SIZE = 256
+TRACK_DT_SIZE = 18
+VGF_HEADER_SIZE = 40
 
 
 class FileTypes(Enum):

@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding GEMPAK VGF files."""
 
-import contextlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
+from functools import partial
 import json
 import logging
 import re
@@ -14,20 +14,12 @@ import sys
 
 import numpy as np
 
+from gempakio.common import (LIST_MEMBER_SIZE, MAX_ASH, MAX_COUNTIES, MAX_JET_POINTS,
+                             MAX_POINTS, MAX_SGWX_POINTS, MAX_SIGMET, MAX_TRACKS,
+                             TRACK_DT_SIZE, VGF_HEADER_SIZE)
 from gempakio.tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
-
-LIST_MEMBER_SIZE = 9
-MAX_ASH = 50
-MAX_COUNTIES = 400
-MAX_JET_POINTS = 50
-MAX_POINTS = 500
-MAX_SGWX_POINTS = 256
-MAX_SIGMET = 100
-MAX_TRACKS = 50
-TRACK_DT_SIZE = 18
-VGF_HEADER_SIZE = 40
 
 
 class VGClass(Enum):
@@ -902,7 +894,7 @@ class FrontElement(VectorGraphicElement):
             Size of barbs, scallops, etc.
 
         pip_stroke : int
-            GEMPAK color code.
+            Size multiplier for a stroke.
 
         pip_direction : int
             Direction pips are facing. Right of line (1) or left of line (-1).
@@ -1375,7 +1367,8 @@ class SpecialLineElement(VectorGraphicElement):
             in GEMPAK documentation for details.
 
         stroke : int
-            GEMPAK color code.
+            Stroke multiplier. Used for kink position for kinked lines. Values are
+            in the range [25, 75]. Not used for other special line types (typically set to 1).
 
         direction : int
             CW (1) or CCW (-1).
@@ -2417,7 +2410,7 @@ class VectorGraphicFile:
         ----------
         file : str or `pathlib.Path`
         """
-        with contextlib.closing(open(file, 'rb')) as fobj:  # noqa: SIM115
+        with open(file, 'rb') as fobj:
             self._buffer = IOBuffer.fromfile(fobj)
 
         if sys.byteorder == 'little':
@@ -2583,16 +2576,10 @@ class VectorGraphicFile:
         Returns
         -------
         List of `mdgpu.io.vgf.SpecialLineElement`.
-
-        Notes
-        -----
-        This will exclude the MD area line.
         """
         if self.has_special_lines:
-            special_lines = self.filter_elements(vg_class=VGClass.lines.value,
-                                                 vg_type=VGType.special_line.value)
-            return [x for x in special_lines
-                    if x.line_type != SpecialLineType.scallop.value]
+            return self.filter_elements(vg_class=VGClass.lines.value,
+                                        vg_type=VGType.special_line.value)
 
         return None
 
@@ -2813,9 +2800,10 @@ class VectorGraphicFile:
             elif vg_class == VGClass.symbols.value:
                 symbol_info = [
                     ('number_symbols', 'i'), ('width', 'i'),
-                    ('symbol_size', 'f', self._round_one), ('symbol_type', 'i'),
-                    ('symbol_code', 'f', int), ('lat', 'f', self._round_two),
-                    ('lon', 'f', self._round_two), ('offset_x', 'i'), ('offset_y', 'i')
+                    ('symbol_size', 'f', partial(round, ndigits=1)), ('symbol_type', 'i'),
+                    ('symbol_code', 'f', int), ('lat', 'f', partial(round, ndigits=2)),
+                    ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
+                    ('offset_y', 'i')
                 ]
                 symbol = self._buffer.read_struct(
                     NamedStruct(symbol_info, self.prefmt, 'SymbolInfo')
@@ -2871,7 +2859,8 @@ class VectorGraphicFile:
                 elif vg_type == VGType.special_line.value:
                     special_line_info = [
                         ('number_points', 'i'), ('line_type', 'i'), ('stroke', 'i'),
-                        ('direction', 'i'), ('line_size', 'f', self._round_one), ('width', 'i')
+                        ('direction', 'i'), ('line_size', 'f', partial(round, ndigits=1)),
+                        ('width', 'i')
                     ]
                     special_line = self._buffer.read_struct(
                         NamedStruct(special_line_info, self.prefmt, 'SpecialLineInfo')
@@ -2898,7 +2887,7 @@ class VectorGraphicFile:
             elif vg_class == VGClass.lists.value:
                 list_info = [
                     ('list_type', 'i'), ('marker_type', 'i'),
-                    ('marker_size', 'f', self._round_one),
+                    ('marker_size', 'f', partial(round, ndigits=1)),
                     ('marker_width', 'i'), ('number_items', 'i')
                 ]
                 list_struct = NamedStruct(list_info, self.prefmt, 'ListInfo')
@@ -2925,10 +2914,11 @@ class VectorGraphicFile:
             elif vg_class == VGClass.text.value:
                 if vg_type == VGType.text.value or vg_type == VGType.justified_text.value:
                     text_info = [
-                        ('rotation', 'f', self._round_one),
-                        ('text_size', 'f', self._round_one), ('font', 'i'),
+                        ('rotation', 'f', partial(round, ndigits=1)),
+                        ('text_size', 'f', partial(round, ndigits=3)), ('font', 'i'),
                         ('text_flag', 'i'), ('width', 'i'), ('align', 'i'),
-                        ('lat', 'f', self._round_two), ('lon', 'f', self._round_two),
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)),
                         ('offset_x', 'i'), ('offset_y', 'i')
                     ]
                     text_struct = NamedStruct(text_info, self.prefmt, 'TextInfo')
@@ -2945,12 +2935,14 @@ class VectorGraphicFile:
                     )
                 elif vg_type == VGType.special_text.value:
                     special_text_info = [
-                        ('rotation', 'f', self._round_one),
-                        ('text_size', 'f', self._round_one), ('text_type', 'i'),
+                        ('rotation', 'f', partial(round, ndigits=1)),
+                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
                         ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
                         ('width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
-                        ('fill_color', 'i'), ('align', 'i'), ('lat', 'f', self._round_two),
-                        ('lon', 'f', self._round_two), ('offset_x', 'i'), ('offset_y', 'i')
+                        ('fill_color', 'i'), ('align', 'i'),
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)),
+                        ('offset_x', 'i'), ('offset_y', 'i')
                     ]
                     text_struct = NamedStruct(
                         special_text_info, self.prefmt, 'SpecialTextInfo'
@@ -2976,8 +2968,8 @@ class VectorGraphicFile:
                     ('track_type', 'i'), ('total_points', 'i'), ('initial_points', 'i'),
                     ('initial_line_type', 'i'), ('extrapolated_line_type', 'i'),
                     ('initial_mark_type', 'i'), ('extrapolated_mark_type', 'i'),
-                    ('line_width', 'i'), ('speed', 'f', self._round_two),
-                    ('direction', 'f', self._round_two), ('increment', 'i'),
+                    ('line_width', 'i'), ('speed', 'f', partial(round, ndigits=2)),
+                    ('direction', 'f', partial(round, ndigits=2)), ('increment', 'i'),
                     ('skip', 'i'), ('font', 'i'), ('font_flag', 'i')
                 ]
                 track = self._buffer.read_struct(
@@ -3065,17 +3057,19 @@ class VectorGraphicFile:
                     ccf_info = [
                         ('subtype', 'i'), ('number_points', 'i'), ('coverage', 'i'),
                         ('storm_tops', 'i'), ('probability', 'i'), ('growth', 'i'),
-                        ('speed', 'f', self._round_two), ('direction', 'f', self._round_two),
+                        ('speed', 'f', partial(round, ndigits=2)),
+                        ('direction', 'f', partial(round, ndigits=2)),
 
                     ]
 
                     # See cvgswap.c in GEMPAK source. These are not swapped.
                     ccf_info_noswap = [
-                        ('text_lat', 'f', self._round_two), ('text_lon', 'f', self._round_two),
-                        ('arrow_lat', 'f', self._round_two),
-                        ('arrow_lon', 'f', self._round_two), ('high_fill', 'i'),
+                        ('text_lat', 'f', partial(round, ndigits=2)),
+                        ('text_lon', 'f', partial(round, ndigits=2)),
+                        ('arrow_lat', 'f', partial(round, ndigits=2)),
+                        ('arrow_lon', 'f', partial(round, ndigits=2)), ('high_fill', 'i'),
                         ('med_fill', 'i'), ('low_fill', 'i'), ('line_type', 'i'),
-                        ('arrow_size', 'f', self._round_one)
+                        ('arrow_size', 'f', partial(round, ndigits=1))
                     ]
 
                     ccf = self._buffer.read_struct(
@@ -3090,14 +3084,14 @@ class VectorGraphicFile:
                     # the special text element in the struct. We handle that manually here
                     # for the few attributes it affects. See cvgswap.c in GEMPAK source.
                     ccf_text_info = [
-                        ('rotation', 'f', self._round_one),
-                        ('text_size', 'f', self._round_one), ('text_type', 'i'),
+                        ('rotation', 'f', partial(round, ndigits=1)),
+                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
                         ('turbulence_symbol', 'i'), ('font', 'i', self._swap32),
                         ('text_flag', 'i', self._swap32), ('width', 'i', self._swap32),
                         ('text_color', 'i'), ('line_color', 'i'), ('fill_color', 'i'),
-                        ('align', 'i'), ('lat', 'f', self._round_two),
-                        ('lon', 'f', self._round_two), ('offset_x', 'i'), ('offset_y', 'i'),
-                        ('text', '255s', self._decode_strip_null),
+                        ('align', 'i'), ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
+                        ('offset_y', 'i'), ('text', '255s', self._decode_strip_null),
                         (None, '1x')  # skip struct alignment padding byte
                     ]
 
@@ -3127,7 +3121,8 @@ class VectorGraphicFile:
                 elif vg_type == VGType.volcano.value:
                     volcano_info = [
                         ('name', '64s', self._decode_strip_null),
-                        ('code', 'f', self._round_one), ('size', 'f', self._round_one),
+                        ('code', 'f', partial(round, ndigits=1)),
+                        ('size', 'f', partial(round, ndigits=1)),
                         ('width', 'i'), ('number', '17s', self._decode_strip_null),
                         ('location', '17s', self._decode_strip_null),
                         ('area', '33s', self._decode_strip_null),
@@ -3153,8 +3148,9 @@ class VectorGraphicFile:
                         ('next_advisory', '128s', self._decode_strip_null),
                         ('forecaster', '64s', self._decode_strip_null),
                         (None, '3x'),  # skip struct alignment padding bytes
-                        ('lat', 'f', self._round_two), ('lon', 'f', self._round_two),
-                        ('offset_x', 'i'), ('offset_y', 'i')
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
+                        ('offset_y', 'i')
                     ]
 
                     volcano = self._buffer.read_struct(
@@ -3180,10 +3176,10 @@ class VectorGraphicFile:
                 elif vg_type == VGType.ash_cloud.value:
                     ash_info = [
                         ('subtype', 'i'), ('number_points', 'i'),
-                        ('distance', 'f', self._round_two),
+                        ('distance', 'f', partial(round, ndigits=2)),
                         ('forecast_hour', 'i'), ('line_type', 'i'),
                         ('line_width', 'i'), ('side_of_line', 'i'),
-                        ('speed', 'f', self._round_two),
+                        ('speed', 'f', partial(round, ndigits=2)),
                         ('speeds', '16s', self._decode_strip_null),
                         ('direction', '4s', self._decode_strip_null),
                         ('flight_level_1', '16s', self._decode_strip_null),
@@ -3195,12 +3191,14 @@ class VectorGraphicFile:
                     )
 
                     special_text_info = [
-                        ('rotation', 'f', self._round_one),
-                        ('text_size', 'f', self._round_one), ('text_type', 'i'),
+                        ('rotation', 'f', partial(round, ndigits=1)),
+                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
                         ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
                         ('width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
-                        ('fill_color', 'i'), ('align', 'i'), ('lat', 'f', self._round_two),
-                        ('lon', 'f', self._round_two), ('offset_x', 'i'), ('offset_y', 'i')
+                        ('fill_color', 'i'), ('align', 'i'),
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
+                        ('offset_y', 'i')
                     ]
 
                     text = self._buffer.read_struct(
@@ -3252,8 +3250,8 @@ class VectorGraphicFile:
                 elif vg_type == VGType.jet.value:
                     jet_line_info = [
                         ('line_color', 'i'), ('number_points', 'i'), ('line_type', 'i'),
-                        ('stroke', 'i'), ('direction', 'i'), ('size', 'f', self._round_one),
-                        ('width', 'i')
+                        ('stroke', 'i'), ('direction', 'i'),
+                        ('size', 'f', partial(round, ndigits=1)), ('width', 'i')
                     ]
                     jet_line = self._buffer.read_struct(
                         NamedStruct(jet_line_info, self.prefmt, 'JetLineInfo')
@@ -3270,16 +3268,19 @@ class VectorGraphicFile:
 
                     jet_barb_info = [
                         ('wind_color', 'i'), ('number_wind', 'i'), ('width', 'i'),
-                        ('size', 'f', self._round_one), ('wind_type', 'i'),
-                        ('head_size', 'f', self._round_one), ('speed', 'f', self._round_two),
-                        ('direction', 'f', self._round_two), ('lat', 'f', self._round_two),
-                        ('lon', 'f', self._round_two), ('flight_level_color', 'i'),
-                        ('text_rotation', 'f', self._round_one),
-                        ('text_size', 'f', self._round_one), ('text_type', 'i'),
+                        ('size', 'f', partial(round, ndigits=1)), ('wind_type', 'i'),
+                        ('head_size', 'f', partial(round, ndigits=1)),
+                        ('speed', 'f', partial(round, ndigits=2)),
+                        ('direction', 'f', partial(round, ndigits=2)),
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)), ('flight_level_color', 'i'),
+                        ('text_rotation', 'f', partial(round, ndigits=1)),
+                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
                         ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
                         ('text_width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
                         ('fill_color', 'i'), ('align', 'i'),
-                        ('text_lat', 'f', self._round_two), ('text_lon', 'f', self._round_two),
+                        ('text_lat', 'f', partial(round, ndigits=2)),
+                        ('text_lon', 'f', partial(round, ndigits=2)),
                         ('offset_x', 'i'), ('offset_y', 'i'),
                         ('text', '255s', self._decode_strip_null),
                         (None, '1x')  # skip struct alignment padding byte
@@ -3313,10 +3314,12 @@ class VectorGraphicFile:
 
                     jet_hash_info = [
                         ('wind_color', 'i'), ('number_wind', 'i'), ('width', 'i'),
-                        ('size', 'f', self._round_one), ('wind_type', 'i'),
-                        ('head_size', 'f', self._round_one), ('speed', 'f', self._round_two),
-                        ('direction', 'f', self._round_two), ('lat', 'f', self._round_two),
-                        ('lon', 'f', self._round_two)
+                        ('size', 'f', partial(round, ndigits=1)), ('wind_type', 'i'),
+                        ('head_size', 'f', partial(round, ndigits=1)),
+                        ('speed', 'f', partial(round, ndigits=2)),
+                        ('direction', 'f', partial(round, ndigits=2)),
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2))
                     ]
 
                     hashes = []
@@ -3479,7 +3482,8 @@ class VectorGraphicFile:
                             )
 
                             track_point_info = [
-                                ('lat', 'f', self._round_two), ('lon', 'f', self._round_two),
+                                ('lat', 'f', partial(round, ndigits=2)),
+                                ('lon', 'f', partial(round, ndigits=2)),
                                 ('advisory_date', '50s', self._decode_strip_null),
                                 ('tau', '50s', self._decode_strip_null),
                                 ('max_wind', '50s', self._decode_strip_null),
@@ -3526,7 +3530,8 @@ class VectorGraphicFile:
                                                       'BreakPointInfo')
 
                             break_meta = [
-                                ('lat', 'f', self._round_two), ('lon', 'f', self._round_two),
+                                ('lat', 'f', partial(round, ndigits=2)),
+                                ('lon', 'f', partial(round, ndigits=2)),
                                 ('name', '256s', self._decode_strip_null)
                             ]
 
@@ -3551,12 +3556,13 @@ class VectorGraphicFile:
                         elif vg_type == VGType.sgwx.value:
                             sgwx_info = [
                                 ('subtype', 'i'), ('number_points', 'i'),
-                                ('text_lat', 'f', self._round_two),
-                                ('text_lon', 'f', self._round_two),
-                                ('arrow_lat', 'f', self._round_two),
-                                ('arrow_lon', 'f', self._round_two),
+                                ('text_lat', 'f', partial(round, ndigits=2)),
+                                ('text_lon', 'f', partial(round, ndigits=2)),
+                                ('arrow_lat', 'f', partial(round, ndigits=2)),
+                                ('arrow_lon', 'f', partial(round, ndigits=2)),
                                 ('line_element', 'i'), ('line_type', 'i'),
-                                ('line_width', 'i'), ('arrow_size', 'f', self._round_one),
+                                ('line_width', 'i'),
+                                ('arrow_size', 'f', partial(round, ndigits=1)),
                                 ('special_symbol', 'i'), ('weather_symbol', 'i')
                             ]
 
@@ -3565,12 +3571,13 @@ class VectorGraphicFile:
                             )
 
                             special_text_info = [
-                                ('rotation', 'f', self._round_one),
-                                ('text_size', 'f', self._round_one), ('text_type', 'i'),
-                                ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
-                                ('width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
-                                ('fill_color', 'i'), ('align', 'i'),
-                                ('lat', 'f', self._round_two), ('lon', 'f', self._round_two),
+                                ('rotation', 'f', partial(round, ndigits=1)),
+                                ('text_size', 'f', partial(round, ndigits=3)),
+                                ('text_type', 'i'), ('turbulence_symbol', 'i'), ('font', 'i'),
+                                ('text_flag', 'i'), ('width', 'i'), ('text_color', 'i'),
+                                ('line_color', 'i'), ('fill_color', 'i'), ('align', 'i'),
+                                ('lat', 'f', partial(round, ndigits=2)),
+                                ('lon', 'f', partial(round, ndigits=2)),
                                 ('offset_x', 'i'), ('offset_y', 'i')
                             ]
 
@@ -3600,14 +3607,14 @@ class VectorGraphicFile:
             elif vg_class == VGClass.watches.value:
                 watch_info = [
                     ('number_points', 'i'), ('style', 'i'), ('shape', 'i'),
-                    ('marker_type', 'i'), ('marker_size', 'f', self._round_one),
+                    ('marker_type', 'i'), ('marker_size', 'f', partial(round, ndigits=1)),
                     ('marker_width', 'i'), ('anchor0_station', '8s', self._decode_strip_null),
-                    ('anchor0_lat', 'f', self._round_two),
-                    ('anchor0_lon', 'f', self._round_two), ('anchor0_distance', 'i'),
+                    ('anchor0_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor0_lon', 'f', partial(round, ndigits=2)), ('anchor0_distance', 'i'),
                     ('anchor0_direction', '4s', self._decode_strip_null),
                     ('anchor1_station', '8s', self._decode_strip_null),
-                    ('anchor1_lat', 'f', self._round_two),
-                    ('anchor1_lon', 'f', self._round_two), ('anchor1_distance', 'i'),
+                    ('anchor1_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor1_lon', 'f', partial(round, ndigits=2)), ('anchor1_distance', 'i'),
                     ('anchor1_direction', '4s', self._decode_strip_null), ('status', 'i'),
                     ('number', 'i'), ('issue_time', '20s', self._decode_strip_null),
                     ('expire_time', '20s', self._decode_strip_null), ('watch_type', 'i'),
@@ -3677,10 +3684,13 @@ class VectorGraphicFile:
                 )
             elif vg_class == VGClass.winds.value:
                 wind_info = [
-                    ('number_wind', 'i'), ('width', 'i'), ('size', 'f', self._round_one),
-                    ('wind_type', 'i'), ('head_size', 'f', self._round_one),
-                    ('speed', 'f', self._round_two), ('direction ', 'f', self._round_two),
-                    ('lat', 'f', self._round_two), ('lon', 'f', self._round_two)
+                    ('number_wind', 'i'), ('width', 'i'),
+                    ('size', 'f', partial(round, ndigits=1)), ('wind_type', 'i'),
+                    ('head_size', 'f', partial(round, ndigits=1)),
+                    ('speed', 'f', partial(round, ndigits=2)),
+                    ('direction ', 'f', partial(round, ndigits=2)),
+                    ('lat', 'f', partial(round, ndigits=2)),
+                    ('lon', 'f', partial(round, ndigits=2))
                 ]
                 wind = self._buffer.read_struct(
                     NamedStruct(wind_info, self.prefmt, 'WindInfo')
@@ -3729,12 +3739,14 @@ class VectorGraphicFile:
         Header size should be 40 bytes (see GEMPAK vgstruct.h).
         """
         vgf_header_info = [
-            ('delete', 'c', ord), ('vg_type', 'c', ord), ('vg_class', 'c', ord),
-            ('filled', 'b'), ('closed', 'c', ord), ('smooth', 'c', ord),
-            ('version', 'c', ord), ('group_type', 'c', ord), ('group_number', 'i'),
+            ('delete', 'B'), ('vg_type', 'B'), ('vg_class', 'B'),
+            ('filled', 'b'), ('closed', 'B'), ('smooth', 'B'),
+            ('version', 'B'), ('group_type', 'B'), ('group_number', 'i'),
             ('major_color', 'i'), ('minor_color', 'i'), ('record_size', 'i'),
-            ('min_lat', 'f', self._round_two), ('min_lon', 'f', self._round_two),
-            ('max_lat', 'f', self._round_two), ('max_lon', 'f', self._round_two)
+            ('min_lat', 'f', partial(round, ndigits=2)),
+            ('min_lon', 'f', partial(round, ndigits=2)),
+            ('max_lat', 'f', partial(round, ndigits=2)),
+            ('max_lon', 'f', partial(round, ndigits=2))
         ]
 
         return self._buffer.read_struct(NamedStruct(
@@ -3812,34 +3824,6 @@ class VectorGraphicFile:
         decoded = x.decode('utf-8', errors='ignore')
         null = decoded.find('\x00')
         return decoded[:null].strip()
-
-    @staticmethod
-    def _round_one(x):
-        """Round to one decimal.
-
-        Parameters
-        ----------
-        x : float
-
-        Returns
-        -------
-        float rounded to 1 decimal
-        """
-        return round(x, 1)
-
-    @staticmethod
-    def _round_two(x):
-        """Round to two decimals.
-
-        Parameters
-        ----------
-        x : float
-
-        Returns
-        -------
-        float rounded to 2 decimals
-        """
-        return round(x, 2)
 
     @staticmethod
     def _swap32(x):
