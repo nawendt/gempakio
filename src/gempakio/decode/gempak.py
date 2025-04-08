@@ -1348,7 +1348,6 @@ class GempakSounding(GempakFile):
 
         # Merge MAN temperature
         bgl = 0
-        qcman = []
         if num_man_levels >= 2 or num_above_man_levels >= 1:
             if merged['PRES'][0] == self.dm_label.missing_float:
                 plast = 2000
@@ -1365,13 +1364,10 @@ class GempakSounding(GempakFile):
                         merged[pname].append(pval[i])
                     plast = merged['PRES'][-1]
                 else:
+                    # GEMPAK ignores AGL MAN data with missing TEMP/HGHT and does not
+                    # interpolate for them.
                     if parts['TTAA']['PRES'][i] > merged['PRES'][0]:
                         bgl += 1
-                    else:
-                        # GEMPAK ignores MAN data with missing TEMP/HGHT and does not
-                        # interpolate for them.
-                        if parts['TTAA']['PRES'][i] != self.dm_label.missing_float:
-                            qcman.append(parts['TTAA']['PRES'][i])
 
         if num_above_man_levels >= 1:
             for i in range(num_above_man_levels):
@@ -1384,45 +1380,26 @@ class GempakSounding(GempakFile):
                     plast = merged['PRES'][-1]
 
         # Merge MAN wind
+        # Some stations only report MAN wind, which GEMPAK ignores
         if num_man_wind_levels >= 1 and num_man_levels >= 1 and len(merged['PRES']) >= 2:
             for iwind, pres in enumerate(parts['PPAA']['PRES']):
+                # PPAA wind data without corresponding TTAA temp/dwpt data are ignored in
+                # GEMPAK
                 if pres in merged['PRES'][1:]:
                     loc = merged['PRES'].index(pres)
                     if merged['DRCT'][loc] == self.dm_label.missing_float:
                         merged['DRCT'][loc] = parts['PPAA']['DRCT'][iwind]
                         merged['SPED'][loc] = parts['PPAA']['SPED'][iwind]
-                else:
-                    if pres not in qcman:
-                        size = len(merged['PRES'])
-                        loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
-                        if loc >= size + 1:
-                            loc = -1
-                        merged['PRES'].insert(loc, pres)
-                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
-                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
-                        merged['DRCT'].insert(loc, parts['PPAA']['DRCT'][iwind])
-                        merged['SPED'].insert(loc, parts['PPAA']['SPED'][iwind])
-                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
 
         if num_above_man_wind_levels >= 1 and num_man_levels >= 1 and len(merged['PRES']) >= 2:
             for iwind, pres in enumerate(parts['PPCC']['PRES']):
+                # PPCC wind data without corresponding TTCC temp/dwpt data are ignored in
+                # GEMPAK
                 if pres in merged['PRES'][1:]:
                     loc = merged['PRES'].index(pres)
                     if merged['DRCT'][loc] == self.dm_label.missing_float:
                         merged['DRCT'][loc] = parts['PPCC']['DRCT'][iwind]
                         merged['SPED'][loc] = parts['PPCC']['SPED'][iwind]
-                else:
-                    if pres not in qcman:
-                        size = len(merged['PRES'])
-                        loc = size - bisect.bisect_left(merged['PRES'][1:][::-1], pres)
-                        if loc >= size + 1:
-                            loc = -1
-                        merged['PRES'].insert(loc, pres)
-                        merged['TEMP'].insert(loc, self.dm_label.missing_float)
-                        merged['DWPT'].insert(loc, self.dm_label.missing_float)
-                        merged['DRCT'].insert(loc, parts['PPCC']['DRCT'][iwind])
-                        merged['SPED'].insert(loc, parts['PPCC']['SPED'][iwind])
-                        merged['HGHT'].insert(loc, self.dm_label.missing_float)
 
         # Merge TROP
         if num_trop_levels >= 1 or num_above_trop_levels >= 1:
@@ -1743,6 +1720,8 @@ class GempakSounding(GempakFile):
                        or merged['SPED'][ilev - 1] == self.dm_label.missing_float):
                         merged['DRCT'][ilev - 1] = drct
                         merged['SPED'][ilev - 1] = sped
+                elif hght <= zold:
+                    skip = True
                 elif hght >= znxt:
                     while more and hght > znxt:
                         zold = znxt

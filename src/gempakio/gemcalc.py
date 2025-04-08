@@ -80,6 +80,12 @@ def interp_logp_height(sounding, missing=-9999):
                 scale_z = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
                 sounding['HGHT'][i] = moist_hydrostatic_height(zb, pb, pt, scale_z)
 
+            if missing not in [sounding['TEMP'][i], sounding['HGHT'][i]]:
+                pb = sounding['PRES'][i]
+                tb = sounding['TEMP'][i]
+                tdb = sounding['DWPT'][i]
+                zb = sounding['HGHT'][i]
+
 
 def interp_logp_pressure(sounding, missing=-9999):
     """Interpolate pressure from heights.
@@ -193,7 +199,8 @@ def interp_moist_height(sounding, missing=-9999):
     subroutine in GEMPAK. This the default behavior when
     merging observed sounding data.
     """
-    hlist = (np.ones(len(sounding['PRES'])) * -9999)
+    nlev = len(sounding['PRES'])
+    hlist = (np.ones(nlev) * -9999)
 
     ilev = -1
     top = False
@@ -201,7 +208,7 @@ def interp_moist_height(sounding, missing=-9999):
     found = False
     while not found and not top:
         ilev += 1
-        if ilev >= len(sounding['PRES']):
+        if ilev >= nlev:
             top = True
         elif (sounding['PRES'][ilev] != missing
               and sounding['TEMP'][ilev] != missing
@@ -221,7 +228,7 @@ def interp_moist_height(sounding, missing=-9999):
 
         while not mand:
             jlev += 1
-            if jlev >= len(sounding['PRES']):
+            if jlev >= nlev:
                 mand = True
                 top = True
             else:
@@ -233,19 +240,23 @@ def interp_moist_height(sounding, missing=-9999):
                    and tt != missing):
                     mand = True
                     klev = jlev
+
                 if (sounding['PRES'][ilev] != missing
                    and sounding['TEMP'][ilev] != missing
                    and sounding['PRES'][jlev] != missing
                    and sounding['TEMP'][jlev] != missing):
                     scale_z = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
                     znew = moist_hydrostatic_height(zb, pb, pt, scale_z, missing)
+                else:
+                    scale_z = missing
+                    znew = missing
+
+                if znew != missing:
                     tb = tt
                     tdb = tdt
                     pb = pt
                     zb = znew
-                else:
-                    scale_z = missing
-                    znew = missing
+
                 hlist[jlev] = scale_z
 
         if klev != 0:
@@ -393,7 +404,8 @@ def moist_hydrostatic_height(z_bot, pres_bot, pres_top, scale_height,
     -----
     See GEMPAK function PR_MHGT
     """
-    if missing in [z_bot, pres_bot, pres_top, scale_height]:
+    if (missing in [z_bot, pres_bot, pres_top, scale_height]
+        or pres_bot <= 0 or pres_top <= 0):
         mhgt = missing
     else:
         mhgt = z_bot + scale_height * np.log(pres_bot / pres_top)
