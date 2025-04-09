@@ -1720,8 +1720,6 @@ class GempakSounding(GempakFile):
                        or merged['SPED'][ilev - 1] == self.dm_label.missing_float):
                         merged['DRCT'][ilev - 1] = drct
                         merged['SPED'][ilev - 1] = sped
-                elif hght <= zold:
-                    skip = True
                 elif hght >= znxt:
                     while more and hght > znxt:
                         zold = znxt
