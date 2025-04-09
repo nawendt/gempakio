@@ -173,6 +173,40 @@ def test_unmerged_sigw_pressure_sounding():
     np.testing.assert_allclose(ghght, dhght, rtol=1e-10, atol=1e-1)
 
 
+def test_unmerged_no_ttcc():
+    """Test loading an unmerged sounding.
+
+    Sounding will have a PPCC group, but no TTCC group. This
+    tests for proper handling of MAN winds on pressure surfaces
+    without any temp/dewpoint/height data.
+    """
+    g = Path(__file__).parent / 'data' / 'nzwp_no_ttcc.snd'
+    d = Path(__file__).parent / 'data' / 'nzwp_no_ttcc.csv'
+
+    gso = GempakSounding(g).snxarray()
+    gpres = gso[0].pres.values
+    gtemp = gso[0].temp.values.squeeze()
+    gdwpt = gso[0].dwpt.values.squeeze()
+    gdrct = gso[0].drct.values.squeeze()
+    gsped = gso[0].sped.values.squeeze()
+    ghght = gso[0].hght.values.squeeze()
+
+    gempak = pd.read_csv(d, na_values=-9999)
+    dpres = gempak.PRES.values
+    dtemp = gempak.TEMP.values
+    ddwpt = gempak.DWPT.values
+    ddrct = gempak.DRCT.values
+    dsped = gempak.SPED.values
+    dhght = gempak.HGHT.values
+
+    np.testing.assert_allclose(gpres, dpres, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gtemp, dtemp, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gdwpt, ddwpt, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gdrct, ddrct, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(gsped, dsped, rtol=1e-10, atol=1e-2)
+    np.testing.assert_allclose(ghght, dhght, rtol=1e-10, atol=1e-1)
+
+
 @pytest.mark.parametrize('keyword,date_time', [
     ('FIRST', '202011070000'), ('LAST', '202011070100')
 ])
