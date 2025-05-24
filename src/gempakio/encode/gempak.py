@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for encoding various GEMPAK file formats."""
@@ -14,10 +14,10 @@ import numpy as np
 import pyproj
 
 from gempakio.common import (_position_to_word, _word_to_position, ANLB_SIZE, DataSource,
-                             DataTypes, FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MBLKSZ,
-                             MISSING_FLOAT, MISSING_INT, MMFREE, MMHDRS, MMPARM, NAVB_SIZE,
-                             PackingType, VerticalCoordinates)
-from gempakio.tools import NamedStruct
+                             DataTypes, FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MAX_LEVELS,
+                             MBLKSZ, MISSING_FLOAT, MISSING_INT, MMFREE, MMHDRS, MMPARM,
+                             NAVB_SIZE, PackingType, VerticalCoordinates)
+from gempakio.tools import NamedStruct, OrderedSet
 
 
 class GempakStream(BytesIO):
@@ -105,8 +105,8 @@ class DataManagementFile:
         self._parts_dict = {}
         self.file_type = None
         self.data_source = None
-        self._column_set = set()
-        self._row_set = set()
+        self._column_set = OrderedSet()
+        self._row_set = OrderedSet()
         self.column_headers = []
         self.row_headers = []
         self.packing_type = None
@@ -1055,7 +1055,7 @@ class SoundingFile(DataManagementFile):
     def _validate_length(data_dict):
         """Validate sounding parameters are of same length."""
         sz = len(data_dict[next(iter(data_dict))])
-        return all(len(x) == sz for x in data_dict.values())
+        return all(len(x) == sz for x in data_dict.values()) and sz < MAX_LEVELS
 
     def add_sounding(self, data, slat, slon, date_time, station_info=None):
         """Add sounding to the file.
@@ -1202,8 +1202,8 @@ class SoundingFile(DataManagementFile):
 
     def _write_data(self, stream):
         """Write sounding to a SoundingFile stream."""
-        for i, row in enumerate(self.row_headers):
-            for j, col in enumerate(self.column_headers):
+        for j, col in enumerate(self.column_headers):
+            for i, row in enumerate(self.row_headers):
                 # Only 1 part for merged sounding, so math can be simplified
                 pointer = self.data_block_ptr + i * self.columns + j
                 stream.jump_to(pointer)

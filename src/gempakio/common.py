@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK comman data definitions and structures."""
@@ -36,6 +36,7 @@ MAX_ASH = 50
 MAX_COUNTIES = 400
 MAX_JET_POINTS = 50
 MAX_POINTS = 500
+MAX_LEVELS = 500
 MAX_SGWX_POINTS = 256
 MAX_SIGMET = 100
 MAX_TRACKS = 50

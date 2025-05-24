@@ -1,10 +1,11 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Copyright (c) 2009,2016,2019 MetPy Developers.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tools for reading GEMPAK files."""
 
 from collections import namedtuple
+from collections.abc import MutableSet
 import struct
 
 import numpy as np
@@ -195,3 +196,44 @@ class IOBuffer:
     def __len__(self):
         """Return the amount of data in the buffer."""
         return len(self._data)
+
+
+class OrderedSet(MutableSet):
+    """Class for sets with order maintained."""
+
+    def __init__(self, iterable=None):
+        self._dict = {}
+        if iterable:
+            for item in iterable:
+                self._dict[item] = None
+
+    def __contains__(self, item):
+        """Return bool(key in self)."""
+        return item in self._dict
+
+    def __iter__(self):
+        """Implement iter(self)."""
+        return iter(self._dict)
+
+    def __len__(self):
+        """Return len(self)."""
+        return len(self._dict)
+
+    def add(self, item):
+        """Add an element."""
+        self._dict[item] = None
+
+    def discard(self, item):
+        """Remove an element."""
+        self._dict.pop(item, None)
+
+    def __repr__(self):
+        """Return repr(self)."""
+        items = ', '.join(repr(item) for item in self)
+        return f'{self.__class__.__name__}([{items}])'
+
+    def __eq__(self, other):
+        """Return self==value."""
+        if isinstance(other, OrderedSet):
+            return list(self) == list(other)
+        return set(self) == set(other)
