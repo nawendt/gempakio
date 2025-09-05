@@ -1,5 +1,5 @@
-numpy
-pandas>=2.0.0
+numpy >= 2.0
+pandas >= 2.0.0
 pyproj
 setuptools; python_version >= '3.12'
 xarray

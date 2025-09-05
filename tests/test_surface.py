@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK surface files."""
@@ -21,15 +21,17 @@ def test_climate_surface():
     gsf = GempakSurface(g)
     gstns = gsf.sfjson()
 
-    gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
-                         parse_dates=['YYMMDD/HHMM'],
-                         date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'})
+    gempak = pd.read_csv(
+        d,
+        index_col=['STN', 'YYMMDD/HHMM'],
+        parse_dates=['YYMMDD/HHMM'],
+        date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'},
+    )
     if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 
     for stn in gstns:
-        idx_key = (stn['properties']['station_id'],
-                   stn['properties']['date_time'])
+        idx_key = (stn['properties']['station_id'], stn['properties']['date_time'])
         gemsfc = gempak.loc[idx_key, :]
 
         for param, val in stn['values'].items():
@@ -63,16 +65,19 @@ def test_ship_surface():
 
     gsf = GempakSurface(g)
 
-    gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
-                         parse_dates=['YYMMDD/HHMM'],
-                         date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'})
+    gempak = pd.read_csv(
+        d,
+        index_col=['STN', 'YYMMDD/HHMM'],
+        parse_dates=['YYMMDD/HHMM'],
+        date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'},
+    )
     if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 
     uidx = gempak.index.unique()
 
     for stn, dt in uidx:
-        ugem = gempak.loc[(stn, dt), ]
+        ugem = gempak.loc[(stn, dt),]
         gstns = gsf.sfjson(station_id=stn, date_time=dt)
 
         assert len(ugem) == len(gstns)
@@ -95,15 +100,17 @@ def test_standard_surface():
     gsf = GempakSurface(g)
     gstns = gsf.sfjson()
 
-    gempak = pd.read_csv(d, index_col=['STN', 'YYMMDD/HHMM'],
-                         parse_dates=['YYMMDD/HHMM'],
-                         date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'})
+    gempak = pd.read_csv(
+        d,
+        index_col=['STN', 'YYMMDD/HHMM'],
+        parse_dates=['YYMMDD/HHMM'],
+        date_format={'YYMMDD/HHMM': '%y%m%d/%H%M'},
+    )
     if not gempak.index.is_monotonic_increasing:
         gempak.sort_index(inplace=True)
 
     for stn in gstns:
-        idx_key = (stn['properties']['station_id'],
-                   stn['properties']['date_time'])
+        idx_key = (stn['properties']['station_id'], stn['properties']['date_time'])
         gemsfc = gempak.loc[idx_key, :]
 
         for param, val in stn['values'].items():
@@ -118,25 +125,24 @@ def test_surface_access(access_type):
     gsf = GempakSurface(g)
 
     if access_type == 'STID':
-        gsf.sfjson(station_id='MSN', country='US', state='WI',
-                   date_time='202109070000')
+        gsf.sfjson(station_id='MSN', country='US', state='WI', date_time='202109070000')
     elif access_type == 'STNM':
-        gsf.sfjson(station_number=726410, country='US', state='WI',
-                   date_time='202109070000')
+        gsf.sfjson(station_number=726410, country='US', state='WI', date_time='202109070000')
 
 
-@pytest.mark.parametrize('text_type,date_time,speci', [
-    ('text', '202109070000', False), ('spcl', '202109071600', True)
-])
+@pytest.mark.parametrize(
+    'text_type,date_time,speci',
+    [('text', '202109070000', False), ('spcl', '202109071600', True)],
+)
 def test_surface_text(text_type, date_time, speci):
     """Test text decoding of surface hourly and special observations."""
     g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'
     d = Path(__file__).parent / 'data' / 'msn_std_sfc.csv'
 
     gsf = GempakSurface(g)
-    text = gsf.nearest_time(date_time,
-                            station_id='MSN',
-                            include_special=speci)[0]['values'][text_type]
+    text = gsf.nearest_time(date_time, station_id='MSN', include_special=speci)[0]['values'][
+        text_type
+    ]
 
     gempak = pd.read_csv(d)
     gem_text = gempak.loc[:, text_type.upper()][0]
@@ -144,9 +150,9 @@ def test_surface_text(text_type, date_time, speci):
     assert text == gem_text
 
 
-@pytest.mark.parametrize('keyword,date_time', [
-    ('FIRST', '202109070000'), ('LAST', '202109071604')
-])
+@pytest.mark.parametrize(
+    'keyword,date_time', [('FIRST', '202109070000'), ('LAST', '202109071604')]
+)
 def test_time_keywords(keyword, date_time):
     """Test time keywords FIRST and LAST."""
     g = Path(__file__).parent / 'data' / 'msn_std_sfc.sfc'

@@ -1,5 +1,5 @@
 # Copyright (c) 2025 Nathan Wendt.
-# Copyright (c) 2009,2016,2019 MetPy Developers.
+# Copyright (c) 2025,2016,2019 MetPy Developers.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tools for reading GEMPAK files."""
@@ -109,7 +109,7 @@ class IOBuffer:
     def splice(self, mark, newdata):
         """Replace the data after the marked location with the specified data."""
         self.jump_to(mark)
-        self._data = self._data[:self._offset] + bytearray(newdata)
+        self._data = self._data[: self._offset] + bytearray(newdata)
 
     def read_struct(self, struct_class):
         """Parse and return a structure from the current buffer offset."""
@@ -139,9 +139,7 @@ class IOBuffer:
         else:
             order = '@'
 
-        return list(
-            self.read_struct(struct.Struct(f'{order}{int(num):d}{item_type}'))
-        )
+        return list(self.read_struct(struct.Struct(f'{order}{int(num):d}{item_type}')))
 
     def read_int(self, size, endian, signed):
         """Parse the current buffer offset as the specified integer code."""
@@ -162,9 +160,9 @@ class IOBuffer:
     def get_next(self, num_bytes=None):
         """Get the next bytes in the buffer without modifying the offset."""
         if num_bytes is None:
-            return self._data[self._offset:]
+            return self._data[self._offset :]
         else:
-            return self._data[self._offset:self._offset + num_bytes]
+            return self._data[self._offset : self._offset + num_bytes]
 
     def skip(self, num_bytes):
         """Jump the ahead the specified bytes in the buffer."""
@@ -175,7 +173,7 @@ class IOBuffer:
 
     def check_remains(self, num_bytes):
         """Check that the number of bytes specified remains in the buffer."""
-        return len(self._data[self._offset:]) == num_bytes
+        return len(self._data[self._offset :]) == num_bytes
 
     def truncate(self, num_bytes):
         """Remove the specified number of bytes from the end of the buffer."""

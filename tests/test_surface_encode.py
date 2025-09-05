@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for encoding GEMPAK sounding files."""
@@ -18,7 +18,7 @@ def test_surface_write():
         'station_number': 723570,
         'elevation': 362,
         'state': 'OK',
-        'country': 'US'
+        'country': 'US',
     }
     oun_lat = 35.22
     oun_lon = -97.47
@@ -43,7 +43,7 @@ def test_surface_write():
             oun_lat,
             oun_lon,
             report['properties']['date_time'],
-            station
+            station,
         )
 
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}

@@ -1,4 +1,4 @@
-# Copyright (c) 2023 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for encoding GEMPAK sounding files."""
@@ -19,7 +19,7 @@ def test_sounding_write():
         'station_number': 72357,
         'elevation': 357,
         'state': 'OK',
-        'country': 'US'
+        'country': 'US',
     }
     oun_lat = 35.21
     oun_lon = -97.45
@@ -36,14 +36,13 @@ def test_sounding_write():
         sped = dat['sped']
 
     out_snd = SoundingFile(['pres', 'hght', 'temp', 'dwpt', 'drct', 'sped'])
-    out_snd.add_sounding({
-        'pres': pres,
-        'hght': hght,
-        'temp': temp,
-        'dwpt': dwpt,
-        'drct': drct,
-        'sped': sped
-    }, oun_lat, oun_lon, dt, station_info)
+    out_snd.add_sounding(
+        {'pres': pres, 'hght': hght, 'temp': temp, 'dwpt': dwpt, 'drct': drct, 'sped': sped},
+        oun_lat,
+        oun_lon,
+        dt,
+        station_info,
+    )
 
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:

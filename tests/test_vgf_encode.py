@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for encoding GEMPAK VGF files."""
@@ -10,9 +10,21 @@ import numpy as np
 import pytest
 
 from gempakio.decode.vgf import VectorGraphicFile, VGClass, VGType
-from gempakio.encode.vgf import (Element, FontCodes, Front, FrontCodes, Line, LineBase,
-                                 LineCodes, SpecialLine, SpecialLineCodes, SpecialText,
-                                 SpecialTextCodes, TextBase, VGFile)
+from gempakio.encode.vgf import (
+    Element,
+    FontCodes,
+    Front,
+    FrontCodes,
+    Line,
+    LineBase,
+    LineCodes,
+    SpecialLine,
+    SpecialLineCodes,
+    SpecialText,
+    SpecialTextCodes,
+    TextBase,
+    VGFile,
+)
 
 
 def test_element_attributes():
@@ -105,10 +117,10 @@ def test_front_attributes():
 
 def test_front_write():
     """Test writing fronts to VGF."""
-    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47],
-                   dtype='float32')
-    lon = np.array([-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12],
-                   dtype='float32')
+    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47], dtype='float32')
+    lon = np.array(
+        [-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12], dtype='float32'
+    )
 
     front = Front(lon, lat, FrontCodes.DRYLINE, 5)
 
@@ -177,10 +189,10 @@ def test_line_attributes():
 
 def test_line_write():
     """Test writing lines to VGF."""
-    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47],
-                   dtype='float32')
-    lon = np.array([-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12],
-                   dtype='float32')
+    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47], dtype='float32')
+    lon = np.array(
+        [-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12], dtype='float32'
+    )
 
     line = Line(lon, lat, 2, LineCodes.LONG_DASH, 0)
 
@@ -246,10 +258,10 @@ def test_special_line_attributes():
 
 def test_special_line_write():
     """Test writing special lines to VGF."""
-    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47],
-                   dtype='float32')
-    lon = np.array([-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12],
-                   dtype='float32')
+    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47], dtype='float32')
+    lon = np.array(
+        [-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12], dtype='float32'
+    )
 
     line = SpecialLine(lon, lat, 2, SpecialLineCodes.SCALLOP, 0, smooth=2)
 
@@ -311,8 +323,9 @@ def test_text_base_attribute():
 
 def test_special_text_attributes():
     """Test special text attributes."""
-    text = SpecialText(0, 0, 'TEST', 8, 18, SpecialTextCodes.GENERAL_TEXT,
-                       FontCodes.HELVETICA_BOLD)
+    text = SpecialText(
+        0, 0, 'TEST', 8, 18, SpecialTextCodes.GENERAL_TEXT, FontCodes.HELVETICA_BOLD
+    )
 
     with pytest.raises(ValueError):
         text.text_type = 20
@@ -340,8 +353,15 @@ def test_special_text_write():
     lat = 38.701065
     lon = -98.326084
 
-    text = SpecialText(lon, lat, 'THIS IS A TEST!', 8, 18, SpecialTextCodes.GENERAL_TEXT,
-                       FontCodes.HELVETICA_BOLD)
+    text = SpecialText(
+        lon,
+        lat,
+        'THIS IS A TEST!',
+        8,
+        18,
+        SpecialTextCodes.GENERAL_TEXT,
+        FontCodes.HELVETICA_BOLD,
+    )
 
     out = VGFile.from_elements(text)
 

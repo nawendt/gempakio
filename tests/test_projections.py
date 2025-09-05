@@ -1,8 +1,7 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
-
 
 from pathlib import Path
 
@@ -12,8 +11,10 @@ import pytest
 from gempakio import GempakGrid
 
 
-@pytest.mark.parametrize('proj_type', ['lcc', 'ced', 'stereographic', 'aed', 'gnomonic', 'lea',
-                                       'mercator', 'orthographic'])
+@pytest.mark.parametrize(
+    'proj_type',
+    ['lcc', 'ced', 'stereographic', 'aed', 'gnomonic', 'lea', 'mercator', 'orthographic'],
+)
 def test_coordinates_creation(proj_type):
     """Test projections and coordinates."""
     g = Path(__file__).parent / 'data' / f'{proj_type}.grd'

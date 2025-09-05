@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding GEMPAK VGF files."""
@@ -14,9 +14,18 @@ import sys
 
 import numpy as np
 
-from gempakio.common import (LIST_MEMBER_SIZE, MAX_ASH, MAX_COUNTIES, MAX_JET_POINTS,
-                             MAX_POINTS, MAX_SGWX_POINTS, MAX_SIGMET, MAX_TRACKS,
-                             TRACK_DT_SIZE, VGF_HEADER_SIZE)
+from gempakio.common import (
+    LIST_MEMBER_SIZE,
+    MAX_ASH,
+    MAX_COUNTIES,
+    MAX_JET_POINTS,
+    MAX_POINTS,
+    MAX_SGWX_POINTS,
+    MAX_SIGMET,
+    MAX_TRACKS,
+    TRACK_DT_SIZE,
+    VGF_HEADER_SIZE,
+)
 from gempakio.tools import IOBuffer, NamedStruct
 
 logger = logging.getLogger(__name__)
@@ -285,17 +294,45 @@ class VectorGraphicAttribute:
 
     def __repr__(self):
         """Return repr(self)."""
-        return (f'{type(self).__qualname__}'
-                f'({", ".join([f"{k}={v}" for k, v in vars(self).items()])})')
+        return (
+            f'{type(self).__qualname__}'
+            f'({", ".join([f"{k}={v}" for k, v in vars(self).items()])})'
+        )
 
 
 class BarbAttribute(VectorGraphicAttribute):
     """Barb attribute."""
 
-    def __init__(self, wind_color, number_wind, width, size, wind_type, head_size, speed,
-                 direction, lat, lon, flight_level_color, text_rotation, text_size, text_type,
-                 turbulence_symbol, font, text_flag, text_width, text_color, line_color,
-                 fill_color, align, text_lat, text_lon, offset_x, offset_y, text):
+    def __init__(
+        self,
+        wind_color,
+        number_wind,
+        width,
+        size,
+        wind_type,
+        head_size,
+        speed,
+        direction,
+        lat,
+        lon,
+        flight_level_color,
+        text_rotation,
+        text_size,
+        text_type,
+        turbulence_symbol,
+        font,
+        text_flag,
+        text_width,
+        text_color,
+        line_color,
+        fill_color,
+        align,
+        text_lat,
+        text_lon,
+        offset_x,
+        offset_y,
+        text,
+    ):
         """Create wind barb attribute.
 
         Parameters
@@ -405,9 +442,22 @@ class BreakPointAttribute(VectorGraphicAttribute):
 class TrackAttribute(VectorGraphicAttribute):
     """Tropical cylcone track attribute."""
 
-    def __init__(self, advisory_date, tau, max_wind, wind_gust, minimum_pressure,
-                 development_level, development_label, direction, speed, date_label,
-                 storm_source, lat, lon):
+    def __init__(
+        self,
+        advisory_date,
+        tau,
+        max_wind,
+        wind_gust,
+        minimum_pressure,
+        development_level,
+        development_label,
+        direction,
+        speed,
+        date_label,
+        storm_source,
+        lat,
+        lon,
+    ):
         """Create tropical cyclone track attribute.
 
         Parameters
@@ -456,8 +506,19 @@ class TrackAttribute(VectorGraphicAttribute):
 class HashAttribute(VectorGraphicAttribute):
     """Hash attribute."""
 
-    def __init__(self, wind_color, number_wind, width, size, wind_type,
-                 head_size, speed, direction, lat, lon):
+    def __init__(
+        self,
+        wind_color,
+        number_wind,
+        width,
+        size,
+        wind_type,
+        head_size,
+        speed,
+        direction,
+        lat,
+        lon,
+    ):
         """Create hash attribute.
 
         Parameters
@@ -497,8 +558,9 @@ class HashAttribute(VectorGraphicAttribute):
 class LineAttribute(VectorGraphicAttribute):
     """Line attribute."""
 
-    def __init__(self, line_color, number_points, line_type, stroke,
-                 direction, size, width, lat, lon):
+    def __init__(
+        self, line_color, number_points, line_type, stroke, direction, size, width, lat, lon
+    ):
         """Create line attribute.
 
         Parameters
@@ -562,14 +624,15 @@ class VectorGraphicElement:
 
     def __repr__(self):
         """Return repr(self)."""
-        return (f'{type(self).__qualname__}'
-                f'[{VGClass(self.vg_class).name}, {VGType(self.vg_type).name}]')
+        return (
+            f'{type(self).__qualname__}'
+            f'[{VGClass(self.vg_class).name}, {VGType(self.vg_type).name}]'
+        )
 
     @property
     def bounds(self):
         """Get bounding box of element."""
-        if (hasattr(self, 'lat') and hasattr(self, 'lon')
-           and len(np.atleast_1d(self.lat)) > 1):
+        if hasattr(self, 'lat') and hasattr(self, 'lon') and len(np.atleast_1d(self.lat)) > 1:
             xmin = min(self.lon)
             xmax = max(self.lon)
             ymin = min(self.lat)
@@ -583,12 +646,40 @@ class VectorGraphicElement:
 class AshCloudElement(VectorGraphicElement):
     """Ash cloud element."""
 
-    def __init__(self, header_struct, subtype, number_points, distance, forecast_hour,
-                 line_type, line_width, side_of_line, speed, speeds, direction,
-                 flight_level1, flight_level2, rotation, text_size, text_type,
-                 turbulence_symbol, font, text_flag, width, text_color, line_color,
-                 fill_color, align, text_lat, text_lon, offset_x, offset_y, text,
-                 lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        subtype,
+        number_points,
+        distance,
+        forecast_hour,
+        line_type,
+        line_width,
+        side_of_line,
+        speed,
+        speeds,
+        direction,
+        flight_level1,
+        flight_level2,
+        rotation,
+        text_size,
+        text_type,
+        turbulence_symbol,
+        font,
+        text_flag,
+        width,
+        text_color,
+        line_color,
+        fill_color,
+        align,
+        text_lat,
+        text_lon,
+        offset_x,
+        offset_y,
+        text,
+        lat,
+        lon,
+    ):
         """Create ash cloud element.
 
         Parameters
@@ -680,7 +771,7 @@ class AshCloudElement(VectorGraphicElement):
         self.line_color = line_color
         self.fill_color = fill_color
         self.align = align
-        self. text_lat = text_lat
+        self.text_lat = text_lat
         self.text_lon = text_lon
         self.offset_x = offset_x
         self.offset_y = offset_y
@@ -692,9 +783,17 @@ class AshCloudElement(VectorGraphicElement):
 class CircleElement(VectorGraphicElement):
     """Circle element."""
 
-    def __init__(self, header_struct, number_points, line_type,
-                 line_type_hardware, width, line_width_hardware,
-                 lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        number_points,
+        line_type,
+        line_type_hardware,
+        width,
+        line_width_hardware,
+        lat,
+        lon,
+    ):
         """Create circle element.
 
         Parameters
@@ -738,11 +837,42 @@ class CircleElement(VectorGraphicElement):
 class CollaborativeConvectiveForecastElement(VectorGraphicElement):
     """CCF element."""
 
-    def __init__(self, header_struct, subtype, number_points, coverage, storm_tops,
-                 probability, growth, speed, direction, text_lat, text_lon, arrow_lat,
-                 arrow_lon, high_fill, med_fill, low_fill, line_type, arrow_size,
-                 rotation, text_size, text_type, turbulence_symbol, font, text_flag, width,
-                 fill_color, align, offset_x, offset_y, text, text_layout, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        subtype,
+        number_points,
+        coverage,
+        storm_tops,
+        probability,
+        growth,
+        speed,
+        direction,
+        text_lat,
+        text_lon,
+        arrow_lat,
+        arrow_lon,
+        high_fill,
+        med_fill,
+        low_fill,
+        line_type,
+        arrow_size,
+        rotation,
+        text_size,
+        text_type,
+        turbulence_symbol,
+        font,
+        text_flag,
+        width,
+        fill_color,
+        align,
+        offset_x,
+        offset_y,
+        text,
+        text_layout,
+        lat,
+        lon,
+    ):
         """Create CCF element.
 
         Parameters
@@ -876,8 +1006,19 @@ class FileHeaderElement(VectorGraphicElement):
 class FrontElement(VectorGraphicElement):
     """Front element."""
 
-    def __init__(self, header_struct, number_points, front_code, pip_size,
-                 pip_stroke, pip_direction, width, label, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        number_points,
+        front_code,
+        pip_size,
+        pip_stroke,
+        pip_direction,
+        width,
+        label,
+        lat,
+        lon,
+    ):
         """Create front element.
 
         Parameters
@@ -933,8 +1074,7 @@ class FrontElement(VectorGraphicElement):
 class GraphicalForecastAreaElement(VectorGraphicElement):
     """GFA element."""
 
-    def __init__(self, header_struct, number_blocks, number_points, blocks,
-                 lat, lon):
+    def __init__(self, header_struct, number_blocks, number_points, blocks, lat, lon):
         """Create GFA element.
 
         Parameters
@@ -962,8 +1102,15 @@ class GraphicalForecastAreaElement(VectorGraphicElement):
 class JetElement(VectorGraphicElement):
     """Jet element."""
 
-    def __init__(self, header_struct, line_attribute, number_barbs, barb_attributes,
-                 number_hashes, hash_attributes):
+    def __init__(
+        self,
+        header_struct,
+        line_attribute,
+        number_barbs,
+        barb_attributes,
+        number_hashes,
+        hash_attributes,
+    ):
         """Create jet element.
 
         Parameters
@@ -991,9 +1138,17 @@ class JetElement(VectorGraphicElement):
 class LineElement(VectorGraphicElement):
     """Line element."""
 
-    def __init__(self, header_struct, number_points, line_type,
-                 line_type_hardware, width, line_width_hardware,
-                 lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        number_points,
+        line_type,
+        line_type_hardware,
+        width,
+        line_width_hardware,
+        lat,
+        lon,
+    ):
         """Create line element.
 
         Parameters
@@ -1039,9 +1194,18 @@ class LineElement(VectorGraphicElement):
 class ListElement(VectorGraphicElement):
     """List element."""
 
-    def __init__(self, header_struct, list_type, marker_type,
-                 marker_size, marker_width, number_items,
-                 list_items, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        list_type,
+        marker_type,
+        marker_size,
+        marker_width,
+        number_items,
+        list_items,
+        lat,
+        lon,
+    ):
         """Create list element.
 
         Parameters
@@ -1086,14 +1250,46 @@ class ListElement(VectorGraphicElement):
 
 
 class SigmetElement(VectorGraphicElement):
-    """"SIGMET element."""
+    """SIGMET element."""
 
-    def __init__(self, header_struct, subtype, number_points, line_type, line_width,
-                 side_of_line, area, flight_info_region, status, distance, message_id,
-                 sequence_number, start_time, end_time, remarks, sonic, phenomena,
-                 phenomena2, phenomena_name, phenomena_lat, phenomena_lon, pressure,
-                 max_wind, free_text, trend, movement, type_indicator, type_time,
-                 flight_level, speed, direction, tops, forecaster, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        subtype,
+        number_points,
+        line_type,
+        line_width,
+        side_of_line,
+        area,
+        flight_info_region,
+        status,
+        distance,
+        message_id,
+        sequence_number,
+        start_time,
+        end_time,
+        remarks,
+        sonic,
+        phenomena,
+        phenomena2,
+        phenomena_name,
+        phenomena_lat,
+        phenomena_lon,
+        pressure,
+        max_wind,
+        free_text,
+        trend,
+        movement,
+        type_indicator,
+        type_time,
+        flight_level,
+        speed,
+        direction,
+        tops,
+        forecaster,
+        lat,
+        lon,
+    ):
         """Create SIGMET element.
 
         Parameters
@@ -1230,12 +1426,38 @@ class SigmetElement(VectorGraphicElement):
 class SignificantWeatherElement(VectorGraphicElement):
     """SGWX element."""
 
-    def __init__(self, header_struct, subtype, number_points, text_lat, text_lon,
-                 arrow_lat, arrow_lon, line_element, line_type, line_width,
-                 arrow_size, special_symbol, weather_symbol, text_rotation,
-                 text_size, text_type, turbulence_symbol, font, text_flag,
-                 text_width, text_color, line_color, fill_color, text_align,
-                 offset_x, offset_y, text, area_lat, area_lon):
+    def __init__(
+        self,
+        header_struct,
+        subtype,
+        number_points,
+        text_lat,
+        text_lon,
+        arrow_lat,
+        arrow_lon,
+        line_element,
+        line_type,
+        line_width,
+        arrow_size,
+        special_symbol,
+        weather_symbol,
+        text_rotation,
+        text_size,
+        text_type,
+        turbulence_symbol,
+        font,
+        text_flag,
+        text_width,
+        text_color,
+        line_color,
+        fill_color,
+        text_align,
+        offset_x,
+        offset_y,
+        text,
+        area_lat,
+        area_lon,
+    ):
         """Create special line element.
 
         Parameters
@@ -1352,8 +1574,9 @@ class SignificantWeatherElement(VectorGraphicElement):
 class SpecialLineElement(VectorGraphicElement):
     """Special line element."""
 
-    def __init__(self, header_struct, number_points, line_type,
-                 stroke, direction, size, width, lat, lon):
+    def __init__(
+        self, header_struct, number_points, line_type, stroke, direction, size, width, lat, lon
+    ):
         """Create special line element.
 
         Parameters
@@ -1402,10 +1625,26 @@ class SpecialLineElement(VectorGraphicElement):
 class SpecialTextElement(VectorGraphicElement):
     """Special text element."""
 
-    def __init__(self, header_struct, rotation, size, text_type,
-                 turbulence_symbol, font, text_flag, width, text_color,
-                 line_color, fill_color, align, lat, lon, offset_x,
-                 offset_y, text):
+    def __init__(
+        self,
+        header_struct,
+        rotation,
+        size,
+        text_type,
+        turbulence_symbol,
+        font,
+        text_flag,
+        width,
+        text_color,
+        line_color,
+        fill_color,
+        align,
+        lat,
+        lon,
+        offset_x,
+        offset_y,
+        text,
+    ):
         """Create special text element.
 
         Parameters
@@ -1484,8 +1723,19 @@ class SpecialTextElement(VectorGraphicElement):
 class SymbolElement(VectorGraphicElement):
     """Symbol element."""
 
-    def __init__(self, header_struct, number_symbols, width, size,
-                 symbol_type, symbol_code, offset_x, offset_y, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        number_symbols,
+        width,
+        size,
+        symbol_type,
+        symbol_code,
+        offset_x,
+        offset_y,
+        lat,
+        lon,
+    ):
         """Create symbol element.
 
         Parameters
@@ -1530,9 +1780,21 @@ class SymbolElement(VectorGraphicElement):
 class TextElement(VectorGraphicElement):
     """Text element."""
 
-    def __init__(self, header_struct, rotation, size, font,
-                 text_flag, width, align, lat, lon, offset_x,
-                 offset_y, text):
+    def __init__(
+        self,
+        header_struct,
+        rotation,
+        size,
+        font,
+        text_flag,
+        width,
+        align,
+        lat,
+        lon,
+        offset_x,
+        offset_y,
+        text,
+    ):
         """Create text element.
 
         Parameters
@@ -1586,10 +1848,28 @@ class TextElement(VectorGraphicElement):
 class TrackElement(VectorGraphicElement):
     """Storm track element."""
 
-    def __init__(self, header_struct, track_type, total_points, initial_points,
-                 initial_line_type, extrapolated_line_type, initial_mark_type,
-                 extrapolated_mark_type, line_width, speed, direction, increment,
-                 skip, font, font_flag, font_size, times, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        track_type,
+        total_points,
+        initial_points,
+        initial_line_type,
+        extrapolated_line_type,
+        initial_mark_type,
+        extrapolated_mark_type,
+        line_width,
+        speed,
+        direction,
+        increment,
+        skip,
+        font,
+        font_flag,
+        font_size,
+        times,
+        lat,
+        lon,
+    ):
         """Create storm track element.
 
         Parameters
@@ -1675,8 +1955,19 @@ class TrackElement(VectorGraphicElement):
 class TropicalCycloneBase(VectorGraphicElement):
     """Base class for TC elements."""
 
-    def __init__(self, header_struct, storm_number, issue_status, basin, advisory_number,
-                 storm_name, storm_type, valid_time, tz, forecast_period):
+    def __init__(
+        self,
+        header_struct,
+        storm_number,
+        issue_status,
+        basin,
+        advisory_number,
+        storm_name,
+        storm_type,
+        valid_time,
+        tz,
+        forecast_period,
+    ):
         """TC base class.
 
         Parameters
@@ -1706,9 +1997,9 @@ class TropicalCycloneBase(VectorGraphicElement):
         self.advisory_number = advisory_number
         self.storm_name = storm_name
         self.storm_type = StormType(storm_type)
-        self.valid_time = datetime.strptime(
-            valid_time, '%y%m%d/%H%M'
-        ).replace(tzinfo=timezone.utc)
+        self.valid_time = datetime.strptime(valid_time, '%y%m%d/%H%M').replace(
+            tzinfo=timezone.utc
+        )
         self.timezone = tz
         self.forecast_period = forecast_period
 
@@ -1716,9 +2007,25 @@ class TropicalCycloneBase(VectorGraphicElement):
 class TropicalCycloneAdvisoryElement(VectorGraphicElement):
     """TCA element."""
 
-    def __init__(self, header_struct, storm_number, issue_status, basin, advisory_number,
-                 storm_name, storm_type, valid_time, tz, text_lat, text_lon,
-                 text_font, text_size, text_width, number_ww, ww):
+    def __init__(
+        self,
+        header_struct,
+        storm_number,
+        issue_status,
+        basin,
+        advisory_number,
+        storm_name,
+        storm_type,
+        valid_time,
+        tz,
+        text_lat,
+        text_lon,
+        text_font,
+        text_size,
+        text_width,
+        number_ww,
+        ww,
+    ):
         """Create TCA element.
 
         Parameters
@@ -1775,9 +2082,24 @@ class TropicalCycloneAdvisoryElement(VectorGraphicElement):
 class TropicalCycloneBreakPointElement(TropicalCycloneBase):
     """Tropical cyclone break point element."""
 
-    def __init__(self, header_struct, storm_number, issue_status, basin, advisory_number,
-                 storm_name, storm_type, valid_time, tz, forecast_period, line_color,
-                 line_width, ww_level, number_points, breakpoints):
+    def __init__(
+        self,
+        header_struct,
+        storm_number,
+        issue_status,
+        basin,
+        advisory_number,
+        storm_name,
+        storm_type,
+        valid_time,
+        tz,
+        forecast_period,
+        line_color,
+        line_width,
+        ww_level,
+        number_points,
+        breakpoints,
+    ):
         """Create TC break point element.
 
         Parameters
@@ -1810,8 +2132,18 @@ class TropicalCycloneBreakPointElement(TropicalCycloneBase):
 
         breakpoints : array_like of `BreakPointAttribute`
         """
-        super().__init__(header_struct, storm_number, issue_status, basin, advisory_number,
-                         storm_name, storm_type, valid_time, tz, forecast_period)
+        super().__init__(
+            header_struct,
+            storm_number,
+            issue_status,
+            basin,
+            advisory_number,
+            storm_name,
+            storm_type,
+            valid_time,
+            tz,
+            forecast_period,
+        )
         self.line_color = line_color
         self.line_width = line_width
         self.ww_level = TropicalWatchWarningLevel(ww_level)
@@ -1822,9 +2154,26 @@ class TropicalCycloneBreakPointElement(TropicalCycloneBase):
 class TropicalCycloneErrorElement(TropicalCycloneBase):
     """Tropical cyclone error cone element."""
 
-    def __init__(self, header_struct, storm_number, issue_status, basin, advisory_number,
-                 storm_name, storm_type, valid_time, tz, forecast_period, line_color,
-                 line_type, fill_color, fill_type, number_points, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        storm_number,
+        issue_status,
+        basin,
+        advisory_number,
+        storm_name,
+        storm_type,
+        valid_time,
+        tz,
+        forecast_period,
+        line_color,
+        line_type,
+        fill_color,
+        fill_type,
+        number_points,
+        lat,
+        lon,
+    ):
         """Create tropical cyclone error cone element.
 
         Parameters
@@ -1857,8 +2206,18 @@ class TropicalCycloneErrorElement(TropicalCycloneBase):
 
         breakpoints : array_like of `BreakPointAttribute`
         """
-        super().__init__(header_struct, storm_number, issue_status, basin, advisory_number,
-                         storm_name, storm_type, valid_time, tz, forecast_period)
+        super().__init__(
+            header_struct,
+            storm_number,
+            issue_status,
+            basin,
+            advisory_number,
+            storm_name,
+            storm_type,
+            valid_time,
+            tz,
+            forecast_period,
+        )
         self.forecast_period = forecast_period
         self.line_color = line_color
         self.line_type = line_type
@@ -1872,9 +2231,23 @@ class TropicalCycloneErrorElement(TropicalCycloneBase):
 class TropicalCycloneTrackElement(TropicalCycloneBase):
     """Tropical cyclone track element."""
 
-    def __init__(self, header_struct, storm_number, issue_status, basin, advisory_number,
-                 storm_name, storm_type, valid_time, tz, forecast_period, line_color,
-                 line_type, number_points, track_points):
+    def __init__(
+        self,
+        header_struct,
+        storm_number,
+        issue_status,
+        basin,
+        advisory_number,
+        storm_name,
+        storm_type,
+        valid_time,
+        tz,
+        forecast_period,
+        line_color,
+        line_type,
+        number_points,
+        track_points,
+    ):
         """Create tropical cyclone track element.
 
         Parameters
@@ -1907,8 +2280,18 @@ class TropicalCycloneTrackElement(TropicalCycloneBase):
 
         breakpoints : array_like of `BreakPointAttribute`
         """
-        super().__init__(header_struct, storm_number, issue_status, basin, advisory_number,
-                         storm_name, storm_type, valid_time, tz, forecast_period)
+        super().__init__(
+            header_struct,
+            storm_number,
+            issue_status,
+            basin,
+            advisory_number,
+            storm_name,
+            storm_type,
+            valid_time,
+            tz,
+            forecast_period,
+        )
         self.forecast_period = forecast_period
         self.line_color = line_color
         self.line_type = line_type
@@ -1919,11 +2302,42 @@ class TropicalCycloneTrackElement(TropicalCycloneBase):
 class VolcanoElement(VectorGraphicElement):
     """Volcano element."""
 
-    def __init__(self, header_struct, name, code, size, width, number, location, area,
-                 origin_station, vaac, wmo_id, header_number, elevation, year, advisory_number,
-                 correction, info_source, additional_source, aviation_color, details, obs_date,
-                 obs_time, obs_ash, forecast_6hr, forecast_12hr, forecast_18hr, remarks,
-                 next_advisory, forecaster, offset_x, offset_y, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        name,
+        code,
+        size,
+        width,
+        number,
+        location,
+        area,
+        origin_station,
+        vaac,
+        wmo_id,
+        header_number,
+        elevation,
+        year,
+        advisory_number,
+        correction,
+        info_source,
+        additional_source,
+        aviation_color,
+        details,
+        obs_date,
+        obs_time,
+        obs_ash,
+        forecast_6hr,
+        forecast_12hr,
+        forecast_18hr,
+        remarks,
+        next_advisory,
+        forecaster,
+        offset_x,
+        offset_y,
+        lat,
+        lon,
+    ):
         """Create volcano element.
 
         Parameters
@@ -2030,8 +2444,9 @@ class VolcanoElement(VectorGraphicElement):
 class WatchStatusMessageElement(SpecialLineElement):
     """Watch status message element."""
 
-    def __init__(self, header_struct, number_points, line_type, stroke, direction, size, width,
-                 lat, lon):
+    def __init__(
+        self, header_struct, number_points, line_type, stroke, direction, size, width, lat, lon
+    ):
         """Create watch status message line element.
 
         Parameters
@@ -2059,15 +2474,27 @@ class WatchStatusMessageElement(SpecialLineElement):
 
         lon : `numpy.ndarray`
         """
-        super().__init__(header_struct, number_points, line_type, stroke, direction, size,
-                         width, lat, lon)
+        super().__init__(
+            header_struct, number_points, line_type, stroke, direction, size, width, lat, lon
+        )
 
 
 class WindElement(VectorGraphicElement):
     """Wind element."""
 
-    def __init__(self, header_struct, number_wind, width, size, wind_type,
-                 head_size, speed, direction, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        number_wind,
+        width,
+        size,
+        wind_type,
+        head_size,
+        speed,
+        direction,
+        lat,
+        lon,
+    ):
         """Create wind element.
 
         Parameters
@@ -2115,17 +2542,57 @@ class WindElement(VectorGraphicElement):
 class WatchBoxElement(VectorGraphicElement):
     """Watch box element."""
 
-    def __init__(self, header_struct, number_points, style, shape,
-                 marker_type, marker_size, marker_width, anchor0_station,
-                 anchor0_lat, anchor0_lon, anchor0_distance, anchor0_direction,
-                 anchor1_station, anchor1_lat, anchor1_lon, anchor1_distance,
-                 anchor1_direction, status, number, issue_time, expire_time,
-                 watch_type, severity, timezone, max_hail, max_wind, max_tops,
-                 mean_storm_direction, mean_storm_speed, states, adjacent_areas,
-                 replacing, forecaster, filename, issue_flag, wsm_issue_time,
-                 wsm_expire_time, wsm_reference_direction, wsm_recent_from_line,
-                 wsm_md_number, wsm_forecaster, number_counties, plot_counties,
-                 county_fips, county_lat, county_lon, lat, lon):
+    def __init__(
+        self,
+        header_struct,
+        number_points,
+        style,
+        shape,
+        marker_type,
+        marker_size,
+        marker_width,
+        anchor0_station,
+        anchor0_lat,
+        anchor0_lon,
+        anchor0_distance,
+        anchor0_direction,
+        anchor1_station,
+        anchor1_lat,
+        anchor1_lon,
+        anchor1_distance,
+        anchor1_direction,
+        status,
+        number,
+        issue_time,
+        expire_time,
+        watch_type,
+        severity,
+        timezone,
+        max_hail,
+        max_wind,
+        max_tops,
+        mean_storm_direction,
+        mean_storm_speed,
+        states,
+        adjacent_areas,
+        replacing,
+        forecaster,
+        filename,
+        issue_flag,
+        wsm_issue_time,
+        wsm_expire_time,
+        wsm_reference_direction,
+        wsm_recent_from_line,
+        wsm_md_number,
+        wsm_forecaster,
+        number_counties,
+        plot_counties,
+        county_fips,
+        county_lat,
+        county_lon,
+        lat,
+        lon,
+    ):
         """Create watch box element.
 
         Parameters
@@ -2340,8 +2807,7 @@ class Group:
 
     def __repr__(self):
         """Return repr(self)."""
-        return (f'{type(self).__qualname__}'
-                f'[{self.group_type}, {self.group_number}]')
+        return f'{type(self).__qualname__}[{self.group_type}, {self.group_number}]'
 
     @property
     def elements(self):
@@ -2370,16 +2836,14 @@ class Group:
         ----------
         element : subclass of `mdgpu.io.vgf.VectorGraphicElement`
         """
-        if (self._group_type != element.group_type
-           and self._group_type is None):
+        if self._group_type != element.group_type and self._group_type is None:
             self._group_type = element.group_type
         elif self._group_type == element.group_type:
             pass
         else:
             raise ValueError('Group cannot have multiple types.')
 
-        if (self._group_number != element.group_number
-           and self._group_number is None):
+        if self._group_number != element.group_number and self._group_number is None:
             self._group_number = element.group_number
         elif self._group_number == element.group_number:
             pass
@@ -2447,8 +2911,7 @@ class VectorGraphicFile:
         ymax = -9999
 
         for element in self.elements:
-            if 0 in [element.max_lat, element.max_lon,
-                     element.min_lat, element.min_lon]:
+            if 0 in [element.max_lat, element.max_lon, element.min_lat, element.min_lon]:
                 continue
             else:
                 if element.max_lat > ymax:
@@ -2470,14 +2933,18 @@ class VectorGraphicFile:
     @property
     def has_text(self):
         """Check for text elements."""
-        return bool(self.filter_elements(vg_class=VGClass.text.value,
-                                         vg_type=VGType.text.value))
+        return bool(
+            self.filter_elements(vg_class=VGClass.text.value, vg_type=VGType.text.value)
+        )
 
     @property
     def has_special_text(self):
         """Check for special text elements."""
-        return bool(self.filter_elements(vg_class=VGClass.text.value,
-                                         vg_type=VGType.special_text.value))
+        return bool(
+            self.filter_elements(
+                vg_class=VGClass.text.value, vg_type=VGType.special_text.value
+            )
+        )
 
     @property
     def has_symbols(self):
@@ -2487,14 +2954,18 @@ class VectorGraphicFile:
     @property
     def has_special_lines(self):
         """Check for special lines elements."""
-        return bool(self.filter_elements(vg_class=VGClass.lines.value,
-                                         vg_type=VGType.special_line.value))
+        return bool(
+            self.filter_elements(
+                vg_class=VGClass.lines.value, vg_type=VGType.special_line.value
+            )
+        )
 
     @property
     def has_lines(self):
         """Check for lines elements."""
-        return bool(self.filter_elements(vg_class=VGClass.lines.value,
-                                         vg_type=VGType.line.value))
+        return bool(
+            self.filter_elements(vg_class=VGClass.lines.value, vg_type=VGType.line.value)
+        )
 
     @property
     def has_winds(self):
@@ -2553,8 +3024,9 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.SpecialTextElement`.
         """
         if self.has_special_text:
-            return self.filter_elements(vg_class=VGClass.text.value,
-                                        vg_type=VGType.special_text.value)
+            return self.filter_elements(
+                vg_class=VGClass.text.value, vg_type=VGType.special_text.value
+            )
 
         return None
 
@@ -2578,8 +3050,9 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.SpecialLineElement`.
         """
         if self.has_special_lines:
-            return self.filter_elements(vg_class=VGClass.lines.value,
-                                        vg_type=VGType.special_line.value)
+            return self.filter_elements(
+                vg_class=VGClass.lines.value, vg_type=VGType.special_line.value
+            )
 
         return None
 
@@ -2591,8 +3064,9 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.LineElement`.
         """
         if self.has_lines:
-            return self.filter_elements(vg_class=VGClass.lines.value,
-                                        vg_type=VGType.line.value)
+            return self.filter_elements(
+                vg_class=VGClass.lines.value, vg_type=VGType.line.value
+            )
 
         return None
 
@@ -2753,9 +3227,7 @@ class VectorGraphicFile:
         """
         serialized = [e.__dict__ for e in self._elements]
 
-        return json.dumps(serialized,
-                          cls=kwargs.get('cls', NumpyEncoder),
-                          **kwargs)
+        return json.dumps(serialized, cls=kwargs.get('cls', NumpyEncoder), **kwargs)
 
     def _decode_elements(self):
         """Decode elements of a VGF."""
@@ -2769,9 +3241,11 @@ class VectorGraphicFile:
             group_info = header_struct.group_type
 
             # Ignores the file header group
-            if (group_info not in self._groups
-               and group_info
-               and vg_class != VGClass.header.value):
+            if (
+                group_info not in self._groups
+                and group_info
+                and vg_class != VGClass.header.value
+            ):
                 self._groups.append(group_info)
 
             if vg_class == VGClass.header.value and vg_type == VGType.file_header.value:
@@ -2782,9 +3256,13 @@ class VectorGraphicFile:
                 self._header = FileHeaderElement(header_struct, version, notes)
             elif vg_class == VGClass.fronts.value:
                 front_info = [
-                    ('number_points', 'i'), ('front_code', 'i'), ('pip_size', 'i'),
-                    ('pip_stroke', 'i'), ('pip_direction', 'i'), ('width', 'i'),
-                    ('label', '4s', self._decode_strip_null)
+                    ('number_points', 'i'),
+                    ('front_code', 'i'),
+                    ('pip_size', 'i'),
+                    ('pip_stroke', 'i'),
+                    ('pip_direction', 'i'),
+                    ('width', 'i'),
+                    ('label', '4s', self._decode_strip_null),
                 ]
                 front = self._buffer.read_struct(
                     NamedStruct(front_info, self.prefmt, 'FrontInfo')
@@ -2793,33 +3271,57 @@ class VectorGraphicFile:
                 lat, lon = self._get_latlon(front.number_points)
 
                 self._elements.append(
-                    FrontElement(header_struct, front.number_points, front.front_code,
-                                 front.pip_size, front.pip_stroke, front.pip_direction,
-                                 front.width, front.label, lat, lon)
+                    FrontElement(
+                        header_struct,
+                        front.number_points,
+                        front.front_code,
+                        front.pip_size,
+                        front.pip_stroke,
+                        front.pip_direction,
+                        front.width,
+                        front.label,
+                        lat,
+                        lon,
+                    )
                 )
             elif vg_class == VGClass.symbols.value:
                 symbol_info = [
-                    ('number_symbols', 'i'), ('width', 'i'),
-                    ('symbol_size', 'f', partial(round, ndigits=1)), ('symbol_type', 'i'),
-                    ('symbol_code', 'f', int), ('lat', 'f', partial(round, ndigits=2)),
-                    ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
-                    ('offset_y', 'i')
+                    ('number_symbols', 'i'),
+                    ('width', 'i'),
+                    ('symbol_size', 'f', partial(round, ndigits=1)),
+                    ('symbol_type', 'i'),
+                    ('symbol_code', 'f', int),
+                    ('lat', 'f', partial(round, ndigits=2)),
+                    ('lon', 'f', partial(round, ndigits=2)),
+                    ('offset_x', 'i'),
+                    ('offset_y', 'i'),
                 ]
                 symbol = self._buffer.read_struct(
                     NamedStruct(symbol_info, self.prefmt, 'SymbolInfo')
                 )
 
                 self._elements.append(
-                    SymbolElement(header_struct, symbol.number_symbols, symbol.width,
-                                  symbol.symbol_size, symbol.symbol_type, symbol.symbol_code,
-                                  symbol.offset_x, symbol.offset_y, symbol.lat, symbol.lon)
+                    SymbolElement(
+                        header_struct,
+                        symbol.number_symbols,
+                        symbol.width,
+                        symbol.symbol_size,
+                        symbol.symbol_type,
+                        symbol.symbol_code,
+                        symbol.offset_x,
+                        symbol.offset_y,
+                        symbol.lat,
+                        symbol.lon,
+                    )
                 )
             elif vg_class == VGClass.circle.value:
                 if vg_type == VGType.circle.value:
                     line_info = [
-                        ('number_points', 'i'), ('line_type', 'i'),
-                        ('line_type_hardware', 'i'), ('width', 'i'),
-                        ('line_width_hardware', 'i')
+                        ('number_points', 'i'),
+                        ('line_type', 'i'),
+                        ('line_type_hardware', 'i'),
+                        ('width', 'i'),
+                        ('line_width_hardware', 'i'),
                     ]
                     line = self._buffer.read_struct(
                         NamedStruct(line_info, self.prefmt, 'LineInfo')
@@ -2829,16 +3331,25 @@ class VectorGraphicFile:
                     lat, lon = self._get_latlon(line.number_points)
 
                     self._elements.append(
-                        CircleElement(header_struct, line.number_points, line.line_type,
-                                      line.line_type_hardware, line.width,
-                                      line.line_width_hardware, lat, lon)
+                        CircleElement(
+                            header_struct,
+                            line.number_points,
+                            line.line_type,
+                            line.line_type_hardware,
+                            line.width,
+                            line.line_width_hardware,
+                            lat,
+                            lon,
+                        )
                     )
             elif vg_class == VGClass.lines.value:
                 if vg_type == VGType.line.value:
                     line_info = [
-                        ('number_points', 'i'), ('line_type', 'i'),
-                        ('line_type_hardware', 'i'), ('width', 'i'),
-                        ('line_width_hardware', 'i')
+                        ('number_points', 'i'),
+                        ('line_type', 'i'),
+                        ('line_type_hardware', 'i'),
+                        ('width', 'i'),
+                        ('line_width_hardware', 'i'),
                     ]
                     line = self._buffer.read_struct(
                         NamedStruct(line_info, self.prefmt, 'LineInfo')
@@ -2852,15 +3363,25 @@ class VectorGraphicFile:
                         lon, lat = self.close_coordinates(lon, lat)
 
                     self._elements.append(
-                        LineElement(header_struct, line.number_points, line.line_type,
-                                    line.line_type_hardware, line.width,
-                                    line.line_width_hardware, lat, lon)
+                        LineElement(
+                            header_struct,
+                            line.number_points,
+                            line.line_type,
+                            line.line_type_hardware,
+                            line.width,
+                            line.line_width_hardware,
+                            lat,
+                            lon,
+                        )
                     )
                 elif vg_type == VGType.special_line.value:
                     special_line_info = [
-                        ('number_points', 'i'), ('line_type', 'i'), ('stroke', 'i'),
-                        ('direction', 'i'), ('line_size', 'f', partial(round, ndigits=1)),
-                        ('width', 'i')
+                        ('number_points', 'i'),
+                        ('line_type', 'i'),
+                        ('stroke', 'i'),
+                        ('direction', 'i'),
+                        ('line_size', 'f', partial(round, ndigits=1)),
+                        ('width', 'i'),
                     ]
                     special_line = self._buffer.read_struct(
                         NamedStruct(special_line_info, self.prefmt, 'SpecialLineInfo')
@@ -2877,18 +3398,27 @@ class VectorGraphicFile:
                         lon, lat = self.flip_coordinates(lon, lat)
 
                     self._elements.append(
-                        SpecialLineElement(header_struct, special_line.number_points,
-                                           special_line.line_type, special_line.stroke,
-                                           special_line.direction, special_line.line_size,
-                                           special_line.width, lat, lon)
+                        SpecialLineElement(
+                            header_struct,
+                            special_line.number_points,
+                            special_line.line_type,
+                            special_line.stroke,
+                            special_line.direction,
+                            special_line.line_size,
+                            special_line.width,
+                            lat,
+                            lon,
+                        )
                     )
                 else:
                     raise NotImplementedError(f'Line type `{vg_type}` is not implemented.')
             elif vg_class == VGClass.lists.value:
                 list_info = [
-                    ('list_type', 'i'), ('marker_type', 'i'),
+                    ('list_type', 'i'),
+                    ('marker_type', 'i'),
                     ('marker_size', 'f', partial(round, ndigits=1)),
-                    ('marker_width', 'i'), ('number_items', 'i')
+                    ('marker_width', 'i'),
+                    ('number_items', 'i'),
                 ]
                 list_struct = NamedStruct(list_info, self.prefmt, 'ListInfo')
                 list_meta = self._buffer.read_struct(list_struct)
@@ -2907,19 +3437,31 @@ class VectorGraphicFile:
                 self._buffer.skip(coord_blank_size)
 
                 self._elements.append(
-                    ListElement(header_struct, list_meta.list_type, list_meta.marker_type,
-                                list_meta.marker_size, list_meta.marker_width,
-                                list_meta.number_items, list_items, lat, lon)
+                    ListElement(
+                        header_struct,
+                        list_meta.list_type,
+                        list_meta.marker_type,
+                        list_meta.marker_size,
+                        list_meta.marker_width,
+                        list_meta.number_items,
+                        list_items,
+                        lat,
+                        lon,
+                    )
                 )
             elif vg_class == VGClass.text.value:
                 if vg_type == VGType.text.value or vg_type == VGType.justified_text.value:
                     text_info = [
                         ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)), ('font', 'i'),
-                        ('text_flag', 'i'), ('width', 'i'), ('align', 'i'),
+                        ('text_size', 'f', partial(round, ndigits=3)),
+                        ('font', 'i'),
+                        ('text_flag', 'i'),
+                        ('width', 'i'),
+                        ('align', 'i'),
                         ('lat', 'f', partial(round, ndigits=2)),
                         ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'), ('offset_y', 'i')
+                        ('offset_x', 'i'),
+                        ('offset_y', 'i'),
                     ]
                     text_struct = NamedStruct(text_info, self.prefmt, 'TextInfo')
                     text = self._buffer.read_struct(text_struct)
@@ -2929,20 +3471,38 @@ class VectorGraphicFile:
                     clean_text = text_string.replace('$$', '\n').replace('\x00', '').strip()
 
                     self._elements.append(
-                        TextElement(header_struct, text.rotation, text.text_size, text.font,
-                                    text.text_flag, text.width, text.align, text.lat,
-                                    text.lon, text.offset_x, text.offset_y, clean_text)
+                        TextElement(
+                            header_struct,
+                            text.rotation,
+                            text.text_size,
+                            text.font,
+                            text.text_flag,
+                            text.width,
+                            text.align,
+                            text.lat,
+                            text.lon,
+                            text.offset_x,
+                            text.offset_y,
+                            clean_text,
+                        )
                     )
                 elif vg_type == VGType.special_text.value:
                     special_text_info = [
                         ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
-                        ('width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
-                        ('fill_color', 'i'), ('align', 'i'),
+                        ('text_size', 'f', partial(round, ndigits=3)),
+                        ('text_type', 'i'),
+                        ('turbulence_symbol', 'i'),
+                        ('font', 'i'),
+                        ('text_flag', 'i'),
+                        ('width', 'i'),
+                        ('text_color', 'i'),
+                        ('line_color', 'i'),
+                        ('fill_color', 'i'),
+                        ('align', 'i'),
                         ('lat', 'f', partial(round, ndigits=2)),
                         ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'), ('offset_y', 'i')
+                        ('offset_x', 'i'),
+                        ('offset_y', 'i'),
                     ]
                     text_struct = NamedStruct(
                         special_text_info, self.prefmt, 'SpecialTextInfo'
@@ -2954,23 +3514,44 @@ class VectorGraphicFile:
                     clean_text = text_string.replace('$$', '\n').replace('\x00', '').strip()
 
                     self._elements.append(
-                        SpecialTextElement(header_struct, text.rotation, text.text_size,
-                                           text.text_type, text.turbulence_symbol, text.font,
-                                           text.text_flag, text.width, text.text_color,
-                                           text.line_color, text.fill_color, text.align,
-                                           text.lat, text.lon, text.offset_x, text.offset_y,
-                                           clean_text)
+                        SpecialTextElement(
+                            header_struct,
+                            text.rotation,
+                            text.text_size,
+                            text.text_type,
+                            text.turbulence_symbol,
+                            text.font,
+                            text.text_flag,
+                            text.width,
+                            text.text_color,
+                            text.line_color,
+                            text.fill_color,
+                            text.align,
+                            text.lat,
+                            text.lon,
+                            text.offset_x,
+                            text.offset_y,
+                            clean_text,
+                        )
                     )
                 else:
                     raise NotImplementedError(f'Text type `{vg_type}` is not implemented.')
             elif vg_class == VGClass.tracks.value:
                 track_info = [
-                    ('track_type', 'i'), ('total_points', 'i'), ('initial_points', 'i'),
-                    ('initial_line_type', 'i'), ('extrapolated_line_type', 'i'),
-                    ('initial_mark_type', 'i'), ('extrapolated_mark_type', 'i'),
-                    ('line_width', 'i'), ('speed', 'f', partial(round, ndigits=2)),
-                    ('direction', 'f', partial(round, ndigits=2)), ('increment', 'i'),
-                    ('skip', 'i'), ('font', 'i'), ('font_flag', 'i')
+                    ('track_type', 'i'),
+                    ('total_points', 'i'),
+                    ('initial_points', 'i'),
+                    ('initial_line_type', 'i'),
+                    ('extrapolated_line_type', 'i'),
+                    ('initial_mark_type', 'i'),
+                    ('extrapolated_mark_type', 'i'),
+                    ('line_width', 'i'),
+                    ('speed', 'f', partial(round, ndigits=2)),
+                    ('direction', 'f', partial(round, ndigits=2)),
+                    ('increment', 'i'),
+                    ('skip', 'i'),
+                    ('font', 'i'),
+                    ('font_flag', 'i'),
                 ]
                 track = self._buffer.read_struct(
                     NamedStruct(track_info, self.prefmt, 'TrackInfo')
@@ -2993,41 +3574,69 @@ class VectorGraphicFile:
                 self._buffer.skip(blank_latlon_size)
 
                 self._elements.append(
-                    TrackElement(header_struct, track.track_type, track.total_points,
-                                 track.initial_points, track.initial_line_type,
-                                 track.extrapolated_line_type, track.initial_mark_type,
-                                 track.extrapolated_mark_type, track.line_width, track.speed,
-                                 track.direction, track.increment, track.skip, track.font,
-                                 track.font_flag, track_font_size, times, lat, lon)
+                    TrackElement(
+                        header_struct,
+                        track.track_type,
+                        track.total_points,
+                        track.initial_points,
+                        track.initial_line_type,
+                        track.extrapolated_line_type,
+                        track.initial_mark_type,
+                        track.extrapolated_mark_type,
+                        track.line_width,
+                        track.speed,
+                        track.direction,
+                        track.increment,
+                        track.skip,
+                        track.font,
+                        track.font_flag,
+                        track_font_size,
+                        times,
+                        lat,
+                        lon,
+                    )
                 )
             elif vg_class == VGClass.sigmets.value:
-                if vg_type in [VGType.convective_outlook.value, VGType.convective_sigmet.value,
-                               VGType.nonconvective_sigmet.value, VGType.airmet.value,
-                               VGType.international_sigmet.value]:
+                if vg_type in [
+                    VGType.convective_outlook.value,
+                    VGType.convective_sigmet.value,
+                    VGType.nonconvective_sigmet.value,
+                    VGType.airmet.value,
+                    VGType.international_sigmet.value,
+                ]:
                     sigmet_info = [
-                        ('subtype', 'i'), ('number_points', 'i'), ('line_type', 'i'),
-                        ('line_width', 'i'), ('side_of_line', 'i'),
+                        ('subtype', 'i'),
+                        ('number_points', 'i'),
+                        ('line_type', 'i'),
+                        ('line_width', 'i'),
+                        ('side_of_line', 'i'),
                         ('area', '8s', self._decode_strip_null),
                         ('flight_info_region', '32s', self._decode_strip_null),
-                        ('status', 'i'), ('distance', 'f'),
+                        ('status', 'i'),
+                        ('distance', 'f'),
                         ('message_id', '12s', self._decode_strip_null),
                         ('sequence_number', 'i'),
                         ('start_time', '20s', self._decode_strip_null),
                         ('end_time', '20s', self._decode_strip_null),
-                        ('remarks', '80s', self._decode_strip_null), ('sonic', 'i'),
+                        ('remarks', '80s', self._decode_strip_null),
+                        ('sonic', 'i'),
                         ('phenomena', '32s', self._decode_strip_null),
                         ('phenomena2', '32s', self._decode_strip_null),
                         ('phenomena_name', '36s', self._decode_strip_null),
                         ('phenomena_lat', '8s', self._decode_strip_null),
-                        ('phenomena_lon', '8s', self._decode_strip_null), ('pressure', 'i'),
-                        ('max_wind', 'i'), ('free_text', '256s', self._decode_strip_null),
+                        ('phenomena_lon', '8s', self._decode_strip_null),
+                        ('pressure', 'i'),
+                        ('max_wind', 'i'),
+                        ('free_text', '256s', self._decode_strip_null),
                         ('trend', '8s', self._decode_strip_null),
                         ('movement', '8s', self._decode_strip_null),
-                        ('type_indicator', 'i'), ('type_time', '20s', self._decode_strip_null),
-                        ('flight_level', 'i'), ('speed', 'i'),
+                        ('type_indicator', 'i'),
+                        ('type_time', '20s', self._decode_strip_null),
+                        ('flight_level', 'i'),
+                        ('speed', 'i'),
                         ('direction', '4s', self._decode_strip_null),
                         ('tops', '80s', self._decode_strip_null),
-                        ('forecaster', '16s', self._decode_strip_null)
+                        ('forecaster', '16s', self._decode_strip_null),
                     ]
 
                     sigmet = self._buffer.read_struct(
@@ -3038,28 +3647,54 @@ class VectorGraphicFile:
                     lon = self._buffer.read_array(sigmet.number_points, f'{self.prefmt}f')
 
                     self._elements.append(
-                        SigmetElement(header_struct, sigmet.subtype, sigmet.number_points,
-                                      sigmet.line_type, sigmet.line_width, sigmet.side_of_line,
-                                      sigmet.area, sigmet.flight_info_region, sigmet.area,
-                                      sigmet.distance, sigmet.message_id,
-                                      sigmet.sequence_number, sigmet.start_time,
-                                      sigmet.end_time, sigmet.remarks, sigmet.sonic,
-                                      sigmet.phenomena, sigmet.phenomena2,
-                                      sigmet.phenomena_name, sigmet.phenomena_lat,
-                                      sigmet.phenomena_lon, sigmet.pressure, sigmet.max_wind,
-                                      sigmet.free_text, sigmet.trend, sigmet.movement,
-                                      sigmet.type_indicator, sigmet.type_time,
-                                      sigmet.flight_level, sigmet.speed, sigmet.direction,
-                                      sigmet.tops, sigmet.forecaster, lat, lon
+                        SigmetElement(
+                            header_struct,
+                            sigmet.subtype,
+                            sigmet.number_points,
+                            sigmet.line_type,
+                            sigmet.line_width,
+                            sigmet.side_of_line,
+                            sigmet.area,
+                            sigmet.flight_info_region,
+                            sigmet.area,
+                            sigmet.distance,
+                            sigmet.message_id,
+                            sigmet.sequence_number,
+                            sigmet.start_time,
+                            sigmet.end_time,
+                            sigmet.remarks,
+                            sigmet.sonic,
+                            sigmet.phenomena,
+                            sigmet.phenomena2,
+                            sigmet.phenomena_name,
+                            sigmet.phenomena_lat,
+                            sigmet.phenomena_lon,
+                            sigmet.pressure,
+                            sigmet.max_wind,
+                            sigmet.free_text,
+                            sigmet.trend,
+                            sigmet.movement,
+                            sigmet.type_indicator,
+                            sigmet.type_time,
+                            sigmet.flight_level,
+                            sigmet.speed,
+                            sigmet.direction,
+                            sigmet.tops,
+                            sigmet.forecaster,
+                            lat,
+                            lon,
                         )
                     )
                 elif vg_type == VGType.ccf.value:
                     ccf_info = [
-                        ('subtype', 'i'), ('number_points', 'i'), ('coverage', 'i'),
-                        ('storm_tops', 'i'), ('probability', 'i'), ('growth', 'i'),
+                        ('subtype', 'i'),
+                        ('number_points', 'i'),
+                        ('coverage', 'i'),
+                        ('storm_tops', 'i'),
+                        ('probability', 'i'),
+                        ('growth', 'i'),
                         ('speed', 'f', partial(round, ndigits=2)),
                         ('direction', 'f', partial(round, ndigits=2)),
-
                     ]
 
                     # See cvgswap.c in GEMPAK source. These are not swapped.
@@ -3067,9 +3702,12 @@ class VectorGraphicFile:
                         ('text_lat', 'f', partial(round, ndigits=2)),
                         ('text_lon', 'f', partial(round, ndigits=2)),
                         ('arrow_lat', 'f', partial(round, ndigits=2)),
-                        ('arrow_lon', 'f', partial(round, ndigits=2)), ('high_fill', 'i'),
-                        ('med_fill', 'i'), ('low_fill', 'i'), ('line_type', 'i'),
-                        ('arrow_size', 'f', partial(round, ndigits=1))
+                        ('arrow_lon', 'f', partial(round, ndigits=2)),
+                        ('high_fill', 'i'),
+                        ('med_fill', 'i'),
+                        ('low_fill', 'i'),
+                        ('line_type', 'i'),
+                        ('arrow_size', 'f', partial(round, ndigits=1)),
                     ]
 
                     ccf = self._buffer.read_struct(
@@ -3085,14 +3723,22 @@ class VectorGraphicFile:
                     # for the few attributes it affects. See cvgswap.c in GEMPAK source.
                     ccf_text_info = [
                         ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'), ('font', 'i', self._swap32),
-                        ('text_flag', 'i', self._swap32), ('width', 'i', self._swap32),
-                        ('text_color', 'i'), ('line_color', 'i'), ('fill_color', 'i'),
-                        ('align', 'i'), ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
-                        ('offset_y', 'i'), ('text', '255s', self._decode_strip_null),
-                        (None, '1x')  # skip struct alignment padding byte
+                        ('text_size', 'f', partial(round, ndigits=3)),
+                        ('text_type', 'i'),
+                        ('turbulence_symbol', 'i'),
+                        ('font', 'i', self._swap32),
+                        ('text_flag', 'i', self._swap32),
+                        ('width', 'i', self._swap32),
+                        ('text_color', 'i'),
+                        ('line_color', 'i'),
+                        ('fill_color', 'i'),
+                        ('align', 'i'),
+                        ('lat', 'f', partial(round, ndigits=2)),
+                        ('lon', 'f', partial(round, ndigits=2)),
+                        ('offset_x', 'i'),
+                        ('offset_y', 'i'),
+                        ('text', '255s', self._decode_strip_null),
+                        (None, '1x'),  # skip struct alignment padding byte
                     ]
 
                     ccf_text = self._buffer.read_struct(
@@ -3105,16 +3751,39 @@ class VectorGraphicFile:
 
                     self._elements.append(
                         CollaborativeConvectiveForecastElement(
-                            header_struct, ccf.subtype, ccf.number_points, ccf.coverage,
-                            ccf.storm_tops, ccf.probability, ccf.growth, ccf.speed,
-                            ccf.direction, ccf_noswap.text_lat, ccf_noswap.text_lon,
-                            ccf_noswap.arrow_lat, ccf_noswap.arrow_lon, ccf_noswap.high_fill,
-                            ccf_noswap.med_fill, ccf_noswap.low_fill, ccf_noswap.line_type,
-                            ccf_noswap.arrow_size, ccf_text.rotation, ccf_text.text_size,
-                            ccf_text.text_type, ccf_text.turbulence_symbol, ccf_text.font,
-                            ccf_text.text_flag, ccf_text.width, ccf_text.fill_color,
-                            ccf_text.align, ccf_text.offset_x, ccf_text.offset_y,
-                            ccf_text.text, text_layout, lat, lon
+                            header_struct,
+                            ccf.subtype,
+                            ccf.number_points,
+                            ccf.coverage,
+                            ccf.storm_tops,
+                            ccf.probability,
+                            ccf.growth,
+                            ccf.speed,
+                            ccf.direction,
+                            ccf_noswap.text_lat,
+                            ccf_noswap.text_lon,
+                            ccf_noswap.arrow_lat,
+                            ccf_noswap.arrow_lon,
+                            ccf_noswap.high_fill,
+                            ccf_noswap.med_fill,
+                            ccf_noswap.low_fill,
+                            ccf_noswap.line_type,
+                            ccf_noswap.arrow_size,
+                            ccf_text.rotation,
+                            ccf_text.text_size,
+                            ccf_text.text_type,
+                            ccf_text.turbulence_symbol,
+                            ccf_text.font,
+                            ccf_text.text_flag,
+                            ccf_text.width,
+                            ccf_text.fill_color,
+                            ccf_text.align,
+                            ccf_text.offset_x,
+                            ccf_text.offset_y,
+                            ccf_text.text,
+                            text_layout,
+                            lat,
+                            lon,
                         )
                     )
                     self._buffer.skip((MAX_SIGMET - ccf.number_points) * 8)
@@ -3123,7 +3792,8 @@ class VectorGraphicFile:
                         ('name', '64s', self._decode_strip_null),
                         ('code', 'f', partial(round, ndigits=1)),
                         ('size', 'f', partial(round, ndigits=1)),
-                        ('width', 'i'), ('number', '17s', self._decode_strip_null),
+                        ('width', 'i'),
+                        ('number', '17s', self._decode_strip_null),
                         ('location', '17s', self._decode_strip_null),
                         ('area', '33s', self._decode_strip_null),
                         ('origin_station', '17s', self._decode_strip_null),
@@ -3149,8 +3819,9 @@ class VectorGraphicFile:
                         ('forecaster', '64s', self._decode_strip_null),
                         (None, '3x'),  # skip struct alignment padding bytes
                         ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
-                        ('offset_y', 'i')
+                        ('lon', 'f', partial(round, ndigits=2)),
+                        ('offset_x', 'i'),
+                        ('offset_y', 'i'),
                     ]
 
                     volcano = self._buffer.read_struct(
@@ -3158,32 +3829,56 @@ class VectorGraphicFile:
                     )
 
                     self._elements.append(
-                        VolcanoElement(header_struct, volcano.name, volcano.code, volcano.size,
-                                       volcano.width, volcano.number, volcano.location,
-                                       volcano.area, volcano.origin_station, volcano.vaac,
-                                       volcano.wmo_id, volcano.header_number,
-                                       volcano.elevation, volcano.year,
-                                       volcano.advisory_number, volcano.correction,
-                                       volcano.info_source, volcano.additional_source,
-                                       volcano.aviation_color, volcano.details,
-                                       volcano.obs_date, volcano.obs_time, volcano.obs_ash,
-                                       volcano.forecast_6hr, volcano.forecast_12hr,
-                                       volcano.forecast_18hr, volcano.remarks,
-                                       volcano.next_advisory, volcano.forecaster,
-                                       volcano.offset_x, volcano.offset_y, volcano.lat,
-                                       volcano.lon)
+                        VolcanoElement(
+                            header_struct,
+                            volcano.name,
+                            volcano.code,
+                            volcano.size,
+                            volcano.width,
+                            volcano.number,
+                            volcano.location,
+                            volcano.area,
+                            volcano.origin_station,
+                            volcano.vaac,
+                            volcano.wmo_id,
+                            volcano.header_number,
+                            volcano.elevation,
+                            volcano.year,
+                            volcano.advisory_number,
+                            volcano.correction,
+                            volcano.info_source,
+                            volcano.additional_source,
+                            volcano.aviation_color,
+                            volcano.details,
+                            volcano.obs_date,
+                            volcano.obs_time,
+                            volcano.obs_ash,
+                            volcano.forecast_6hr,
+                            volcano.forecast_12hr,
+                            volcano.forecast_18hr,
+                            volcano.remarks,
+                            volcano.next_advisory,
+                            volcano.forecaster,
+                            volcano.offset_x,
+                            volcano.offset_y,
+                            volcano.lat,
+                            volcano.lon,
+                        )
                     )
                 elif vg_type == VGType.ash_cloud.value:
                     ash_info = [
-                        ('subtype', 'i'), ('number_points', 'i'),
+                        ('subtype', 'i'),
+                        ('number_points', 'i'),
                         ('distance', 'f', partial(round, ndigits=2)),
-                        ('forecast_hour', 'i'), ('line_type', 'i'),
-                        ('line_width', 'i'), ('side_of_line', 'i'),
+                        ('forecast_hour', 'i'),
+                        ('line_type', 'i'),
+                        ('line_width', 'i'),
+                        ('side_of_line', 'i'),
                         ('speed', 'f', partial(round, ndigits=2)),
                         ('speeds', '16s', self._decode_strip_null),
                         ('direction', '4s', self._decode_strip_null),
                         ('flight_level_1', '16s', self._decode_strip_null),
-                        ('flight_level_2', '16s', self._decode_strip_null)
+                        ('flight_level_2', '16s', self._decode_strip_null),
                     ]
 
                     ash = self._buffer.read_struct(
@@ -3192,13 +3887,20 @@ class VectorGraphicFile:
 
                     special_text_info = [
                         ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
-                        ('width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
-                        ('fill_color', 'i'), ('align', 'i'),
+                        ('text_size', 'f', partial(round, ndigits=3)),
+                        ('text_type', 'i'),
+                        ('turbulence_symbol', 'i'),
+                        ('font', 'i'),
+                        ('text_flag', 'i'),
+                        ('width', 'i'),
+                        ('text_color', 'i'),
+                        ('line_color', 'i'),
+                        ('fill_color', 'i'),
+                        ('align', 'i'),
                         ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)), ('offset_x', 'i'),
-                        ('offset_y', 'i')
+                        ('lon', 'f', partial(round, ndigits=2)),
+                        ('offset_x', 'i'),
+                        ('offset_y', 'i'),
                     ]
 
                     text = self._buffer.read_struct(
@@ -3209,27 +3911,48 @@ class VectorGraphicFile:
                     self._buffer.skip(1)  # skip byte for struct alignment
 
                     lat, lon = self._get_latlon(ash.number_points)
-                    self. _buffer.skip((MAX_ASH - ash.number_points) * 8)
+                    self._buffer.skip((MAX_ASH - ash.number_points) * 8)
 
                     self._elements.append(
-                        AshCloudElement(header_struct, ash.subtype, ash.number_points,
-                                        ash.distance, ash.forecast_hour, ash.line_type,
-                                        ash.line_width, ash.side_of_line, ash.speed,
-                                        ash.speeds, ash.direction, ash.flight_level_1,
-                                        ash.flight_level_2, text.rotation, text.text_size,
-                                        text.text_type, text.turbulence_symbol, text.font,
-                                        text.text_flag, text.width, text.text_color,
-                                        text.line_color, text.fill_color, text.align,
-                                        text.lat, text.lon, text.offset_x, text.offset_y,
-                                        text_string, lat, lon)
+                        AshCloudElement(
+                            header_struct,
+                            ash.subtype,
+                            ash.number_points,
+                            ash.distance,
+                            ash.forecast_hour,
+                            ash.line_type,
+                            ash.line_width,
+                            ash.side_of_line,
+                            ash.speed,
+                            ash.speeds,
+                            ash.direction,
+                            ash.flight_level_1,
+                            ash.flight_level_2,
+                            text.rotation,
+                            text.text_size,
+                            text.text_type,
+                            text.turbulence_symbol,
+                            text.font,
+                            text.text_flag,
+                            text.width,
+                            text.text_color,
+                            text.line_color,
+                            text.fill_color,
+                            text.align,
+                            text.lat,
+                            text.lon,
+                            text.offset_x,
+                            text.offset_y,
+                            text_string,
+                            lat,
+                            lon,
+                        )
                     )
                 else:
                     raise NotImplementedError(f'SIGMET type `{vg_type}` not implemented.')
             elif vg_class == VGClass.met.value:
                 if vg_type == VGType.gfa.value:
-                    gfa_info = [
-                        ('number_blocks', 'i'), ('number_points', 'i')
-                    ]
+                    gfa_info = [('number_blocks', 'i'), ('number_points', 'i')]
 
                     gfa = self._buffer.read_struct(
                         NamedStruct(gfa_info, self.prefmt, 'GFAInfo')
@@ -3244,46 +3967,74 @@ class VectorGraphicFile:
                     lat, lon = self._get_latlon(gfa.number_points)
 
                     self._elements.append(
-                        GraphicalForecastAreaElement(header_struct, gfa.number_blocks,
-                                                     gfa.number_points, blocks, lat, lon)
+                        GraphicalForecastAreaElement(
+                            header_struct,
+                            gfa.number_blocks,
+                            gfa.number_points,
+                            blocks,
+                            lat,
+                            lon,
+                        )
                     )
                 elif vg_type == VGType.jet.value:
                     jet_line_info = [
-                        ('line_color', 'i'), ('number_points', 'i'), ('line_type', 'i'),
-                        ('stroke', 'i'), ('direction', 'i'),
-                        ('size', 'f', partial(round, ndigits=1)), ('width', 'i')
+                        ('line_color', 'i'),
+                        ('number_points', 'i'),
+                        ('line_type', 'i'),
+                        ('stroke', 'i'),
+                        ('direction', 'i'),
+                        ('size', 'f', partial(round, ndigits=1)),
+                        ('width', 'i'),
                     ]
                     jet_line = self._buffer.read_struct(
                         NamedStruct(jet_line_info, self.prefmt, 'JetLineInfo')
                     )
                     jet_line_lat, jet_line_lon = self._get_latlon(jet_line.number_points)
-                    line_attr = LineAttribute(jet_line.line_color, jet_line.number_points,
-                                              jet_line.line_type, jet_line.stroke,
-                                              jet_line.direction, jet_line.size,
-                                              jet_line.width, jet_line_lat, jet_line_lon)
+                    line_attr = LineAttribute(
+                        jet_line.line_color,
+                        jet_line.number_points,
+                        jet_line.line_type,
+                        jet_line.stroke,
+                        jet_line.direction,
+                        jet_line.size,
+                        jet_line.width,
+                        jet_line_lat,
+                        jet_line_lon,
+                    )
 
                     self._buffer.skip((MAX_POINTS - jet_line.number_points) * 8)
 
                     number_barbs = self._buffer.read_int(4, 'big', False)
 
                     jet_barb_info = [
-                        ('wind_color', 'i'), ('number_wind', 'i'), ('width', 'i'),
-                        ('size', 'f', partial(round, ndigits=1)), ('wind_type', 'i'),
+                        ('wind_color', 'i'),
+                        ('number_wind', 'i'),
+                        ('width', 'i'),
+                        ('size', 'f', partial(round, ndigits=1)),
+                        ('wind_type', 'i'),
                         ('head_size', 'f', partial(round, ndigits=1)),
                         ('speed', 'f', partial(round, ndigits=2)),
                         ('direction', 'f', partial(round, ndigits=2)),
                         ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)), ('flight_level_color', 'i'),
+                        ('lon', 'f', partial(round, ndigits=2)),
+                        ('flight_level_color', 'i'),
                         ('text_rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)), ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'), ('font', 'i'), ('text_flag', 'i'),
-                        ('text_width', 'i'), ('text_color', 'i'), ('line_color', 'i'),
-                        ('fill_color', 'i'), ('align', 'i'),
+                        ('text_size', 'f', partial(round, ndigits=3)),
+                        ('text_type', 'i'),
+                        ('turbulence_symbol', 'i'),
+                        ('font', 'i'),
+                        ('text_flag', 'i'),
+                        ('text_width', 'i'),
+                        ('text_color', 'i'),
+                        ('line_color', 'i'),
+                        ('fill_color', 'i'),
+                        ('align', 'i'),
                         ('text_lat', 'f', partial(round, ndigits=2)),
                         ('text_lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'), ('offset_y', 'i'),
+                        ('offset_x', 'i'),
+                        ('offset_y', 'i'),
                         ('text', '255s', self._decode_strip_null),
-                        (None, '1x')  # skip struct alignment padding byte
+                        (None, '1x'),  # skip struct alignment padding byte
                     ]
 
                     barbs = []
@@ -3292,20 +4043,35 @@ class VectorGraphicFile:
                         jet_barb = self._buffer.read_struct(barb_struct)
 
                         barbs.append(
-                            BarbAttribute(jet_barb.wind_color, jet_barb.number_wind,
-                                        jet_barb.width, jet_barb.size,
-                                        jet_barb.wind_type, jet_barb.head_size,
-                                        jet_barb.speed, jet_barb.direction,
-                                        jet_barb.lat, jet_barb.lon,
-                                        jet_barb.flight_level_color,
-                                        jet_barb.text_rotation, jet_barb.text_size,
-                                        jet_barb.text_type, jet_barb.turbulence_symbol,
-                                        jet_barb.font, jet_barb.text_flag,
-                                        jet_barb.text_width, jet_barb.text_color,
-                                        jet_barb.line_color, jet_barb.fill_color,
-                                        jet_barb.align, jet_barb.text_lat,
-                                        jet_barb.text_lon, jet_barb.offset_x,
-                                        jet_barb.offset_y, jet_barb.text)
+                            BarbAttribute(
+                                jet_barb.wind_color,
+                                jet_barb.number_wind,
+                                jet_barb.width,
+                                jet_barb.size,
+                                jet_barb.wind_type,
+                                jet_barb.head_size,
+                                jet_barb.speed,
+                                jet_barb.direction,
+                                jet_barb.lat,
+                                jet_barb.lon,
+                                jet_barb.flight_level_color,
+                                jet_barb.text_rotation,
+                                jet_barb.text_size,
+                                jet_barb.text_type,
+                                jet_barb.turbulence_symbol,
+                                jet_barb.font,
+                                jet_barb.text_flag,
+                                jet_barb.text_width,
+                                jet_barb.text_color,
+                                jet_barb.line_color,
+                                jet_barb.fill_color,
+                                jet_barb.align,
+                                jet_barb.text_lat,
+                                jet_barb.text_lon,
+                                jet_barb.offset_x,
+                                jet_barb.offset_y,
+                                jet_barb.text,
+                            )
                         )
 
                     self._buffer.skip((MAX_JET_POINTS - number_barbs) * barb_struct.size)
@@ -3313,13 +4079,16 @@ class VectorGraphicFile:
                     number_hash = self._buffer.read_int(4, 'big', False)
 
                     jet_hash_info = [
-                        ('wind_color', 'i'), ('number_wind', 'i'), ('width', 'i'),
-                        ('size', 'f', partial(round, ndigits=1)), ('wind_type', 'i'),
+                        ('wind_color', 'i'),
+                        ('number_wind', 'i'),
+                        ('width', 'i'),
+                        ('size', 'f', partial(round, ndigits=1)),
+                        ('wind_type', 'i'),
                         ('head_size', 'f', partial(round, ndigits=1)),
                         ('speed', 'f', partial(round, ndigits=2)),
                         ('direction', 'f', partial(round, ndigits=2)),
                         ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2))
+                        ('lon', 'f', partial(round, ndigits=2)),
                     ]
 
                     hashes = []
@@ -3328,86 +4097,89 @@ class VectorGraphicFile:
                         jet_hash = self._buffer.read_struct(hash_struct)
 
                         hashes.append(
-                            HashAttribute(jet_hash.wind_color, jet_hash.number_wind,
-                                        jet_hash.width, jet_hash.size, jet_hash.wind_type,
-                                        jet_hash.head_size, jet_hash.speed,
-                                        jet_hash.direction, jet_hash.lat, jet_hash.lon)
+                            HashAttribute(
+                                jet_hash.wind_color,
+                                jet_hash.number_wind,
+                                jet_hash.width,
+                                jet_hash.size,
+                                jet_hash.wind_type,
+                                jet_hash.head_size,
+                                jet_hash.speed,
+                                jet_hash.direction,
+                                jet_hash.lat,
+                                jet_hash.lon,
+                            )
                         )
 
                     self._buffer.skip((MAX_JET_POINTS - number_hash) * hash_struct.size)
 
                     self._elements.append(
-                        JetElement(header_struct, line_attr, number_barbs, barbs,
-                                   number_hash, hashes)
+                        JetElement(
+                            header_struct, line_attr, number_barbs, barbs, number_hash, hashes
+                        )
                     )
                 elif vg_type == VGType.tca.value:
                     tca_string_length = header_struct.record_size - VGF_HEADER_SIZE
                     tca_string = self._buffer.read_ascii(tca_string_length)
 
-                    storm_number = int(re.search(
-                        r'(?<=<tca_stormNum>)(.+?)(?=<)', tca_string
-                    ).group())
+                    storm_number = int(
+                        re.search(r'(?<=<tca_stormNum>)(.+?)(?=<)', tca_string).group()
+                    )
 
                     issue_status = re.search(
                         r'(?<=<tca_issueStatus>)(.+?)(?=<)', tca_string
                     ).group()
 
-                    basin = int(re.search(
-                        r'(?<=<tca_basin>)(.+?)(?=<)', tca_string
-                    ).group())
+                    basin = int(re.search(r'(?<=<tca_basin>)(.+?)(?=<)', tca_string).group())
 
-                    advisory_number = int(re.search(
-                        r'(?<=<tca_advisoryNum>)(.+?)(?=<)', tca_string
-                    ).group())
+                    advisory_number = int(
+                        re.search(r'(?<=<tca_advisoryNum>)(.+?)(?=<)', tca_string).group()
+                    )
 
                     storm_name = re.search(
                         r'(?<=<tca_stormName>)(.+?)(?=<)', tca_string
                     ).group()
 
-                    storm_type = int(re.search(
-                        r'(?<=<tca_stormType>)(.+?)(?=<)', tca_string
-                    ).group())
+                    storm_type = int(
+                        re.search(r'(?<=<tca_stormType>)(.+?)(?=<)', tca_string).group()
+                    )
 
-                    valid = re.search(
-                        r'(?<=<tca_validTime>)(.+?)(?=<)', tca_string
-                    ).group()
+                    valid = re.search(r'(?<=<tca_validTime>)(.+?)(?=<)', tca_string).group()
 
-                    tz = re.search(
-                        r'(?<=<tca_timezone>)(.+?)(?=<)', tca_string
-                    ).group()
+                    tz = re.search(r'(?<=<tca_timezone>)(.+?)(?=<)', tca_string).group()
 
-                    text_lat = float(re.search(
-                        r'(?<=<tca_textLat>)(.+?)(?=<)', tca_string
-                    ).group())
+                    text_lat = float(
+                        re.search(r'(?<=<tca_textLat>)(.+?)(?=<)', tca_string).group()
+                    )
 
-                    text_lon = float(re.search(
-                        r'(?<=<tca_textLon>)(.+?)(?=<)', tca_string
-                    ).group())
+                    text_lon = float(
+                        re.search(r'(?<=<tca_textLon>)(.+?)(?=<)', tca_string).group()
+                    )
 
-                    text_font = int(re.search(
-                        r'(?<=<tca_textFont>)(.+?)(?=<)', tca_string
-                    ).group())
+                    text_font = int(
+                        re.search(r'(?<=<tca_textFont>)(.+?)(?=<)', tca_string).group()
+                    )
 
-                    text_size = float(re.search(
-                        r'(?<=<tca_textSize>)(.+?)(?=<)', tca_string
-                    ).group())
+                    text_size = float(
+                        re.search(r'(?<=<tca_textSize>)(.+?)(?=<)', tca_string).group()
+                    )
 
-                    text_width = int(re.search(
-                        r'(?<=<tca_textWidth>)(.+?)(?=<)', tca_string
-                    ).group())
+                    text_width = int(
+                        re.search(r'(?<=<tca_textWidth>)(.+?)(?=<)', tca_string).group()
+                    )
 
-                    wwnum = int(re.search(
-                        r'(?<=<tca_wwNum>)(.+?)(?=<)', tca_string
-                    ).group())
+                    wwnum = int(re.search(r'(?<=<tca_wwNum>)(.+?)(?=<)', tca_string).group())
 
                     ww = []
                     for n in range(wwnum):
                         wwstr = re.search(
                             rf'(?<=<tca_tcawwStr_{n}>)(.+?)(?=<)', tca_string
                         ).group()
-                        nbreaks = int(re.search(
-                            rf'(?<=<tca_numBreakPts_{n}>)(.+?)(?=<)', tca_string
-                        ).group())
+                        nbreaks = int(
+                            re.search(
+                                rf'(?<=<tca_numBreakPts_{n}>)(.+?)(?=<)', tca_string
+                            ).group()
+                        )
                         breakpts = re.search(
                             rf'(?<=<tca_breakPts_{n}>)(.+?)(?=<|$)', tca_string
                         ).group()
@@ -3415,8 +4187,10 @@ class VectorGraphicFile:
                         severity, advisory_type, special_geog = wwstr.split('|')
 
                         parsed_breaks = np.array_split(breakpts.split('|'), nbreaks)
-                        decode_breaks = [[float(lat), float(lon), bname]
-                                         for lat, lon, bname in parsed_breaks]
+                        decode_breaks = [
+                            [float(lat), float(lon), bname]
+                            for lat, lon, bname in parsed_breaks
+                        ]
 
                         ww.append(
                             {
@@ -3424,201 +4198,304 @@ class VectorGraphicFile:
                                 'advisory_type': AdvisoryType(int(advisory_type)),
                                 'special_geography': SpecialGeography(int(special_geog)),
                                 'number_breaks': nbreaks,
-                                'break_points': decode_breaks
+                                'break_points': decode_breaks,
                             }
                         )
 
                         self._elements.append(
                             TropicalCycloneAdvisoryElement(
-                                header_struct, storm_number, issue_status, basin,
-                                advisory_number, storm_name, storm_type, valid, tz, text_lat,
-                                text_lon, text_font, text_size, text_width, wwnum, ww)
+                                header_struct,
+                                storm_number,
+                                issue_status,
+                                basin,
+                                advisory_number,
+                                storm_name,
+                                storm_type,
+                                valid,
+                                tz,
+                                text_lat,
+                                text_lon,
+                                text_font,
+                                text_size,
+                                text_width,
+                                wwnum,
+                                ww,
+                            )
                         )
-                elif vg_type in [VGType.tc_error_cone.value, VGType.tc_track.value,
-                                 VGType.tc_break_point.value]:
-                        tc_info = [
-                            ('storm_number', '5s', self._decode_strip_null),
-                            ('issue_status', '2s', self._decode_strip_null),
-                            ('basin', '5s', self._decode_strip_null),
-                            ('advisory_number', '5s', self._decode_strip_null),
-                            ('storm_name', '128s', self._decode_strip_null),
-                            ('storm_type', '5s', self._decode_strip_null),
-                            ('valid_time', '21s', self._decode_strip_null),
-                            ('timezone', '4s', self._decode_strip_null),
-                            ('forecast_period', '5s', self._decode_strip_null)
+                elif vg_type in [
+                    VGType.tc_error_cone.value,
+                    VGType.tc_track.value,
+                    VGType.tc_break_point.value,
+                ]:
+                    tc_info = [
+                        ('storm_number', '5s', self._decode_strip_null),
+                        ('issue_status', '2s', self._decode_strip_null),
+                        ('basin', '5s', self._decode_strip_null),
+                        ('advisory_number', '5s', self._decode_strip_null),
+                        ('storm_name', '128s', self._decode_strip_null),
+                        ('storm_type', '5s', self._decode_strip_null),
+                        ('valid_time', '21s', self._decode_strip_null),
+                        ('timezone', '4s', self._decode_strip_null),
+                        ('forecast_period', '5s', self._decode_strip_null),
+                    ]
+
+                    tc = self._buffer.read_struct(NamedStruct(tc_info, self.prefmt, 'TCInfo'))
+
+                    if vg_type == VGType.tc_error_cone.value:
+                        cone_info = [
+                            ('line_color', 'i'),
+                            ('line_type', 'i'),
+                            ('fill_color', 'i'),
+                            ('fill_type', 'i'),
+                            ('number_points', 'i'),
                         ]
 
-                        tc = self._buffer.read_struct(
-                            NamedStruct(tc_info, self.prefmt, 'TCInfo')
+                        cone = self._buffer.read_struct(
+                            NamedStruct(cone_info, self.prefmt, 'TCConeInfo')
                         )
 
-                        if vg_type == VGType.tc_error_cone.value:
-                            cone_info = [
-                                ('line_color', 'i'), ('line_type', 'i'), ('fill_color', 'i'),
-                                ('fill_type', 'i'), ('number_points', 'i')
-                            ]
+                        lat, lon = self._get_latlon(cone.number_points)
 
-                            cone = self._buffer.read_struct(
-                                NamedStruct(cone_info, self.prefmt, 'TCConeInfo')
+                        self._elements.append(
+                            TropicalCycloneErrorElement(
+                                header_struct,
+                                tc.storm_number,
+                                tc.issue_status,
+                                tc.basin,
+                                tc.advisory_number,
+                                tc.storm_name,
+                                tc.storm_type,
+                                tc.valid_time,
+                                tc.timezone,
+                                tc.forecast_period,
+                                cone.line_color,
+                                cone.line_type,
+                                cone.fill_color,
+                                cone.fill_type,
+                                cone.number_points,
+                                lat,
+                                lon,
                             )
+                        )
+                    elif vg_type == VGType.tc_track.value:
+                        track_info = [
+                            ('line_color', 'i'),
+                            ('line_type', 'i'),
+                            ('number_points', 'i'),
+                        ]
 
-                            lat, lon = self._get_latlon(cone.number_points)
+                        track = self._buffer.read_struct(
+                            NamedStruct(track_info, self.prefmt, 'TCTrackInfo')
+                        )
 
-                            self._elements.append(
-                                TropicalCycloneErrorElement(
-                                    header_struct, tc.storm_number, tc.issue_status, tc.basin,
-                                    tc.advisory_number, tc.storm_name, tc.storm_type,
-                                    tc.valid_time, tc.timezone, tc.forecast_period,
-                                    cone.line_color, cone.line_type, cone.fill_color,
-                                    cone.fill_type, cone.number_points, lat, lon)
-                            )
-                        elif vg_type == VGType.tc_track.value:
-                            track_info = [
-                                ('line_color', 'i'), ('line_type', 'i'), ('number_points', 'i')
-                            ]
+                        track_point_info = [
+                            ('lat', 'f', partial(round, ndigits=2)),
+                            ('lon', 'f', partial(round, ndigits=2)),
+                            ('advisory_date', '50s', self._decode_strip_null),
+                            ('tau', '50s', self._decode_strip_null),
+                            ('max_wind', '50s', self._decode_strip_null),
+                            ('wind_gust', '50s', self._decode_strip_null),
+                            ('minimum_pressure', '50s', self._decode_strip_null),
+                            ('development_level', '50s', self._decode_strip_null),
+                            ('development_label', '50s', self._decode_strip_null),
+                            ('direction', '50s', self._decode_strip_null),
+                            ('speed', '50s', self._decode_strip_null),
+                            ('date_label', '50s', self._decode_strip_null),
+                            ('storm_source', '50s', self._decode_strip_null),
+                            (None, '2x'),  # skip struct alignment padding bytes
+                        ]
 
-                            track = self._buffer.read_struct(
-                                NamedStruct(track_info, self.prefmt, 'TCTrackInfo')
-                            )
+                        point_struct = NamedStruct(
+                            track_point_info, self.prefmt, 'TrackPointInfo'
+                        )
 
-                            track_point_info = [
-                                ('lat', 'f', partial(round, ndigits=2)),
-                                ('lon', 'f', partial(round, ndigits=2)),
-                                ('advisory_date', '50s', self._decode_strip_null),
-                                ('tau', '50s', self._decode_strip_null),
-                                ('max_wind', '50s', self._decode_strip_null),
-                                ('wind_gust', '50s', self._decode_strip_null),
-                                ('minimum_pressure', '50s', self._decode_strip_null),
-                                ('development_level', '50s', self._decode_strip_null),
-                                ('development_label', '50s', self._decode_strip_null),
-                                ('direction', '50s', self._decode_strip_null),
-                                ('speed', '50s', self._decode_strip_null),
-                                ('date_label', '50s', self._decode_strip_null),
-                                ('storm_source', '50s', self._decode_strip_null),
-                                (None, '2x')  # skip struct alignment padding bytes
-                            ]
-
-                            point_struct = NamedStruct(track_point_info, self.prefmt,
-                                                       'TrackPointInfo')
-
-                            track_points = []
-                            for _ in range(track.number_points):
-                                pt = self._buffer.read_struct(point_struct)
-                                track_points.append(
-                                    TrackAttribute(
-                                        pt.advisory_date, pt.tau, pt.max_wind, pt.wind_gust,
-                                        pt.minimum_pressure, pt.development_level,
-                                        pt.development_label, pt.direction, pt.speed,
-                                        pt.date_label, pt.storm_source, pt.lat, pt.lon)
-                                )
-
-                            self.elements.append(
-                                TropicalCycloneTrackElement(
-                                    header_struct, tc.storm_number, tc.issue_status, tc.basin,
-                                    tc.advisory_number, tc.storm_name, tc.storm_type,
-                                    tc.valid_time, tc.timezone, tc.forecast_period,
-                                    track.line_color, track.line_type, track.number_points,
-                                    track_points)
-                            )
-                        elif vg_type == VGType.tc_break_point.value:
-                            break_info = [
-                                ('line_color', 'i'), ('line_width', 'i'), ('ww_level', 'i'),
-                                ('number_points', 'i')
-                            ]
-
-                            brkpt = self._buffer(break_info, self.prefmt,
-                                                      'BreakPointInfo')
-
-                            break_meta = [
-                                ('lat', 'f', partial(round, ndigits=2)),
-                                ('lon', 'f', partial(round, ndigits=2)),
-                                ('name', '256s', self._decode_strip_null)
-                            ]
-
-                            break_struct = NamedStruct(break_meta, self.prefmt, 'BreakPoint')
-
-                            breakpoints = []
-                            for _ in range(brkpt.number_points):
-                                bp = self._buffer.read_struct(break_struct)
-                                breakpoints.append(
-                                    BreakPointAttribute(bp.lat, bp.lon, bp.name)
-                                )
-
-                            self._elements.append(
-                                TropicalCycloneBreakPointElement(
-                                    header_struct, tc.storm_number, tc.issue_status,
-                                    tc.basin, tc.advisory_number, tc.storm_name,
-                                    tc.storm_type, tc.valid_time, tc.timezone,
-                                    tz.forecast_period, brkpt.line_color, brkpt.line_width,
-                                    brkpt.ww_level, brkpt.number_points, breakpoints
-                                )
-                            )
-                        elif vg_type == VGType.sgwx.value:
-                            sgwx_info = [
-                                ('subtype', 'i'), ('number_points', 'i'),
-                                ('text_lat', 'f', partial(round, ndigits=2)),
-                                ('text_lon', 'f', partial(round, ndigits=2)),
-                                ('arrow_lat', 'f', partial(round, ndigits=2)),
-                                ('arrow_lon', 'f', partial(round, ndigits=2)),
-                                ('line_element', 'i'), ('line_type', 'i'),
-                                ('line_width', 'i'),
-                                ('arrow_size', 'f', partial(round, ndigits=1)),
-                                ('special_symbol', 'i'), ('weather_symbol', 'i')
-                            ]
-
-                            sgwx = self._buffer.read_struct(
-                                NamedStruct(sgwx_info, self.prefmt, 'SGWXInfo')
-                            )
-
-                            special_text_info = [
-                                ('rotation', 'f', partial(round, ndigits=1)),
-                                ('text_size', 'f', partial(round, ndigits=3)),
-                                ('text_type', 'i'), ('turbulence_symbol', 'i'), ('font', 'i'),
-                                ('text_flag', 'i'), ('width', 'i'), ('text_color', 'i'),
-                                ('line_color', 'i'), ('fill_color', 'i'), ('align', 'i'),
-                                ('lat', 'f', partial(round, ndigits=2)),
-                                ('lon', 'f', partial(round, ndigits=2)),
-                                ('offset_x', 'i'), ('offset_y', 'i')
-                            ]
-
-                            text = self._buffer.read_struct(
-                                NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
-                            )
-
-                            lat, lon = self._get_latlon(sgwx.number_points)
-
-                            self._elements.append(
-                                SignificantWeatherElement(
-                                    header_struct, sgwx.subtype, sgwx.number_points,
-                                    sgwx.text_lat, sgwx.text_lon, sgwx.arrow_lat,
-                                    sgwx.arrow_lon, sgwx.line_element, sgwx.line_type,
-                                    sgwx.line_width, sgwx.arrow_size, sgwx.special_symbol,
-                                    sgwx.weather_symbol, text.rotation, text.text_size,
-                                    text.text_type, text.turbulence_symbol, text.font,
-                                    text.text_flag, text.text_width, text.text_color,
-                                    text.line_color, text.fill_color, text.text_align,
-                                    text.offset_x, text.offset_y, text.text, lat, lon
+                        track_points = []
+                        for _ in range(track.number_points):
+                            pt = self._buffer.read_struct(point_struct)
+                            track_points.append(
+                                TrackAttribute(
+                                    pt.advisory_date,
+                                    pt.tau,
+                                    pt.max_wind,
+                                    pt.wind_gust,
+                                    pt.minimum_pressure,
+                                    pt.development_level,
+                                    pt.development_label,
+                                    pt.direction,
+                                    pt.speed,
+                                    pt.date_label,
+                                    pt.storm_source,
+                                    pt.lat,
+                                    pt.lon,
                                 )
                             )
 
-                            self. _buffer.skip((MAX_SGWX_POINTS - sgwx.number_points) * 4)
+                        self.elements.append(
+                            TropicalCycloneTrackElement(
+                                header_struct,
+                                tc.storm_number,
+                                tc.issue_status,
+                                tc.basin,
+                                tc.advisory_number,
+                                tc.storm_name,
+                                tc.storm_type,
+                                tc.valid_time,
+                                tc.timezone,
+                                tc.forecast_period,
+                                track.line_color,
+                                track.line_type,
+                                track.number_points,
+                                track_points,
+                            )
+                        )
+                    elif vg_type == VGType.tc_break_point.value:
+                        break_info = [
+                            ('line_color', 'i'),
+                            ('line_width', 'i'),
+                            ('ww_level', 'i'),
+                            ('number_points', 'i'),
+                        ]
+
+                        brkpt = self._buffer(break_info, self.prefmt, 'BreakPointInfo')
+
+                        break_meta = [
+                            ('lat', 'f', partial(round, ndigits=2)),
+                            ('lon', 'f', partial(round, ndigits=2)),
+                            ('name', '256s', self._decode_strip_null),
+                        ]
+
+                        break_struct = NamedStruct(break_meta, self.prefmt, 'BreakPoint')
+
+                        breakpoints = []
+                        for _ in range(brkpt.number_points):
+                            bp = self._buffer.read_struct(break_struct)
+                            breakpoints.append(BreakPointAttribute(bp.lat, bp.lon, bp.name))
+
+                        self._elements.append(
+                            TropicalCycloneBreakPointElement(
+                                header_struct,
+                                tc.storm_number,
+                                tc.issue_status,
+                                tc.basin,
+                                tc.advisory_number,
+                                tc.storm_name,
+                                tc.storm_type,
+                                tc.valid_time,
+                                tc.timezone,
+                                tz.forecast_period,
+                                brkpt.line_color,
+                                brkpt.line_width,
+                                brkpt.ww_level,
+                                brkpt.number_points,
+                                breakpoints,
+                            )
+                        )
+                    elif vg_type == VGType.sgwx.value:
+                        sgwx_info = [
+                            ('subtype', 'i'),
+                            ('number_points', 'i'),
+                            ('text_lat', 'f', partial(round, ndigits=2)),
+                            ('text_lon', 'f', partial(round, ndigits=2)),
+                            ('arrow_lat', 'f', partial(round, ndigits=2)),
+                            ('arrow_lon', 'f', partial(round, ndigits=2)),
+                            ('line_element', 'i'),
+                            ('line_type', 'i'),
+                            ('line_width', 'i'),
+                            ('arrow_size', 'f', partial(round, ndigits=1)),
+                            ('special_symbol', 'i'),
+                            ('weather_symbol', 'i'),
+                        ]
+
+                        sgwx = self._buffer.read_struct(
+                            NamedStruct(sgwx_info, self.prefmt, 'SGWXInfo')
+                        )
+
+                        special_text_info = [
+                            ('rotation', 'f', partial(round, ndigits=1)),
+                            ('text_size', 'f', partial(round, ndigits=3)),
+                            ('text_type', 'i'),
+                            ('turbulence_symbol', 'i'),
+                            ('font', 'i'),
+                            ('text_flag', 'i'),
+                            ('width', 'i'),
+                            ('text_color', 'i'),
+                            ('line_color', 'i'),
+                            ('fill_color', 'i'),
+                            ('align', 'i'),
+                            ('lat', 'f', partial(round, ndigits=2)),
+                            ('lon', 'f', partial(round, ndigits=2)),
+                            ('offset_x', 'i'),
+                            ('offset_y', 'i'),
+                        ]
+
+                        text = self._buffer.read_struct(
+                            NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
+                        )
+
+                        lat, lon = self._get_latlon(sgwx.number_points)
+
+                        self._elements.append(
+                            SignificantWeatherElement(
+                                header_struct,
+                                sgwx.subtype,
+                                sgwx.number_points,
+                                sgwx.text_lat,
+                                sgwx.text_lon,
+                                sgwx.arrow_lat,
+                                sgwx.arrow_lon,
+                                sgwx.line_element,
+                                sgwx.line_type,
+                                sgwx.line_width,
+                                sgwx.arrow_size,
+                                sgwx.special_symbol,
+                                sgwx.weather_symbol,
+                                text.rotation,
+                                text.text_size,
+                                text.text_type,
+                                text.turbulence_symbol,
+                                text.font,
+                                text.text_flag,
+                                text.text_width,
+                                text.text_color,
+                                text.line_color,
+                                text.fill_color,
+                                text.text_align,
+                                text.offset_x,
+                                text.offset_y,
+                                text.text,
+                                lat,
+                                lon,
+                            )
+                        )
+
+                        self._buffer.skip((MAX_SGWX_POINTS - sgwx.number_points) * 4)
                 else:
                     raise NotImplementedError(f'MET type `{vg_type}` not implemented.')
             elif vg_class == VGClass.watches.value:
                 watch_info = [
-                    ('number_points', 'i'), ('style', 'i'), ('shape', 'i'),
-                    ('marker_type', 'i'), ('marker_size', 'f', partial(round, ndigits=1)),
-                    ('marker_width', 'i'), ('anchor0_station', '8s', self._decode_strip_null),
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('shape', 'i'),
+                    ('marker_type', 'i'),
+                    ('marker_size', 'f', partial(round, ndigits=1)),
+                    ('marker_width', 'i'),
+                    ('anchor0_station', '8s', self._decode_strip_null),
                     ('anchor0_lat', 'f', partial(round, ndigits=2)),
-                    ('anchor0_lon', 'f', partial(round, ndigits=2)), ('anchor0_distance', 'i'),
+                    ('anchor0_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor0_distance', 'i'),
                     ('anchor0_direction', '4s', self._decode_strip_null),
                     ('anchor1_station', '8s', self._decode_strip_null),
                     ('anchor1_lat', 'f', partial(round, ndigits=2)),
-                    ('anchor1_lon', 'f', partial(round, ndigits=2)), ('anchor1_distance', 'i'),
-                    ('anchor1_direction', '4s', self._decode_strip_null), ('status', 'i'),
-                    ('number', 'i'), ('issue_time', '20s', self._decode_strip_null),
-                    ('expire_time', '20s', self._decode_strip_null), ('watch_type', 'i'),
-                    ('severity', 'i'), ('timezone', '4s', self._decode_strip_null),
+                    ('anchor1_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor1_distance', 'i'),
+                    ('anchor1_direction', '4s', self._decode_strip_null),
+                    ('status', 'i'),
+                    ('number', 'i'),
+                    ('issue_time', '20s', self._decode_strip_null),
+                    ('expire_time', '20s', self._decode_strip_null),
+                    ('watch_type', 'i'),
+                    ('severity', 'i'),
+                    ('timezone', '4s', self._decode_strip_null),
                     ('max_hail', '8s', self._decode_strip_null),
                     ('max_wind', '8s', self._decode_strip_null),
                     ('max_tops', '8s', self._decode_strip_null),
@@ -3629,13 +4506,15 @@ class VectorGraphicFile:
                     ('replacing', '24s', self._decode_strip_null),
                     ('forecaster', '64s', self._decode_strip_null),
                     ('filename', '128s', self._decode_strip_null),
-                    ('issue_flag', 'i'), ('wsm_issue_time', '20s', self._decode_strip_null),
+                    ('issue_flag', 'i'),
+                    ('wsm_issue_time', '20s', self._decode_strip_null),
                     ('wsm_expire_time', '20s', self._decode_strip_null),
                     ('wsm_reference_direction', '32s', self._decode_strip_null),
                     ('wsm_recent_from_line', '128s', self._decode_strip_null),
                     ('wsm_md_number', '8s', self._decode_strip_null),
                     ('wsm_forecaster', '64s', self._decode_strip_null),
-                    ('number_counties', 'i'), ('plot_counties', 'i')
+                    ('number_counties', 'i'),
+                    ('plot_counties', 'i'),
                 ]
 
                 watch = self._buffer.read_struct(
@@ -3659,51 +4538,93 @@ class VectorGraphicFile:
                     lon, lat = self.close_coordinates(lon, lat)
 
                 self._elements.append(
-                    WatchBoxElement(header_struct, watch.number_points, watch.style,
-                                    watch.shape, watch.marker_type, watch.marker_size,
-                                    watch.marker_width, watch.anchor0_station,
-                                    watch.anchor0_lat, watch.anchor0_lon,
-                                    watch.anchor0_distance, watch.anchor0_direction,
-                                    watch.anchor1_station, watch.anchor1_lat,
-                                    watch.anchor1_lon, watch.anchor1_distance,
-                                    watch.anchor1_direction, watch.status,
-                                    watch.number, watch.issue_time,
-                                    watch.expire_time, watch.watch_type,
-                                    watch.severity, watch.timezone,
-                                    watch.max_hail, watch.max_wind,
-                                    watch.max_tops, watch.mean_storm_direction,
-                                    watch.mean_storm_speed, watch.states,
-                                    watch.adjacent_areas, watch.replacing,
-                                    watch.forecaster, watch.filename, watch.issue_flag,
-                                    watch.wsm_issue_time, watch.wsm_expire_time,
-                                    watch.wsm_reference_direction,
-                                    watch.wsm_recent_from_line, watch.wsm_md_number,
-                                    watch.wsm_forecaster, watch.number_counties,
-                                    watch.plot_counties, county_fips, county_lat,
-                                    county_lon, lat, lon)
+                    WatchBoxElement(
+                        header_struct,
+                        watch.number_points,
+                        watch.style,
+                        watch.shape,
+                        watch.marker_type,
+                        watch.marker_size,
+                        watch.marker_width,
+                        watch.anchor0_station,
+                        watch.anchor0_lat,
+                        watch.anchor0_lon,
+                        watch.anchor0_distance,
+                        watch.anchor0_direction,
+                        watch.anchor1_station,
+                        watch.anchor1_lat,
+                        watch.anchor1_lon,
+                        watch.anchor1_distance,
+                        watch.anchor1_direction,
+                        watch.status,
+                        watch.number,
+                        watch.issue_time,
+                        watch.expire_time,
+                        watch.watch_type,
+                        watch.severity,
+                        watch.timezone,
+                        watch.max_hail,
+                        watch.max_wind,
+                        watch.max_tops,
+                        watch.mean_storm_direction,
+                        watch.mean_storm_speed,
+                        watch.states,
+                        watch.adjacent_areas,
+                        watch.replacing,
+                        watch.forecaster,
+                        watch.filename,
+                        watch.issue_flag,
+                        watch.wsm_issue_time,
+                        watch.wsm_expire_time,
+                        watch.wsm_reference_direction,
+                        watch.wsm_recent_from_line,
+                        watch.wsm_md_number,
+                        watch.wsm_forecaster,
+                        watch.number_counties,
+                        watch.plot_counties,
+                        county_fips,
+                        county_lat,
+                        county_lon,
+                        lat,
+                        lon,
+                    )
                 )
             elif vg_class == VGClass.winds.value:
                 wind_info = [
-                    ('number_wind', 'i'), ('width', 'i'),
-                    ('size', 'f', partial(round, ndigits=1)), ('wind_type', 'i'),
+                    ('number_wind', 'i'),
+                    ('width', 'i'),
+                    ('size', 'f', partial(round, ndigits=1)),
+                    ('wind_type', 'i'),
                     ('head_size', 'f', partial(round, ndigits=1)),
                     ('speed', 'f', partial(round, ndigits=2)),
                     ('direction ', 'f', partial(round, ndigits=2)),
                     ('lat', 'f', partial(round, ndigits=2)),
-                    ('lon', 'f', partial(round, ndigits=2))
+                    ('lon', 'f', partial(round, ndigits=2)),
                 ]
                 wind = self._buffer.read_struct(
                     NamedStruct(wind_info, self.prefmt, 'WindInfo')
                 )
 
                 self._elements.append(
-                    WindElement(header_struct, wind.number_wind, wind.width, wind.size,
-                                wind.wind_type, wind.head_size, wind.speed, wind.direction,
-                                wind.lat, wind.lon)
+                    WindElement(
+                        header_struct,
+                        wind.number_wind,
+                        wind.width,
+                        wind.size,
+                        wind.wind_type,
+                        wind.head_size,
+                        wind.speed,
+                        wind.direction,
+                        wind.lat,
+                        wind.lon,
+                    )
                 )
             else:
-                logger.warning('Could not decode element with class `%s` and type `%s`',
-                               VGClass(vg_class).name, VGType(vg_type).name)
+                logger.warning(
+                    'Could not decode element with class `%s` and type `%s`',
+                    VGClass(vg_class).name,
+                    VGType(vg_type).name,
+                )
                 _ = self._buffer.skip(data_size)
 
     def _get_latlon(self, points):
@@ -3739,19 +4660,25 @@ class VectorGraphicFile:
         Header size should be 40 bytes (see GEMPAK vgstruct.h).
         """
         vgf_header_info = [
-            ('delete', 'B'), ('vg_type', 'B'), ('vg_class', 'B'),
-            ('filled', 'b'), ('closed', 'B'), ('smooth', 'B'),
-            ('version', 'B'), ('group_type', 'B'), ('group_number', 'i'),
-            ('major_color', 'i'), ('minor_color', 'i'), ('record_size', 'i'),
+            ('delete', 'B'),
+            ('vg_type', 'B'),
+            ('vg_class', 'B'),
+            ('filled', 'b'),
+            ('closed', 'B'),
+            ('smooth', 'B'),
+            ('version', 'B'),
+            ('group_type', 'B'),
+            ('group_number', 'i'),
+            ('major_color', 'i'),
+            ('minor_color', 'i'),
+            ('record_size', 'i'),
             ('min_lat', 'f', partial(round, ndigits=2)),
             ('min_lon', 'f', partial(round, ndigits=2)),
             ('max_lat', 'f', partial(round, ndigits=2)),
-            ('max_lon', 'f', partial(round, ndigits=2))
+            ('max_lon', 'f', partial(round, ndigits=2)),
         ]
 
-        return self._buffer.read_struct(NamedStruct(
-            vgf_header_info, self.prefmt, 'Header'
-        ))
+        return self._buffer.read_struct(NamedStruct(vgf_header_info, self.prefmt, 'Header'))
 
     @staticmethod
     def close_coordinates(x, y):
@@ -3792,8 +4719,9 @@ class VectorGraphicFile:
         -------
         tuple of reversed x, y
         """
-        if ((isinstance(x, np.ndarray) and isinstance(y, np.ndarray))
-           or (isinstance(x, list) and isinstance(y, list))):
+        if (isinstance(x, np.ndarray) and isinstance(y, np.ndarray)) or (
+            isinstance(x, list) and isinstance(y, list)
+        ):
             x = x[::-1]
             y = y[::-1]
         else:
@@ -3837,5 +4765,4 @@ class VectorGraphicFile:
         -------
         byte-swapped float or int
         """
-        return int.from_bytes(x.to_bytes(4, byteorder='little'),
-                              byteorder='big', signed=False)
+        return int.from_bytes(x.to_bytes(4, byteorder='little'), byteorder='big', signed=False)

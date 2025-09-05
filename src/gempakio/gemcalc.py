@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK calculations."""
@@ -57,8 +57,9 @@ def interp_logp_height(sounding, missing=-9999):
                     ztop = sounding['HGHT'][ilev]
                 else:
                     ilev += 1
-            sounding['HGHT'][i] = (zbot + (ztop - zbot)
-                                   * (np.log(pres / pbot) / np.log(ptop / pbot)))
+            sounding['HGHT'][i] = zbot + (ztop - zbot) * (
+                np.log(pres / pbot) / np.log(ptop / pbot)
+            )
 
     if maxlev < size - 1:
         if maxlev > -1:
@@ -121,9 +122,7 @@ def interp_logp_pressure(sounding, missing=-9999):
             for j in range(ilev + 1, klev):
                 z = sounding['HGHT'][j]
                 if z != missing and zb != missing and pb != missing:
-                    sounding['PRES'][j] = (
-                        pb * np.exp((z - zb) * np.log(pt / pb) / (zt - zb))
-                    )
+                    sounding['PRES'][j] = pb * np.exp((z - zb) * np.log(pt / pb) / (zt - zb))
         ilev = klev
         pb = pt
         zb = zt
@@ -164,17 +163,19 @@ def interp_missing_data(sounding, missing=-9999):
                                 iabove = 0
                                 more = False
 
-                if (var2 is None and iabove != 0
-                   and sounding['PRES'][i - 1] > 100
-                   and sounding['PRES'][iabove] < 100):
+                if (
+                    var2 is None
+                    and iabove != 0
+                    and sounding['PRES'][i - 1] > 100
+                    and sounding['PRES'][iabove] < 100
+                ):
                     iabove = 0
 
                 if iabove != 0:
                     adata = {}
                     bdata = {}
                     for param, val in sounding.items():
-                        if (param in ['PRES', 'TEMP', 'DWPT',
-                                      'DRCT', 'SPED', 'HGHT']):
+                        if param in ['PRES', 'TEMP', 'DWPT', 'DRCT', 'SPED', 'HGHT']:
                             adata[param] = val[i - 1]
                             bdata[param] = val[iabove]
                     vlev = sounding['PRES'][i]
@@ -200,7 +201,7 @@ def interp_moist_height(sounding, missing=-9999):
     merging observed sounding data.
     """
     nlev = len(sounding['PRES'])
-    hlist = (np.ones(nlev) * -9999)
+    hlist = np.ones(nlev) * -9999
 
     ilev = -1
     top = False
@@ -210,9 +211,11 @@ def interp_moist_height(sounding, missing=-9999):
         ilev += 1
         if ilev >= nlev:
             top = True
-        elif (sounding['PRES'][ilev] != missing
-              and sounding['TEMP'][ilev] != missing
-              and sounding['HGHT'][ilev] != missing):
+        elif (
+            sounding['PRES'][ilev] != missing
+            and sounding['TEMP'][ilev] != missing
+            and sounding['HGHT'][ilev] != missing
+        ):
             found = True
 
     while not top:
@@ -236,15 +239,16 @@ def interp_moist_height(sounding, missing=-9999):
                 tt = sounding['TEMP'][jlev]
                 tdt = sounding['DWPT'][jlev]
                 zt = sounding['HGHT'][jlev]
-                if (zt != missing
-                   and tt != missing):
+                if zt != missing and tt != missing:
                     mand = True
                     klev = jlev
 
-                if (sounding['PRES'][ilev] != missing
-                   and sounding['TEMP'][ilev] != missing
-                   and sounding['PRES'][jlev] != missing
-                   and sounding['TEMP'][jlev] != missing):
+                if (
+                    sounding['PRES'][ilev] != missing
+                    and sounding['TEMP'][ilev] != missing
+                    and sounding['PRES'][jlev] != missing
+                    and sounding['TEMP'][jlev] != missing
+                ):
                     scale_z = scale_height(tb, tt, tdb, tdt, pb, pt, missing)
                     znew = moist_hydrostatic_height(zb, pb, pt, scale_z, missing)
                 else:
@@ -304,10 +308,9 @@ def interp_parameters(vlev, adata, bdata, missing=-9999):
     """
     pres1 = adata['PRES']
     pres2 = bdata['PRES']
-    between = (((pres1 < pres2) and (pres1 < vlev)
-               and (vlev < pres2))
-               or ((pres2 < pres1) and (pres2 < vlev)
-               and (vlev < pres1)))
+    between = ((pres1 < pres2) and (pres1 < vlev) and (vlev < pres2)) or (
+        (pres2 < pres1) and (pres2 < vlev) and (vlev < pres1)
+    )
 
     if not between:
         raise ValueError('Current pressure does not fall between levels.')
@@ -368,14 +371,13 @@ def mixing_ratio(dwpc, pres, missing=-9999):
         if vapr == missing:
             mixr = missing
         else:
-            corr = (1.001 + ((pres - 100.) / 900.) * 0.0034)
+            corr = 1.001 + ((pres - 100.0) / 900.0) * 0.0034
             e = corr * vapr
             mixr = missing if e > 0.5 * pres else 0.62197 * (e / (pres - e)) * 1000.0
     return mixr
 
 
-def moist_hydrostatic_height(z_bot, pres_bot, pres_top, scale_height,
-                             missing=-9999):
+def moist_hydrostatic_height(z_bot, pres_bot, pres_top, scale_height, missing=-9999):
     """Calculate the moist hydrostatic height at the top of a layer.
 
     Parameters
@@ -404,16 +406,14 @@ def moist_hydrostatic_height(z_bot, pres_bot, pres_top, scale_height,
     -----
     See GEMPAK function PR_MHGT
     """
-    if (missing in [z_bot, pres_bot, pres_top, scale_height]
-        or pres_bot <= 0 or pres_top <= 0):
+    if missing in [z_bot, pres_bot, pres_top, scale_height] or pres_bot <= 0 or pres_top <= 0:
         mhgt = missing
     else:
         mhgt = z_bot + scale_height * np.log(pres_bot / pres_top)
     return mhgt
 
 
-def scale_height(tmpc_bot, tmpc_top, dwpc_bot, dwpc_top,
-                 pres_bot, pres_top, missing=-9999):
+def scale_height(tmpc_bot, tmpc_top, dwpc_bot, dwpc_top, pres_bot, pres_top, missing=-9999):
     """Calculate the scale height of a layer.
 
     Parameters
@@ -521,5 +521,5 @@ def virtual_temperature(tmpc, dwpc, pres, missing=-9999):
         if rmix == missing:
             tvirt = tmpc + 273.15
         else:
-            tvirt = tmpk * (1. + 0.001 * rmix / 0.62197) / (1. + 0.001 * rmix)
+            tvirt = tmpk * (1.0 + 0.001 * rmix / 0.62197) / (1.0 + 0.001 * rmix)
     return tvirt

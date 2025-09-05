@@ -1,84 +1,68 @@
 [project]
-name = 'gempakIO'
-description = 'Read GEMPAK data with pure Python.'
+name = "gempakIO"
+description = "Read GEMPAK data with pure Python."
 authors = [
-    {name = 'Nathan Wendt', email = 'nathan.wendt@noaa.gov'},
+    {name = "Nathan Wendt", email = "nathan.wendt@noaa.gov"},
 ]
-readme = 'README.md'
-license = {file = 'LICENSE'}
-dynamic = ['version']
-requires-python = '>=3.10'
+readme = "README.md"
+license = {file = "LICENSE"}
+dynamic = ["version"]
+requires-python = ">=3.10"
 dependencies = [
-    'numpy',
-    'pandas',
-    'pyproj',
-    'xarray'
+    "numpy",
+    "pandas",
+    "pyproj",
+    "xarray"
 ]
 
 [project.optional-dependencies]
 lint = [
-    'flake8',
-    'ruff',
-    'pycodestyle',
-    'pyflakes',
-    'flake8-continuation',
-    'flake8-copyright',
-    'flake8-isort',
-    'isort',
-    'flake8-requirements',
-    'pydocstyle'
+    "ruff"
 ]
 test = [
-    'pytest',
-    'pytest-cov'
+    "pytest",
+    "pytest-cov"
 ]
 
 [build-system]
-requires = ['setuptools']
-build-backend = 'setuptools.build_meta'
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project.urls]
-homepage = 'https://github.com/nawendt/gempakio'
-repository = 'https://github.com/nawendt/gempakio'
-
-[tool.isort]
-line_length = 95
-known_first_party = ['gempakio']
-force_single_line = false
-reverse_relative = true
-use_parentheses = true
-force_sort_within_sections = true
-order_by_type = false
-sort_relative_in_force_sorted_sections = true
-combine_as_imports = true
-combine_star = true
+homepage = "https://github.com/nawendt/gempakio"
+repository = "https://github.com/nawendt/gempakio"
 
 [tool.ruff]
 line-length = 95
-exclude = ['examples']
+exclude = [
+    "examples"
+]
+
+[tool.ruff.format]
+quote-style = "single"
 
 [tool.ruff.lint]
-select = ['A', 'B', 'C', 'CPY001', 'D', 'E', 'E226', 'F', 'G', 'I', 'N', 'NPY', 'Q', 'R', 'S', 'SIM', 'T', 'U', 'W']
-ignore = ['F405', 'I001', 'RET504', 'RET505', 'RET506', 'RET507', 'RUF100']
+select = ["A", "B", "C", "CPY001", "D", "E", "E226", "F", "G", "I", "N", "NPY", "PIE", "Q", "R", "S", "SIM", "T", "U", "W"]
+ignore = ["RET504", "RET505", "RET506", "RET507"]
 preview = true
 explicit-preview-rules = true
 
 [tool.ruff.lint.per-file-ignores]
-'src/gempakio/__init__.py' = ['F401']
-'tests/*.py' = ['S101']
+"src/gempakio/__init__.py" = ["F401"]
+"tests/*.py" = ["S101"]
 
 [tool.ruff.lint.flake8-copyright]
 notice-rgx = '(?i)Copyright\s+(\(C\)\s+)?\d{4}'
-author = 'Nathan Wendt'
+author = "Nathan Wendt"
 
 [tool.ruff.lint.flake8-quotes]
-inline-quotes = 'single'
-multiline-quotes = 'double'
+inline-quotes = "single"
+multiline-quotes = "double"
 
 [tool.ruff.lint.isort]
-known-first-party = ['gempakio']
+known-first-party = ["gempakio"]
 force-single-line = false
-relative-imports-order = 'closest-to-furthest'
+relative-imports-order = "closest-to-furthest"
 force-sort-within-sections = true
 order-by-type = false
 combine-as-imports = true
@@ -87,13 +71,13 @@ combine-as-imports = true
 max-complexity = 61
 
 [tool.ruff.lint.pydocstyle]
-convention = 'numpy'
+convention = "numpy"
 
 [tool.setuptools]
 zip-safe = true
 
 [tool.setuptools.dynamic]
-version = {attr = 'gempakio.__version__'}
+version = {attr = "gempakio.__version__"}
 
 [tool.setuptools.packages.find]
 where = ['src']

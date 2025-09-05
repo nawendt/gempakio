@@ -13,10 +13,26 @@ import struct
 import numpy as np
 import pyproj
 
-from gempakio.common import (_position_to_word, _word_to_position, ANLB_SIZE, DataSource,
-                             DataTypes, FileTypes, GEMPAK_HEADER, HEADER_DTYPE, MAX_LEVELS,
-                             MBLKSZ, MISSING_FLOAT, MISSING_INT, MMFREE, MMHDRS, MMPARM,
-                             NAVB_SIZE, PackingType, VerticalCoordinates)
+from gempakio.common import (
+    _position_to_word,
+    _word_to_position,
+    ANLB_SIZE,
+    DataSource,
+    DataTypes,
+    FileTypes,
+    GEMPAK_HEADER,
+    HEADER_DTYPE,
+    MAX_LEVELS,
+    MBLKSZ,
+    MISSING_FLOAT,
+    MISSING_INT,
+    MMFREE,
+    MMHDRS,
+    MMPARM,
+    NAVB_SIZE,
+    PackingType,
+    VerticalCoordinates,
+)
 from gempakio.tools import NamedStruct, OrderedSet
 
 
@@ -55,35 +71,92 @@ class DataManagementFile:
     """Class to facilitate writing GEMPAK files to disk."""
 
     _label_struct = NamedStruct(
-        [('dm_head', '28s'), ('version', 'i'), ('file_headers', 'i'), ('file_keys_ptr', 'i'),
-         ('rows', 'i'), ('row_keys', 'i'), ('row_keys_ptr', 'i'), ('row_headers_ptr', 'i'),
-         ('columns', 'i'), ('column_keys', 'i'), ('column_keys_ptr', 'i'),
-         ('column_headers_ptr', 'i'), ('parts', 'i'), ('parts_ptr', 'i'),
-         ('data_mgmt_ptr', 'i'), ('data_mgmt_length', 'i'), ('data_block_ptr', 'i'),
-         ('file_type', 'i'), ('data_source', 'i'), ('machine_type', 'i'), ('missing_int', 'i'),
-         (None, '12x'), ('missing_float', 'f')], '<', 'Label'
+        [
+            ('dm_head', '28s'),
+            ('version', 'i'),
+            ('file_headers', 'i'),
+            ('file_keys_ptr', 'i'),
+            ('rows', 'i'),
+            ('row_keys', 'i'),
+            ('row_keys_ptr', 'i'),
+            ('row_headers_ptr', 'i'),
+            ('columns', 'i'),
+            ('column_keys', 'i'),
+            ('column_keys_ptr', 'i'),
+            ('column_headers_ptr', 'i'),
+            ('parts', 'i'),
+            ('parts_ptr', 'i'),
+            ('data_mgmt_ptr', 'i'),
+            ('data_mgmt_length', 'i'),
+            ('data_block_ptr', 'i'),
+            ('file_type', 'i'),
+            ('data_source', 'i'),
+            ('machine_type', 'i'),
+            ('missing_int', 'i'),
+            (None, '12x'),
+            ('missing_float', 'f'),
+        ],
+        '<',
+        'Label',
     )
 
     _data_mgmt_struct = NamedStruct(
-        [('next_free_word', 'i'), ('max_free_pairs', 'i'), ('actual_free_pairs', 'i'),
-         ('last_word', 'i'), (None, '464x')], '<', 'DataManagement'
+        [
+            ('next_free_word', 'i'),
+            ('max_free_pairs', 'i'),
+            ('actual_free_pairs', 'i'),
+            ('last_word', 'i'),
+            (None, '464x'),
+        ],
+        '<',
+        'DataManagement',
     )
 
     _grid_nav_struct = NamedStruct(
-        [('grid_definition_type', 'f'), ('projection', '4s'), ('left_grid_number', 'f'),
-         ('bottom_grid_number', 'f'), ('right_grid_number', 'f'), ('top_grid_number', 'f'),
-         ('lower_left_lat', 'f'), ('lower_left_lon', 'f'), ('upper_right_lat', 'f'),
-         ('upper_right_lon', 'f'), ('proj_angle1', 'f'), ('proj_angle2', 'f'),
-         ('proj_angle3', 'f'), (None, '972x')], '<', 'Navigation')
+        [
+            ('grid_definition_type', 'f'),
+            ('projection', '4s'),
+            ('left_grid_number', 'f'),
+            ('bottom_grid_number', 'f'),
+            ('right_grid_number', 'f'),
+            ('top_grid_number', 'f'),
+            ('lower_left_lat', 'f'),
+            ('lower_left_lon', 'f'),
+            ('upper_right_lat', 'f'),
+            ('upper_right_lon', 'f'),
+            ('proj_angle1', 'f'),
+            ('proj_angle2', 'f'),
+            ('proj_angle3', 'f'),
+            (None, '972x'),
+        ],
+        '<',
+        'Navigation',
+    )
 
     _analysis_struct = NamedStruct(
-        [('analysis_type', 'f'), ('delta_n', 'f'), ('grid_ext_left', 'f'),
-         ('grid_ext_down', 'f'), ('grid_ext_right', 'f'), ('grid_ext_up', 'f'),
-         ('garea_llcr_lat', 'f'), ('garea_llcr_lon', 'f'), ('garea_urcr_lat', 'f'),
-         ('garea_urcr_lon', 'f'), ('extarea_llcr_lat', 'f'), ('extarea_llcr_lon', 'f'),
-         ('extarea_urcr_lat', 'f'), ('extarea_urcr_lon', 'f'), ('datarea_llcr_lat', 'f'),
-         ('datarea_llcr_lon', 'f'), ('datarea_urcr_lat', 'f'), ('datarea_urcrn_lon', 'f'),
-         (None, '440x')], '<', 'Analysis'
+        [
+            ('analysis_type', 'f'),
+            ('delta_n', 'f'),
+            ('grid_ext_left', 'f'),
+            ('grid_ext_down', 'f'),
+            ('grid_ext_right', 'f'),
+            ('grid_ext_up', 'f'),
+            ('garea_llcr_lat', 'f'),
+            ('garea_llcr_lon', 'f'),
+            ('garea_urcr_lat', 'f'),
+            ('garea_urcr_lon', 'f'),
+            ('extarea_llcr_lat', 'f'),
+            ('extarea_llcr_lon', 'f'),
+            ('extarea_urcr_lat', 'f'),
+            ('extarea_urcr_lon', 'f'),
+            ('datarea_llcr_lat', 'f'),
+            ('datarea_llcr_lon', 'f'),
+            ('datarea_urcr_lat', 'f'),
+            ('datarea_urcrn_lon', 'f'),
+            (None, '440x'),
+        ],
+        '<',
+        'Analysis',
     )
 
     def __init__(self):
@@ -135,7 +208,7 @@ class DataManagementFile:
     @staticmethod
     def _fortran_ishift(i, shift):
         """Python-friendly bit shifting."""
-        mask = 0xffffffff
+        mask = 0xFFFFFFFF
         if shift > 0:
             shifted = ctypes.c_int32(i << shift).value
         elif shift < 0:
@@ -174,7 +247,7 @@ class DataManagementFile:
         self.file_keys_ptr = self.column_keys_ptr + self.column_keys
         lenfil = 0
         for _fh, info in self._file_headers.items():
-            lenfil += (info['length'] + 1)
+            lenfil += info['length'] + 1
         rec, word = self._dmword(self.file_keys_ptr + 3 * len(self._file_headers) + lenfil)
         if word != 1:
             self.row_headers_ptr = rec * MBLKSZ + 1
@@ -196,18 +269,14 @@ class DataManagementFile:
             self.parts_ptr = self.column_headers_ptr + self.columns * (self.column_keys + 1)
 
         # Data
-        rec, word = self._dmword(
-            self.parts_ptr + 4 * nparts + 4 * lenpart
-        )
+        rec, word = self._dmword(self.parts_ptr + 4 * nparts + 4 * lenpart)
         if word != 1:
             self.data_block_ptr = rec * MBLKSZ + 1
         else:
             self.data_block_ptr = self.parts_ptr + 4 * nparts + 4 * lenpart
 
         # Data Management (initial next free word)
-        rec, word = self._dmword(
-            self.data_block_ptr + nparts * self.rows * self.columns
-        )
+        rec, word = self._dmword(self.data_block_ptr + nparts * self.rows * self.columns)
         if word != 1:
             self.next_free_word = rec * MBLKSZ + 1
         else:
@@ -238,7 +307,7 @@ class DataManagementFile:
             data_source=self.data_source,
             machine_type=self._machine_type,
             missing_int=self._missing_int,
-            missing_float=self._missing_float
+            missing_float=self._missing_float,
         )
 
     def _write_data_management(self, stream):
@@ -248,7 +317,7 @@ class DataManagementFile:
             next_free_word=self.next_free_word,
             max_free_pairs=self._max_free_pairs,
             actual_free_pairs=self._actual_free_pairs,
-            last_word=self._last_word
+            last_word=self._last_word,
         )
 
     def _write_file_keys(self, stream):
@@ -428,11 +497,21 @@ class GridFile(DataManagementFile):
 
         self._file_headers = {
             'NAVB': {'length': NAVB_SIZE, 'type': 1},
-            'ANLB': {'length': ANLB_SIZE, 'type': 1}
+            'ANLB': {'length': ANLB_SIZE, 'type': 1},
         }
         self.row_names = ['GRID']
-        self.column_names = ['GDT1', 'GTM1', 'GDT2', 'GTM2', 'GLV1', 'GLV2', 'GVCD', 'GPM1',
-                             'GPM2', 'GPM3']
+        self.column_names = [
+            'GDT1',
+            'GTM1',
+            'GDT2',
+            'GTM2',
+            'GLV1',
+            'GLV2',
+            'GVCD',
+            'GPM1',
+            'GPM2',
+            'GPM3',
+        ]
         self.parameter_names = ['GRID']
 
         self._init_headers()
@@ -491,12 +570,12 @@ class GridFile(DataManagementFile):
     def _set_bbox(self):
         """Set bounds of data."""
         if self._is_xy:
-            self.lower_left_lon, self.lower_left_lat = self.projection(self.x[0],
-                                                                       self.y[0],
-                                                                       inverse=True)
-            self.upper_right_lon, self.upper_right_lat = self.projection(self.x[-1],
-                                                                         self.y[-1],
-                                                                         inverse=True)
+            self.lower_left_lon, self.lower_left_lat = self.projection(
+                self.x[0], self.y[0], inverse=True
+            )
+            self.upper_right_lon, self.upper_right_lat = self.projection(
+                self.x[-1], self.y[-1], inverse=True
+            )
         else:
             self.lower_left_lon = self.lon[0, 0]
             self.lower_left_lat = self.lat[0, 0]
@@ -557,31 +636,43 @@ class GridFile(DataManagementFile):
             self.angle3 = self.rotation
         elif name == 'lambert_azimuthal_equal_area':
             self.gemproj = 'LEA'
-            self.angle1 = float(re.search(
-                r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))',
-                params
-            ).groupdict()['lat_0'])
-            self.angle2 = float(re.search(
-                r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))',
-                params
-            ).groupdict()['lon_0'])
+            self.angle1 = float(
+                re.search(
+                    r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))', params
+                ).groupdict()['lat_0']
+            )
+            self.angle2 = float(
+                re.search(
+                    r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))', params
+                ).groupdict()['lon_0']
+            )
             self.angle3 = self.rotation
         elif name == 'gnomonic':
             self.gemproj = 'GNO'
-            self.angle1 = float(re.search(
-                r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))',
-                params
-            ).groupdict()['lat_0'])
-            self.angle2 = float(re.search(
-                r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))',
-                params
-            ).groupdict()['lon_0'])
+            self.angle1 = float(
+                re.search(
+                    r'(?:\"Latitude of natural origin\",(?P<lat_0>-?\d{1,2}\.?\d*))', params
+                ).groupdict()['lat_0']
+            )
+            self.angle2 = float(
+                re.search(
+                    r'(?:\"Longitude of natural origin\",(?P<lon_0>-?\d{1,3}\.?\d*))', params
+                ).groupdict()['lon_0']
+            )
             self.angle3 = self.rotation
         else:
             raise NotImplementedError(f'`{name}` projection not implemented.')
 
-    def add_grid(self, grid, parameter_name, vertical_coordinate, level, date_time,
-                 level2=None, date_time2=None):
+    def add_grid(
+        self,
+        grid,
+        parameter_name,
+        vertical_coordinate,
+        level,
+        date_time,
+        level2=None,
+        date_time2=None,
+    ):
         """Add grid to the file.
 
         Parameters
@@ -674,13 +765,7 @@ class GridFile(DataManagementFile):
                     forecast_minute = int(fmin)
                 else:
                     forecast_hour = 0 if fhr == '' else int(fhr)
-                grid_type = {
-                    'A': 0,
-                    'F': 1,
-                    'V': 1,
-                    'G': 2,
-                    'I': 3
-                }.get(gtype)
+                grid_type = {'A': 0, 'F': 1, 'V': 1, 'G': 2, 'I': 3}.get(gtype)
             elif len(split_time) > 3:
                 raise ValueError(f'Cannot parse malformed date_time input {date_time}.')
             else:
@@ -706,8 +791,9 @@ class GridFile(DataManagementFile):
         if date_time2 is not None:
             if isinstance(date_time2, str):
                 if len(date_time) < 12:
-                    raise ValueError(f'{date_time2} does not match minimum format of '
-                                     'YYYYmmddHHMM.')
+                    raise ValueError(
+                        f'{date_time2} does not match minimum format of YYYYmmddHHMM.'
+                    )
                 date_time2 = date_time2.upper()
                 split_time = re.split('([AFVIG])', date_time2)
                 if len(split_time) == 3:
@@ -720,13 +806,7 @@ class GridFile(DataManagementFile):
                         forecast_minute2 = int(fmin)
                     else:
                         forecast_hour2 = 0 if fhr == '' else int(fhr)
-                    grid_type2 = {
-                        'A': 0,
-                        'F': 1,
-                        'V': 1,
-                        'G': 2,
-                        'I': 3
-                    }.get(gtype)
+                    grid_type2 = {'A': 0, 'F': 1, 'V': 1, 'G': 2, 'I': 3}.get(gtype)
                     if grid_type != grid_type2:
                         raise ValueError('Grid type mismatch in date_time and date_time2.')
                 elif len(split_time) > 3:
@@ -743,7 +823,7 @@ class GridFile(DataManagementFile):
                 raise TypeError('date_time must be string or datetime or None.')
 
         pbuff = f'{parameter_name:<12s}'
-        gpm1, gpm2, gpm3 = (pbuff[i:(i + 4)] for i in range(0, len(pbuff), 4))
+        gpm1, gpm2, gpm3 = (pbuff[i : (i + 4)] for i in range(0, len(pbuff), 4))
 
         new_column = (
             (grid_type, init_date),
@@ -752,11 +832,14 @@ class GridFile(DataManagementFile):
             (grid_type2, forecast_hour2, forecast_minute2),
             level,
             level2 if level2 is not None else -1,
-            (self._encode_vertical_coordinate(vertical_coordinate)
-             if vertical_coordinate is not None else 0),
+            (
+                self._encode_vertical_coordinate(vertical_coordinate)
+                if vertical_coordinate is not None
+                else 0
+            ),
             gpm1,
             gpm2,
-            gpm3
+            gpm3,
         )
         self._column_set.add(self.make_column_header(*new_column))
 
@@ -807,11 +890,11 @@ class GridFile(DataManagementFile):
             nnnn = 0
             if abs(qdiff) > (2**-126 * imax):  # Smallest number for 32-bit float
                 if idat >= imax:
-                    while (idat >= imax):
+                    while idat >= imax:
                         nnnn -= 1
                         idat = qdiff * 2**nnnn
                 else:
-                    while (round(qdiff * 2**(nnnn + 1)) < imax):
+                    while round(qdiff * 2 ** (nnnn + 1)) < imax:
                         nnnn += 1
 
             scale = 2**nnnn
@@ -906,7 +989,7 @@ class GridFile(DataManagementFile):
             upper_right_lon=self.upper_right_lon,
             proj_angle1=self.angle1,
             proj_angle2=self.angle2,
-            proj_angle3=self.angle3
+            proj_angle3=self.angle3,
         )
 
         # Write a basic analysis block (type 2)
@@ -1017,8 +1100,7 @@ class SoundingFile(DataManagementFile):
             self._data_type = DataTypes.real.value
 
         self.row_names = ['DATE', 'TIME']
-        self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV',
-                             'STAT', 'COUN', 'STD2']
+        self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV', 'STAT', 'COUN', 'STD2']
         self._init_headers()
 
         self._add_parameters(parameters)
@@ -1108,8 +1190,9 @@ class SoundingFile(DataManagementFile):
             date_time = date_time.upper()
             if 'F' in date_time:
                 init, fhr = date_time.split('F')
-                self._datetime = (datetime.strptime(init, '%Y%m%d%H%M')
-                                  + timedelta(hours=int(fhr)))
+                self._datetime = datetime.strptime(init, '%Y%m%d%H%M') + timedelta(
+                    hours=int(fhr)
+                )
             else:
                 self._datetime = datetime.strptime(date_time, '%Y%m%d%H%M')
         elif isinstance(date_time, datetime):
@@ -1211,8 +1294,9 @@ class SoundingFile(DataManagementFile):
                     stream.write_int(self.next_free_word)
                     params = self.data[(row, col)]
                     # Need data length, so just grab first parameter
-                    lendat = (self._parts_dict['SNDT']['header']
-                              + len(params[next(iter(params))]) * len(params))
+                    lendat = self._parts_dict['SNDT']['header'] + len(
+                        params[next(iter(params))]
+                    ) * len(params)
                     itime = int(row.TIME.strftime('%H%M'))
                     stream.jump_to(self.next_free_word)
                     stream.write_int(lendat)
@@ -1279,8 +1363,17 @@ class SurfaceFile(DataManagementFile):
             self._data_type = DataTypes.real.value
 
         self.row_names = ['DATE', 'TIME']
-        self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV', 'STAT',
-                             'COUN', 'STD2', 'SPRI']
+        self.column_names = [
+            'STID',
+            'STNM',
+            'SLAT',
+            'SLON',
+            'SELV',
+            'STAT',
+            'COUN',
+            'STD2',
+            'SPRI',
+        ]
         self._init_headers()
 
         self._add_parameters(parameters)

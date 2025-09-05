@@ -29,7 +29,7 @@ HEADER_DTYPE = {
     'GPM1': '4s',
     'GPM2': '4s',
     'GPM3': '4s',
-    'GVCD': 'i'
+    'GVCD': 'i',
 }
 LIST_MEMBER_SIZE = 9
 MAX_ASH = 50
