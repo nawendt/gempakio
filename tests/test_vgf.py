@@ -1140,8 +1140,8 @@ def test_volcano():
 
     v = VectorGraphicFile(vgf)
 
-    volcano = v.filter_elements(vg_type=VGType.volcano.value)[0]
-    ash = v.filter_elements(vg_type=VGType.ash_cloud.value)[0]
+    volcano = v.filter_elements(vg_type=VGType.volcano)[0]
+    ash = v.filter_elements(vg_type=VGType.ash_cloud)[0]
 
     assert volcano.__dict__ == expected_volcano
     np.testing.assert_equal(ash.__dict__, expected_ash)

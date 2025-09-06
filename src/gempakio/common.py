@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK comman data definitions and structures."""
 
-from enum import Enum
+from enum import IntEnum
 
 ANLB_SIZE = 128
 BYTES_PER_WORD = 4
@@ -51,7 +51,7 @@ TRACK_DT_SIZE = 18
 VGF_HEADER_SIZE = 40
 
 
-class FileTypes(Enum):
+class FileTypes(IntEnum):
     """GEMPAK file type."""
 
     surface = 1
@@ -59,7 +59,7 @@ class FileTypes(Enum):
     grid = 3
 
 
-class DataTypes(Enum):
+class DataTypes(IntEnum):
     """Data management library data types."""
 
     real = 1
@@ -69,7 +69,7 @@ class DataTypes(Enum):
     grid = 5
 
 
-class VerticalCoordinates(Enum):
+class VerticalCoordinates(IntEnum):
     """Veritical coordinates."""
 
     none = 0
@@ -83,7 +83,7 @@ class VerticalCoordinates(Enum):
     pvbl = 8
 
 
-class PackingType(Enum):
+class PackingType(IntEnum):
     """GRIB packing type."""
 
     none = 0
@@ -94,7 +94,7 @@ class PackingType(Enum):
     grib2 = 5
 
 
-class ForecastType(Enum):
+class ForecastType(IntEnum):
     """Forecast type."""
 
     analysis = 0
@@ -103,7 +103,7 @@ class ForecastType(Enum):
     initial = 3
 
 
-class DataSource(Enum):
+class DataSource(IntEnum):
     """Data source."""
 
     model = 0

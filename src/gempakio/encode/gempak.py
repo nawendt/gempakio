@@ -482,10 +482,10 @@ class GridFile(DataManagementFile):
         Grids are written with an empty analysis block.
         """
         super().__init__()
-        self.file_type = FileTypes.grid.value
-        self.data_source = DataSource.grid.value
-        self.packing_type = PackingType.grib.value
-        self._data_type = DataTypes.grid.value
+        self.file_type = FileTypes.grid
+        self.data_source = DataSource.grid
+        self.packing_type = PackingType.grib
+        self._data_type = DataTypes.grid
         self.rows = 1
         self.angle1 = 0
         self.angle2 = 0
@@ -1033,7 +1033,7 @@ class GridFile(DataManagementFile):
             if col in self.data:
                 stream.write_int(self.next_free_word)
                 stream.jump_to(self.next_free_word)
-                if self.packing_type == PackingType.grib.value:
+                if self.packing_type == PackingType.grib:
                     ref, scale, packed_grid = self._pack_grib(self.data[col], self.precision)
                     lendat = len(packed_grid)
                     stream.write_int(lendat + self._parts_dict['GRID']['header'] + 6)
@@ -1091,13 +1091,13 @@ class SoundingFile(DataManagementFile):
             Currently not implemented.
         """
         super().__init__()
-        self.file_type = FileTypes.sounding.value
-        self.data_source = DataSource.raob_buoy.value
+        self.file_type = FileTypes.sounding
+        self.data_source = DataSource.raob_buoy
 
         if pack_data:
-            self._data_type = DataTypes.realpack.value
+            self._data_type = DataTypes.realpack
         else:
-            self._data_type = DataTypes.real.value
+            self._data_type = DataTypes.real
 
         self.row_names = ['DATE', 'TIME']
         self.column_names = ['STID', 'STNM', 'SLAT', 'SLON', 'SELV', 'STAT', 'COUN', 'STD2']
@@ -1303,7 +1303,7 @@ class SoundingFile(DataManagementFile):
                     stream.write_int(itime)
 
                     for rec in zip(*params.values(), strict=True):
-                        if self._data_type == DataTypes.realpack.value:
+                        if self._data_type == DataTypes.realpack:
                             for _param, _pval in zip(self.parameter_names, rec, strict=True):
                                 # pack values
                                 pass
@@ -1354,13 +1354,13 @@ class SurfaceFile(DataManagementFile):
         (e.g., TEXT/SPCL parameters).
         """
         super().__init__()
-        self.file_type = FileTypes.surface.value
-        self.data_source = DataSource.metar.value
+        self.file_type = FileTypes.surface
+        self.data_source = DataSource.metar
 
         if pack_data:
-            self._data_type = DataTypes.realpack.value
+            self._data_type = DataTypes.realpack
         else:
-            self._data_type = DataTypes.real.value
+            self._data_type = DataTypes.real
 
         self.row_names = ['DATE', 'TIME']
         self.column_names = [
@@ -1567,7 +1567,7 @@ class SurfaceFile(DataManagementFile):
                     stream.write_int(itime)
 
                     for _param, pval in params.items():
-                        if self._data_type == DataTypes.realpack.value:
+                        if self._data_type == DataTypes.realpack:
                             pass
                         else:
                             stream.write_float(pval)

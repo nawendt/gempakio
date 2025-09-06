@@ -5,7 +5,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from enum import Enum
+from enum import IntEnum
 from functools import partial
 import json
 import logging
@@ -31,7 +31,7 @@ from gempakio.tools import IOBuffer, NamedStruct
 logger = logging.getLogger(__name__)
 
 
-class VGClass(Enum):
+class VGClass(IntEnum):
     """Values for vg_class from drwids.h."""
 
     header = 0
@@ -53,7 +53,7 @@ class VGClass(Enum):
     blank = 16
 
 
-class VGType(Enum):
+class VGType(IntEnum):
     """Values for vg_type from vgstruct.h."""
 
     line = 1
@@ -100,7 +100,7 @@ class VGType(Enum):
     sgwx = 43
 
 
-class LineType(Enum):
+class LineType(IntEnum):
     """Values for lintyp from GEMPAK."""
 
     dotted = 0
@@ -115,7 +115,7 @@ class LineType(Enum):
     extra_long_dash_two_dot = 9
 
 
-class SpecialLineType(Enum):
+class SpecialLineType(IntEnum):
     """Values for spltyp from settings.tbl."""
 
     ball_chain = 1
@@ -146,7 +146,7 @@ class SpecialLineType(Enum):
     z_line = 26
 
 
-class MarkerType(Enum):
+class MarkerType(IntEnum):
     """Values for mrktyp from GEMPAK."""
 
     none = 0
@@ -176,7 +176,7 @@ class MarkerType(Enum):
     hurricane = 24
 
 
-class ListType(Enum):
+class ListType(IntEnum):
     """Values for list types."""
 
     county = 1
@@ -186,7 +186,7 @@ class ListType(Enum):
     marine_county = 5
 
 
-class FrontType(Enum):
+class FrontType(IntEnum):
     """Values for front types."""
 
     stationary = 0
@@ -201,7 +201,7 @@ class FrontType(Enum):
     convergence = 9
 
 
-class FrontIntensity(Enum):
+class FrontIntensity(IntEnum):
     """Values for front intensity."""
 
     unspecified = 0
@@ -216,7 +216,7 @@ class FrontIntensity(Enum):
     strong_increasing = 9
 
 
-class FrontCharacter(Enum):
+class FrontCharacter(IntEnum):
     """Values for front character."""
 
     unspecified = 0
@@ -231,7 +231,7 @@ class FrontCharacter(Enum):
     position_doubtful = 9
 
 
-class Basin(Enum):
+class Basin(IntEnum):
     """Values for TCA basin."""
 
     atlantic = 0
@@ -240,14 +240,14 @@ class Basin(Enum):
     west_pacific = 3
 
 
-class Severity(Enum):
+class Severity(IntEnum):
     """Values for TCA severity."""
 
     tropical_storm = 0
     hurricane = 1
 
 
-class StormType(Enum):
+class StormType(IntEnum):
     """Values for TCA storm type."""
 
     hurricane = 0
@@ -257,14 +257,14 @@ class StormType(Enum):
     subtropical_depression = 4
 
 
-class AdvisoryType(Enum):
+class AdvisoryType(IntEnum):
     """Values for TCA advisory type."""
 
     watch = 0
     warning = 1
 
 
-class SpecialGeography(Enum):
+class SpecialGeography(IntEnum):
     """Values for TCA special geography type."""
 
     no_types = 0
@@ -272,7 +272,7 @@ class SpecialGeography(Enum):
     water = 2
 
 
-class TropicalWatchWarningLevel(Enum):
+class TropicalWatchWarningLevel(IntEnum):
     """Values for watch-warning level."""
 
     hurricane_warning = 0
@@ -281,7 +281,7 @@ class TropicalWatchWarningLevel(Enum):
     tropical_storm_watch = 3
 
 
-class WatchType(Enum):
+class WatchType(IntEnum):
     """Values for watch type."""
 
     tornado = 2
@@ -2928,69 +2928,69 @@ class VectorGraphicFile:
     @property
     def has_fronts(self):
         """Check for front elements."""
-        return bool(self.filter_elements(vg_class=VGClass.fronts.value))
+        return bool(self.filter_elements(vg_class=VGClass.fronts))
 
     @property
     def has_text(self):
         """Check for text elements."""
-        return bool(
-            self.filter_elements(vg_class=VGClass.text.value, vg_type=VGType.text.value)
-        )
+        return bool(self.filter_elements(vg_class=VGClass.text, vg_type=VGType.text))
 
     @property
     def has_special_text(self):
         """Check for special text elements."""
-        return bool(
-            self.filter_elements(
-                vg_class=VGClass.text.value, vg_type=VGType.special_text.value
-            )
-        )
+        return bool(self.filter_elements(vg_class=VGClass.text, vg_type=VGType.special_text))
 
     @property
     def has_symbols(self):
-        """Check for symbols elements."""
-        return bool(self.filter_elements(vg_class=VGClass.symbols.value))
+        """Check for symbol elements."""
+        return bool(self.filter_elements(vg_class=VGClass.symbols))
+
+    @property
+    def has_special_symbols(self):
+        """Check for special symbol elements."""
+        return bool(
+            self.filter_elements(vg_class=VGClass.symbols, vg_type=VGType.special_symbol)
+        )
+
+    @property
+    def has_markers(self):
+        """Check for marker elements."""
+        return bool(self.filter_elements(vg_class=VGClass.symbols, vg_type=VGType.marker))
 
     @property
     def has_special_lines(self):
         """Check for special lines elements."""
-        return bool(
-            self.filter_elements(
-                vg_class=VGClass.lines.value, vg_type=VGType.special_line.value
-            )
-        )
+        return bool(self.filter_elements(vg_class=VGClass.lines, vg_type=VGType.special_line))
 
     @property
     def has_lines(self):
         """Check for lines elements."""
-        return bool(
-            self.filter_elements(vg_class=VGClass.lines.value, vg_type=VGType.line.value)
-        )
+        return bool(self.filter_elements(vg_class=VGClass.lines, vg_type=VGType.line))
 
     @property
     def has_winds(self):
         """Check for wind elements."""
-        return bool(self.filter_elements(vg_class=VGClass.winds.value))
+        return bool(self.filter_elements(vg_class=VGClass.winds))
 
     @property
     def has_tracks(self):
         """Check for track elements."""
-        return bool(self.filter_elements(vg_class=VGClass.tracks.value))
+        return bool(self.filter_elements(vg_class=VGClass.tracks))
 
     @property
     def has_watch_box(self):
         """Check for watch box elements."""
-        return bool(self.filter_elements(vg_class=VGClass.watches.value))
+        return bool(self.filter_elements(vg_class=VGClass.watches))
 
     @property
     def has_sigmet(self):
         """Check for SIGMET elements."""
-        return bool(self.filter_elements(vg_class=VGClass.sigmets.value))
+        return bool(self.filter_elements(vg_class=VGClass.sigmets))
 
     @property
     def has_met(self):
         """Check for MET elements."""
-        return bool(self.filter_elements(vg_class=VGClass.met.value))
+        return bool(self.filter_elements(vg_class=VGClass.met))
 
     def get_fronts(self):
         """Extract front elements.
@@ -3000,7 +3000,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.FrontElement`.
         """
         if self.has_fronts:
-            return self.filter_elements(vg_class=VGClass.fronts.value)
+            return self.filter_elements(vg_class=VGClass.fronts)
 
         return None
 
@@ -3012,7 +3012,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.TextElement`.
         """
         if self.has_text:
-            return self.filter_elements(vg_class=VGClass.text.value)
+            return self.filter_elements(vg_class=VGClass.text)
 
         return None
 
@@ -3024,9 +3024,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.SpecialTextElement`.
         """
         if self.has_special_text:
-            return self.filter_elements(
-                vg_class=VGClass.text.value, vg_type=VGType.special_text.value
-            )
+            return self.filter_elements(vg_class=VGClass.text, vg_type=VGType.special_text)
 
         return None
 
@@ -3038,7 +3036,33 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.SymbolElement`.
         """
         if self.has_symbols:
-            return self.filter_elements(vg_class=VGClass.symbols.value)
+            return self.filter_elements(vg_class=VGClass.symbols)
+
+        return None
+
+    def get_special_symbols(self):
+        """Extract special symbol elements.
+
+        Returns
+        -------
+        List of `mdgpu.io.vgf.SymbolElement`.
+        """
+        if self.has_special_symbols:
+            return self.filter_elements(
+                vg_class=VGClass.symbols, vg_type=VGType.special_symbol
+            )
+
+        return None
+
+    def get_markers(self):
+        """Extract special symbol elements.
+
+        Returns
+        -------
+        List of `mdgpu.io.vgf.SymbolElement`.
+        """
+        if self.has_markers:
+            return self.filter_elements(vg_class=VGClass.symbols, vg_type=VGType.marker)
 
         return None
 
@@ -3050,9 +3074,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.SpecialLineElement`.
         """
         if self.has_special_lines:
-            return self.filter_elements(
-                vg_class=VGClass.lines.value, vg_type=VGType.special_line.value
-            )
+            return self.filter_elements(vg_class=VGClass.lines, vg_type=VGType.special_line)
 
         return None
 
@@ -3064,9 +3086,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.LineElement`.
         """
         if self.has_lines:
-            return self.filter_elements(
-                vg_class=VGClass.lines.value, vg_type=VGType.line.value
-            )
+            return self.filter_elements(vg_class=VGClass.lines, vg_type=VGType.line)
 
         return None
 
@@ -3078,7 +3098,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.TrackElement`.
         """
         if self.has_tracks:
-            return self.filter_elements(vg_class=VGClass.tracks.value)
+            return self.filter_elements(vg_class=VGClass.tracks)
 
         return None
 
@@ -3090,7 +3110,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.WindElement`.
         """
         if self.has_winds:
-            return self.filter_elements(vg_class=VGClass.winds.value)
+            return self.filter_elements(vg_class=VGClass.winds)
 
         return None
 
@@ -3102,7 +3122,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.WatchBoxElement`.
         """
         if self.has_watch_box:
-            return self.filter_elements(vg_class=VGClass.watches.value)
+            return self.filter_elements(vg_class=VGClass.watches)
 
         return None
 
@@ -3114,7 +3134,7 @@ class VectorGraphicFile:
         List of `mdgpu.io.vgf.SigmetElement`.
         """
         if self.has_sigmet:
-            return self.filter_elements(vg_class=VGClass.sigmets.value)
+            return self.filter_elements(vg_class=VGClass.sigmets)
 
         return None
 
@@ -3126,7 +3146,7 @@ class VectorGraphicFile:
         List of MET elements.
         """
         if self.has_sigmet:
-            return self.filter_elements(vg_class=VGClass.met.value)
+            return self.filter_elements(vg_class=VGClass.met)
 
         return None
 
@@ -3241,20 +3261,16 @@ class VectorGraphicFile:
             group_info = header_struct.group_type
 
             # Ignores the file header group
-            if (
-                group_info not in self._groups
-                and group_info
-                and vg_class != VGClass.header.value
-            ):
+            if group_info not in self._groups and group_info and vg_class != VGClass.header:
                 self._groups.append(group_info)
 
-            if vg_class == VGClass.header.value and vg_type == VGType.file_header.value:
+            if vg_class == VGClass.header and vg_type == VGType.file_header:
                 version_size = 128
                 version = self._decode_strip_null(self._buffer.read(version_size))
                 notes_size = data_size - version_size
                 notes = self._decode_strip_null(self._buffer.read(notes_size))
                 self._header = FileHeaderElement(header_struct, version, notes)
-            elif vg_class == VGClass.fronts.value:
+            elif vg_class == VGClass.fronts:
                 front_info = [
                     ('number_points', 'i'),
                     ('front_code', 'i'),
@@ -3284,7 +3300,7 @@ class VectorGraphicFile:
                         lon,
                     )
                 )
-            elif vg_class == VGClass.symbols.value:
+            elif vg_class == VGClass.symbols:
                 symbol_info = [
                     ('number_symbols', 'i'),
                     ('width', 'i'),
@@ -3314,8 +3330,8 @@ class VectorGraphicFile:
                         symbol.lon,
                     )
                 )
-            elif vg_class == VGClass.circle.value:
-                if vg_type == VGType.circle.value:
+            elif vg_class == VGClass.circle:
+                if vg_type == VGType.circle:
                     line_info = [
                         ('number_points', 'i'),
                         ('line_type', 'i'),
@@ -3342,8 +3358,8 @@ class VectorGraphicFile:
                             lon,
                         )
                     )
-            elif vg_class == VGClass.lines.value:
-                if vg_type == VGType.line.value:
+            elif vg_class == VGClass.lines:
+                if vg_type == VGType.line:
                     line_info = [
                         ('number_points', 'i'),
                         ('line_type', 'i'),
@@ -3374,7 +3390,7 @@ class VectorGraphicFile:
                             lon,
                         )
                     )
-                elif vg_type == VGType.special_line.value:
+                elif vg_type == VGType.special_line:
                     special_line_info = [
                         ('number_points', 'i'),
                         ('line_type', 'i'),
@@ -3412,7 +3428,7 @@ class VectorGraphicFile:
                     )
                 else:
                     raise NotImplementedError(f'Line type `{vg_type}` is not implemented.')
-            elif vg_class == VGClass.lists.value:
+            elif vg_class == VGClass.lists:
                 list_info = [
                     ('list_type', 'i'),
                     ('marker_type', 'i'),
@@ -3449,8 +3465,8 @@ class VectorGraphicFile:
                         lon,
                     )
                 )
-            elif vg_class == VGClass.text.value:
-                if vg_type == VGType.text.value or vg_type == VGType.justified_text.value:
+            elif vg_class == VGClass.text:
+                if vg_type == VGType.text or vg_type == VGType.justified_text:
                     text_info = [
                         ('rotation', 'f', partial(round, ndigits=1)),
                         ('text_size', 'f', partial(round, ndigits=3)),
@@ -3486,7 +3502,7 @@ class VectorGraphicFile:
                             clean_text,
                         )
                     )
-                elif vg_type == VGType.special_text.value:
+                elif vg_type == VGType.special_text:
                     special_text_info = [
                         ('rotation', 'f', partial(round, ndigits=1)),
                         ('text_size', 'f', partial(round, ndigits=3)),
@@ -3536,7 +3552,7 @@ class VectorGraphicFile:
                     )
                 else:
                     raise NotImplementedError(f'Text type `{vg_type}` is not implemented.')
-            elif vg_class == VGClass.tracks.value:
+            elif vg_class == VGClass.tracks:
                 track_info = [
                     ('track_type', 'i'),
                     ('total_points', 'i'),
@@ -3596,13 +3612,13 @@ class VectorGraphicFile:
                         lon,
                     )
                 )
-            elif vg_class == VGClass.sigmets.value:
+            elif vg_class == VGClass.sigmets:
                 if vg_type in [
-                    VGType.convective_outlook.value,
-                    VGType.convective_sigmet.value,
-                    VGType.nonconvective_sigmet.value,
-                    VGType.airmet.value,
-                    VGType.international_sigmet.value,
+                    VGType.convective_outlook,
+                    VGType.convective_sigmet,
+                    VGType.nonconvective_sigmet,
+                    VGType.airmet,
+                    VGType.international_sigmet,
                 ]:
                     sigmet_info = [
                         ('subtype', 'i'),
@@ -3685,7 +3701,7 @@ class VectorGraphicFile:
                             lon,
                         )
                     )
-                elif vg_type == VGType.ccf.value:
+                elif vg_type == VGType.ccf:
                     ccf_info = [
                         ('subtype', 'i'),
                         ('number_points', 'i'),
@@ -3787,7 +3803,7 @@ class VectorGraphicFile:
                         )
                     )
                     self._buffer.skip((MAX_SIGMET - ccf.number_points) * 8)
-                elif vg_type == VGType.volcano.value:
+                elif vg_type == VGType.volcano:
                     volcano_info = [
                         ('name', '64s', self._decode_strip_null),
                         ('code', 'f', partial(round, ndigits=1)),
@@ -3865,7 +3881,7 @@ class VectorGraphicFile:
                             volcano.lon,
                         )
                     )
-                elif vg_type == VGType.ash_cloud.value:
+                elif vg_type == VGType.ash_cloud:
                     ash_info = [
                         ('subtype', 'i'),
                         ('number_points', 'i'),
@@ -3950,8 +3966,8 @@ class VectorGraphicFile:
                     )
                 else:
                     raise NotImplementedError(f'SIGMET type `{vg_type}` not implemented.')
-            elif vg_class == VGClass.met.value:
-                if vg_type == VGType.gfa.value:
+            elif vg_class == VGClass.met:
+                if vg_type == VGType.gfa:
                     gfa_info = [('number_blocks', 'i'), ('number_points', 'i')]
 
                     gfa = self._buffer.read_struct(
@@ -3976,7 +3992,7 @@ class VectorGraphicFile:
                             lon,
                         )
                     )
-                elif vg_type == VGType.jet.value:
+                elif vg_type == VGType.jet:
                     jet_line_info = [
                         ('line_color', 'i'),
                         ('number_points', 'i'),
@@ -4118,7 +4134,7 @@ class VectorGraphicFile:
                             header_struct, line_attr, number_barbs, barbs, number_hash, hashes
                         )
                     )
-                elif vg_type == VGType.tca.value:
+                elif vg_type == VGType.tca:
                     tca_string_length = header_struct.record_size - VGF_HEADER_SIZE
                     tca_string = self._buffer.read_ascii(tca_string_length)
 
@@ -4223,9 +4239,9 @@ class VectorGraphicFile:
                             )
                         )
                 elif vg_type in [
-                    VGType.tc_error_cone.value,
-                    VGType.tc_track.value,
-                    VGType.tc_break_point.value,
+                    VGType.tc_error_cone,
+                    VGType.tc_track,
+                    VGType.tc_break_point,
                 ]:
                     tc_info = [
                         ('storm_number', '5s', self._decode_strip_null),
@@ -4241,7 +4257,7 @@ class VectorGraphicFile:
 
                     tc = self._buffer.read_struct(NamedStruct(tc_info, self.prefmt, 'TCInfo'))
 
-                    if vg_type == VGType.tc_error_cone.value:
+                    if vg_type == VGType.tc_error_cone:
                         cone_info = [
                             ('line_color', 'i'),
                             ('line_type', 'i'),
@@ -4277,7 +4293,7 @@ class VectorGraphicFile:
                                 lon,
                             )
                         )
-                    elif vg_type == VGType.tc_track.value:
+                    elif vg_type == VGType.tc_track:
                         track_info = [
                             ('line_color', 'i'),
                             ('line_type', 'i'),
@@ -4348,7 +4364,7 @@ class VectorGraphicFile:
                                 track_points,
                             )
                         )
-                    elif vg_type == VGType.tc_break_point.value:
+                    elif vg_type == VGType.tc_break_point:
                         break_info = [
                             ('line_color', 'i'),
                             ('line_width', 'i'),
@@ -4390,7 +4406,7 @@ class VectorGraphicFile:
                                 breakpoints,
                             )
                         )
-                    elif vg_type == VGType.sgwx.value:
+                    elif vg_type == VGType.sgwx:
                         sgwx_info = [
                             ('subtype', 'i'),
                             ('number_points', 'i'),
@@ -4471,7 +4487,7 @@ class VectorGraphicFile:
                         self._buffer.skip((MAX_SGWX_POINTS - sgwx.number_points) * 4)
                 else:
                     raise NotImplementedError(f'MET type `{vg_type}` not implemented.')
-            elif vg_class == VGClass.watches.value:
+            elif vg_class == VGClass.watches:
                 watch_info = [
                     ('number_points', 'i'),
                     ('style', 'i'),
@@ -4589,7 +4605,7 @@ class VectorGraphicFile:
                         lon,
                     )
                 )
-            elif vg_class == VGClass.winds.value:
+            elif vg_class == VGClass.winds:
                 wind_info = [
                     ('number_wind', 'i'),
                     ('width', 'i'),
