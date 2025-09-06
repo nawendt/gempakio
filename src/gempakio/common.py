@@ -1,9 +1,9 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """GEMPAK comman data definitions and structures."""
 
-from enum import Enum
+from enum import IntEnum
 
 ANLB_SIZE = 128
 BYTES_PER_WORD = 4
@@ -29,13 +29,14 @@ HEADER_DTYPE = {
     'GPM1': '4s',
     'GPM2': '4s',
     'GPM3': '4s',
-    'GVCD': 'i'
+    'GVCD': 'i',
 }
 LIST_MEMBER_SIZE = 9
 MAX_ASH = 50
 MAX_COUNTIES = 400
 MAX_JET_POINTS = 50
 MAX_POINTS = 500
+MAX_LEVELS = 500
 MAX_SGWX_POINTS = 256
 MAX_SIGMET = 100
 MAX_TRACKS = 50
@@ -50,7 +51,7 @@ TRACK_DT_SIZE = 18
 VGF_HEADER_SIZE = 40
 
 
-class FileTypes(Enum):
+class FileTypes(IntEnum):
     """GEMPAK file type."""
 
     surface = 1
@@ -58,7 +59,7 @@ class FileTypes(Enum):
     grid = 3
 
 
-class DataTypes(Enum):
+class DataTypes(IntEnum):
     """Data management library data types."""
 
     real = 1
@@ -68,7 +69,7 @@ class DataTypes(Enum):
     grid = 5
 
 
-class VerticalCoordinates(Enum):
+class VerticalCoordinates(IntEnum):
     """Veritical coordinates."""
 
     none = 0
@@ -82,7 +83,7 @@ class VerticalCoordinates(Enum):
     pvbl = 8
 
 
-class PackingType(Enum):
+class PackingType(IntEnum):
     """GRIB packing type."""
 
     none = 0
@@ -93,7 +94,7 @@ class PackingType(Enum):
     grib2 = 5
 
 
-class ForecastType(Enum):
+class ForecastType(IntEnum):
     """Forecast type."""
 
     analysis = 0
@@ -102,7 +103,7 @@ class ForecastType(Enum):
     initial = 3
 
 
-class DataSource(Enum):
+class DataSource(IntEnum):
     """Data source."""
 
     model = 0

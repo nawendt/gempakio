@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for encoding GEMPAK VGF files."""
@@ -10,9 +10,27 @@ import numpy as np
 import pytest
 
 from gempakio.decode.vgf import VectorGraphicFile, VGClass, VGType
-from gempakio.encode.vgf import (Element, FontCodes, Front, FrontCodes, Line, LineBase,
-                                 LineCodes, SpecialLine, SpecialLineCodes, SpecialText,
-                                 SpecialTextCodes, TextBase, VGFile)
+from gempakio.encode.vgf import (
+    ColorCodes,
+    Element,
+    FontCodes,
+    Front,
+    FrontCodes,
+    Line,
+    LineBase,
+    LineCodes,
+    Marker,
+    MarkerCodes,
+    SpecialLine,
+    SpecialLineCodes,
+    SpecialSymbol,
+    SpecialSymbolCodes,
+    SpecialText,
+    SpecialTextCodes,
+    SymbolBase,
+    TextBase,
+    VGFile,
+)
 
 
 def test_element_attributes():
@@ -105,10 +123,10 @@ def test_front_attributes():
 
 def test_front_write():
     """Test writing fronts to VGF."""
-    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47],
-                   dtype='float32')
-    lon = np.array([-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12],
-                   dtype='float32')
+    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47], dtype='float32')
+    lon = np.array(
+        [-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12], dtype='float32'
+    )
 
     front = Front(lon, lat, FrontCodes.DRYLINE, 5)
 
@@ -128,8 +146,8 @@ def test_front_write():
         test_lon = test_front.lon
 
         assert test_front.front_code == FrontCodes.DRYLINE
-        assert test_front.vg_type == VGType.front.value
-        assert test_front.vg_class == VGClass.fronts.value
+        assert test_front.vg_type == VGType.front
+        assert test_front.vg_class == VGClass.fronts
         assert test_front.major_color == 5
         assert test_front.minor_color == 5
         assert test_front.closed == 0
@@ -177,10 +195,10 @@ def test_line_attributes():
 
 def test_line_write():
     """Test writing lines to VGF."""
-    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47],
-                   dtype='float32')
-    lon = np.array([-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12],
-                   dtype='float32')
+    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47], dtype='float32')
+    lon = np.array(
+        [-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12], dtype='float32'
+    )
 
     line = Line(lon, lat, 2, LineCodes.LONG_DASH, 0)
 
@@ -200,8 +218,8 @@ def test_line_write():
         test_lon = test_line.lon
 
         assert test_line.line_type == LineCodes.LONG_DASH
-        assert test_line.vg_type == VGType.line.value
-        assert test_line.vg_class == VGClass.lines.value
+        assert test_line.vg_type == VGType.line
+        assert test_line.vg_class == VGClass.lines
         assert test_line.major_color == 2
         assert test_line.minor_color == 2
         assert test_line.closed == 0
@@ -246,10 +264,10 @@ def test_special_line_attributes():
 
 def test_special_line_write():
     """Test writing special lines to VGF."""
-    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47],
-                   dtype='float32')
-    lon = np.array([-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12],
-                   dtype='float32')
+    lat = np.array([27.29, 28.28, 28.53, 27.93, 26.8, 26.03, 25.51, 25.47], dtype='float32')
+    lon = np.array(
+        [-82.44, -81.66, -80.99, -80.48, -79.89, -80.03, -80.45, -81.12], dtype='float32'
+    )
 
     line = SpecialLine(lon, lat, 2, SpecialLineCodes.SCALLOP, 0, smooth=2)
 
@@ -269,8 +287,8 @@ def test_special_line_write():
         test_lon = test_line.lon
 
         assert test_line.line_type == SpecialLineCodes.SCALLOP
-        assert test_line.vg_type == VGType.special_line.value
-        assert test_line.vg_class == VGClass.lines.value
+        assert test_line.vg_type == VGType.special_line
+        assert test_line.vg_class == VGClass.lines
         assert test_line.major_color == 2
         assert test_line.minor_color == 2
         assert test_line.closed == 0
@@ -311,8 +329,9 @@ def test_text_base_attribute():
 
 def test_special_text_attributes():
     """Test special text attributes."""
-    text = SpecialText(0, 0, 'TEST', 8, 18, SpecialTextCodes.GENERAL_TEXT,
-                       FontCodes.HELVETICA_BOLD)
+    text = SpecialText(
+        0, 0, 'TEST', 8, 18, SpecialTextCodes.GENERAL_TEXT, FontCodes.HELVETICA_BOLD
+    )
 
     with pytest.raises(ValueError):
         text.text_type = 20
@@ -340,8 +359,15 @@ def test_special_text_write():
     lat = 38.701065
     lon = -98.326084
 
-    text = SpecialText(lon, lat, 'THIS IS A TEST!', 8, 18, SpecialTextCodes.GENERAL_TEXT,
-                       FontCodes.HELVETICA_BOLD)
+    text = SpecialText(
+        lon,
+        lat,
+        'THIS IS A TEST!',
+        8,
+        18,
+        SpecialTextCodes.GENERAL_TEXT,
+        FontCodes.HELVETICA_BOLD,
+    )
 
     out = VGFile.from_elements(text)
 
@@ -356,8 +382,8 @@ def test_special_text_write():
         test_text = in_vgf.get_special_text()[0]
 
         assert test_text.text_type == SpecialTextCodes.GENERAL_TEXT
-        assert test_text.vg_type == VGType.special_text.value
-        assert test_text.vg_class == VGClass.text.value
+        assert test_text.vg_type == VGType.special_text
+        assert test_text.vg_class == VGClass.text
         assert test_text.major_color == 8
         assert test_text.minor_color == 8
         assert test_text.closed == 0
@@ -377,5 +403,134 @@ def test_special_text_write():
         assert test_text.min_lon == pytest.approx(lon, rel=1e-4, abs=0)
         assert test_text.lat == pytest.approx(lat, rel=1e-4, abs=0)
         assert test_text.lon == pytest.approx(lon, rel=1e-4, abs=0)
+    finally:
+        vgf.unlink()
+
+
+def test_symbol_base_attributes():
+    """Test base symbol class attributes."""
+    lat = 38.701065
+    lon = -98.326084
+
+    symbol = SymbolBase(lon, lat, SpecialSymbolCodes.CIRCLE_FILLED, ColorCodes.MAGENTA)
+
+    with pytest.raises(ValueError):
+        symbol.width = -1
+
+    with pytest.raises(ValueError):
+        symbol.width = 20
+
+    with pytest.raises(ValueError):
+        symbol.size = -1
+
+    with pytest.raises(ValueError):
+        symbol.size = 20
+
+    with pytest.raises(TypeError):
+        symbol.symbol_code = '10'
+
+
+def test_special_symbol_attributes():
+    """Test special symbol class attributes."""
+    lat = 38.701065
+    lon = -98.326084
+
+    symbol = SpecialSymbol(lon, lat, SpecialSymbolCodes.CIRCLE_FILLED, ColorCodes.MAGENTA)
+
+    with pytest.raises(ValueError):
+        symbol.symbol_code = 42
+
+
+def test_marker_attributes():
+    """Test marker class attributes."""
+    lat = 38.701065
+    lon = -98.326084
+
+    marker = Marker(lon, lat, MarkerCodes.ASTERISK, ColorCodes.MAGENTA)
+
+    with pytest.raises(ValueError):
+        marker.symbol_code = 25
+
+
+def test_special_symbol_write():
+    """Test writing special symbol to VGF."""
+    lat = 38.701065
+    lon = -98.326084
+
+    symbol = SpecialSymbol(lon, lat, SpecialSymbolCodes.CIRCLE_FILLED, ColorCodes.MAGENTA)
+
+    out = VGFile.from_elements(symbol)
+
+    kwargs = {'dir': '.', 'suffix': '.vgf', 'delete': False}
+
+    try:
+        with tempfile.NamedTemporaryFile(**kwargs) as tmp:
+            out.to_vgf(tmp.name)
+            vgf = Path(tmp.name)
+
+        in_vgf = VectorGraphicFile(vgf)
+        test_symbol = in_vgf.get_special_symbols()[0]
+
+        assert test_symbol.vg_type == VGType.special_symbol
+        assert test_symbol.vg_class == VGClass.symbols
+        assert test_symbol.symbol_code == SpecialSymbolCodes.CIRCLE_FILLED
+        assert test_symbol.major_color == ColorCodes.MAGENTA
+        assert test_symbol.minor_color == ColorCodes.MAGENTA
+        assert test_symbol.closed == 0
+        assert test_symbol.smooth == 0
+        assert test_symbol.filled == 0
+        assert test_symbol.record_size == 76
+        assert test_symbol.group_type == 0
+        assert test_symbol.group_number == 0
+        assert test_symbol.width == 1
+        assert test_symbol.size == 1
+        assert test_symbol.max_lat == pytest.approx(lat, rel=1e-4, abs=0)
+        assert test_symbol.max_lon == pytest.approx(lon, rel=1e-4, abs=0)
+        assert test_symbol.min_lat == pytest.approx(lat, rel=1e-4, abs=0)
+        assert test_symbol.min_lon == pytest.approx(lon, rel=1e-4, abs=0)
+        assert test_symbol.lat == pytest.approx(lat, rel=1e-4, abs=0)
+        assert test_symbol.lon == pytest.approx(lon, rel=1e-4, abs=0)
+    finally:
+        vgf.unlink()
+
+
+def test_marker_write():
+    """Test writing marker to VGF."""
+    lat = 38.701065
+    lon = -98.326084
+
+    symbol = Marker(lon, lat, MarkerCodes.ASTERISK, ColorCodes.MAGENTA)
+
+    out = VGFile.from_elements(symbol)
+
+    kwargs = {'dir': '.', 'suffix': '.vgf', 'delete': False}
+
+    try:
+        with tempfile.NamedTemporaryFile(**kwargs) as tmp:
+            out.to_vgf(tmp.name)
+            vgf = Path(tmp.name)
+
+        in_vgf = VectorGraphicFile(vgf)
+        test_marker = in_vgf.get_markers()[0]
+
+        assert test_marker.vg_type == VGType.marker
+        assert test_marker.vg_class == VGClass.symbols
+        assert test_marker.symbol_code == MarkerCodes.ASTERISK
+        assert test_marker.major_color == ColorCodes.MAGENTA
+        assert test_marker.minor_color == ColorCodes.MAGENTA
+        assert test_marker.closed == 0
+        assert test_marker.smooth == 0
+        assert test_marker.filled == 0
+        assert test_marker.record_size == 76
+        assert test_marker.group_type == 0
+        assert test_marker.group_number == 0
+        assert test_marker.width == 1
+        assert test_marker.size == 1
+        assert test_marker.max_lat == pytest.approx(lat, rel=1e-4, abs=0)
+        assert test_marker.max_lon == pytest.approx(lon, rel=1e-4, abs=0)
+        assert test_marker.min_lat == pytest.approx(lat, rel=1e-4, abs=0)
+        assert test_marker.min_lon == pytest.approx(lon, rel=1e-4, abs=0)
+        assert test_marker.lat == pytest.approx(lat, rel=1e-4, abs=0)
+        assert test_marker.lon == pytest.approx(lon, rel=1e-4, abs=0)
     finally:
         vgf.unlink()

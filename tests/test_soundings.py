@@ -1,4 +1,4 @@
-# Copyright (c) 2022 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
@@ -82,11 +82,9 @@ def test_sounding_access(access_type):
     gso = GempakSounding(g)
 
     if access_type == 'STID':
-        gso.snxarray(station_id='OUN', country='US', state='OK',
-                     date_time='202101200000')
+        gso.snxarray(station_id='OUN', country='US', state='OK', date_time='202101200000')
     elif access_type == 'STNM':
-        gso.snxarray(station_number=72357, country='US', state='OK',
-                     date_time='202101200000')
+        gso.snxarray(station_number=72357, country='US', state='OK', date_time='202101200000')
 
 
 @pytest.mark.parametrize('text_type', ['txta', 'txtb', 'txtc', 'txpb'])
@@ -104,10 +102,13 @@ def test_sounding_text(text_type):
     assert text == gem_text
 
 
-@pytest.mark.parametrize('gem,gio,station', [
-    ('top_sigw_hght_unmrg.csv', 'top_sigw_hght_unmrg.snd', 'TOP'),
-    ('waml_sigw_pres_unmrg.csv', 'waml_sigw_pres_unmrg.snd', 'WAML')
-])
+@pytest.mark.parametrize(
+    'gem,gio,station',
+    [
+        ('top_sigw_hght_unmrg.csv', 'top_sigw_hght_unmrg.snd', 'TOP'),
+        ('waml_sigw_pres_unmrg.csv', 'waml_sigw_pres_unmrg.snd', 'WAML'),
+    ],
+)
 def test_unmerged(gem, gio, station):
     """Test loading an unmerged sounding.
 
@@ -207,9 +208,9 @@ def test_unmerged_no_ttcc():
     np.testing.assert_allclose(ghght, dhght, rtol=1e-10, atol=1e-1)
 
 
-@pytest.mark.parametrize('keyword,date_time', [
-    ('FIRST', '202011070000'), ('LAST', '202011070100')
-])
+@pytest.mark.parametrize(
+    'keyword,date_time', [('FIRST', '202011070000'), ('LAST', '202011070100')]
+)
 def test_time_keywords(keyword, date_time):
     """Test time keywords FIRST and LAST."""
     g = Path(__file__).parent / 'data' / 'unmerged_with_text.snd'

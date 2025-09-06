@@ -22,7 +22,3 @@ jobs:
       - name: Run ruff
         run: |
           ruff check .
-  
-      - name: Run flake8
-        run: |
-          flake8

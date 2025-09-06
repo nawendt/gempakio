@@ -1,8 +1,7 @@
-# Copyright (c) 2024 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for encoding GEMPAK VGF files."""
-
 
 from dataclasses import dataclass
 from enum import IntEnum
@@ -12,6 +11,43 @@ import numpy as np
 
 from gempakio.common import MAX_POINTS
 from gempakio.tools import NamedStruct
+
+
+class ColorCodes(IntEnum):
+    """Standard named GEMPAK color codes."""
+
+    PALE_PINK = 1
+    RED = 2
+    GREEN = 3
+    BLUE = 4
+    YELLOW = 5
+    CYAN = 6
+    MAGENTA = 7
+    BROWN = 8
+    CORAL = 9
+    APRICOT = 10
+    PINK = 11
+    DARK_PINK = 12
+    MEDIUM_PINK = 13
+    MEDIUM_PURPLE = 14
+    LIGHT_PURPLE = 15
+    VIOLET = 16
+    DARK_BLUE = 17
+    MEDIUM_BLUE = 18
+    LIGHT_BLUE = 19
+    BLUE_GREEN = 20
+    MEDIUM_GREEN = 21
+    LIGHT_GREEN = 22
+    GREEN_YELLOW = 23
+    LIGHT_YELLOW = 24
+    GOLD = 25
+    DARK_YELLOW = 26
+    ORANGE = 27
+    MEDIUM_RED = 28
+    MEDIUM_ORANGE = 29
+    LIGHT_ORANGE = 30
+    WHITE = 31
+    BLACK = 32
 
 
 class FillCodes(IntEnum):
@@ -65,6 +101,26 @@ class FrontCodes(IntEnum):
     SQUALL = 940
 
 
+@dataclass(frozen=True)
+class FontSize:
+    """A read-only container for GEMPAK text size conventions."""
+
+    name: str
+    hardware: float
+    points: int
+
+
+class FontSizeCodes(FontSize):
+    """Size information for named font sizes."""
+
+    TINY = FontSize(name='TINY', hardware=0.714, points=10)
+    SMALL = FontSize(name='SMALL', hardware=0.857, points=12)
+    MEDIUM = FontSize(name='MEDIUM', hardware=1.000, points=14)
+    LARGE = FontSize(name='LARGE', hardware=1.286, points=18)
+    HUGE = FontSize(name='HUGE', hardware=1.714, points=24)
+    GIANT = FontSize(name='GIANT', hardware=2.429, points=34)
+
+
 class LineCodes(IntEnum):
     """Line type codes."""
 
@@ -78,6 +134,35 @@ class LineCodes(IntEnum):
     LONG_DASH_DOT = 7
     LONG_DASH_THREE_DOTS = 8
     MEDIUM_DASH_DOT = 9
+
+
+class MarkerCodes(IntEnum):
+    """Marker codes."""
+
+    PLUS_SIGN = 1
+    OCTAGON = 2
+    TRIANGLE = 3
+    BOX = 4
+    SMALL_X = 5
+    DIAMOND = 6
+    UP_ARROW = 7
+    X_WITH_TOP_BAR = 8
+    Z_WITH_BAR = 9
+    Y = 10
+    BOX_WITH_DIAGONALS = 11
+    ASTERISK = 12
+    HOURGLASS_X = 13
+    STAR = 14
+    DOT = 15
+    LARGE_X = 16
+    FILLED_OCTAGON = 17
+    FILLED_TRIANGLE = 18
+    FILLED_BOX = 19
+    FILLED_DIAMOND = 20
+    FILLED_STAR = 21
+    MINUS_SIGN = 22
+    TROPICAL_STORM = 23
+    HURRICANE = 24
 
 
 class SpecialLineCodes(IntEnum):
@@ -111,15 +196,62 @@ class SpecialLineCodes(IntEnum):
     Z_LINE = 26
 
 
+class SpecialSymbolCodes(IntEnum):
+    """Special symbol codes."""
+
+    SQUARE_OUTLINE = 0
+    SQUARE_FILLED = 1
+    CIRCLE_OUTLINE = 2
+    CIRCLE_FILLED = 3
+    TRIANGLE_OUTLINE = 4
+    TRIANGLE_FILLED = 5
+    DIAMOND_OUTLINE = 6
+    DIAMOND_FILLED = 7
+    STAR_OUTLINE = 8
+    STAR_FILLED = 9
+    HIGH_PRESSURE_H_OUTLINE = 10
+    LOW_PRESSURE_L_OUTLINE = 11
+    HIGH_PRESSURE_H_FILLED = 12
+    LOW_PRESSURE_L_FILLED = 13
+    SINGLE_BRACKET = 14
+    BOTTOM_HALF_BRACKET = 15
+    TOP_HALF_BRACKET = 16
+    LEFT_ADJUSTED_VERTICAL_BAR = 17
+    RIGHT_ADJUSTED_VERTICAL_BAR = 18
+    BRACKET_WITH_ONE_DOT = 19
+    BRACKET_WITH_TWO_DOTS = 20
+    BRACKET_WITH_ONE_ASTERISK = 21
+    BRACKET_WITH_TWO_ASTERISKS = 22
+    BRACKET_WITH_ONE_TRIANGLE = 23
+    BRACKET_WITH_TWO_TRIANGLES = 24
+    TROPICAL_STORM_NORTHERN_HEMISPHERE = 25
+    HURRICANE_NORTHERN_HEMISPHERE = 26
+    TROPICAL_STORM_SOUTHERN_HEMISPHERE = 27
+    HURRICANE_SOUTHERN_HEMISPHERE = 28
+    TRIANGLE_WITH_ANTENNA = 29
+    SIDEWAYS_S = 30
+    SLASH = 31
+    STORM_CENTER = 32
+    TROPICAL_DEPRESSION = 33
+    TROPICAL_CYCLONE = 34
+    FLAME = 35
+    X_CROSS = 36
+    LOW_PRESSURE_X_CROSS_OUTLINE = 37
+    LOW_PRESSURE_X_CROSS_FILLED = 38
+    TROPICAL_STORM_NH = 39
+    TROPICAL_STORM_SH = 40
+    NUCLEAR_FALLOUT = 41
+
+
 class SpecialTextCodes(IntEnum):
     """Special text codes."""
 
     GENERAL_TEXT = 0
     LOW_PRESSURE_BOX = 1
     HIGH_PRESSURE_BOX = 2
-    BOX_BORDER_FILLED = 3
-    BOX_BORDER_NOFILL = 4
-    BOX_NOBORDER_NOFILL = 5
+    BOX_BORDER_NOFILL = 3
+    BOX_BORDER_FILLED = 4
+    BOX_NOBORDER_FILLED = 5
     FREEZING_LEVEL = 6
     LOW_LEVEL_TURBULENCE = 7
     CLOUD_LEVEL = 8
@@ -138,11 +270,26 @@ class Element:
     """Base VGF element."""
 
     element_header_struct = NamedStruct(
-        [('delete', 'B'), ('vg_type', 'B'), ('vg_class', 'B'), ('filled', 'b'),
-         ('closed', 'B'), ('smooth', 'B'), ('version', 'B'), ('group_type', 'B'),
-         ('group_number', 'i'), ('major_color', 'i'), ('minor_color', 'i'),
-         ('record_size', 'i'), ('min_lat', 'f'), ('min_lon', 'f'), ('max_lat', 'f'),
-         ('max_lon', 'f')], '>', 'ElementHeader'
+        [
+            ('delete', 'B'),
+            ('vg_type', 'B'),
+            ('vg_class', 'B'),
+            ('filled', 'b'),
+            ('closed', 'B'),
+            ('smooth', 'B'),
+            ('version', 'B'),
+            ('group_type', 'B'),
+            ('group_number', 'i'),
+            ('major_color', 'i'),
+            ('minor_color', 'i'),
+            ('record_size', 'i'),
+            ('min_lat', 'f'),
+            ('min_lon', 'f'),
+            ('max_lat', 'f'),
+            ('max_lon', 'f'),
+        ],
+        '>',
+        'ElementHeader',
     )
 
     def __init__(self):
@@ -231,9 +378,7 @@ class Element:
     def smooth(self, value):
         """Set smooth."""
         if value not in range(3):
-            raise ValueError(
-                'smooth option must be 0 (none), 1 (splines), or 2 (parametric).'
-            )
+            raise ValueError('smooth option must be 0 (none), 1 (splines), or 2 (parametric).')
         self._smooth = value
 
     @property
@@ -301,7 +446,7 @@ class Element:
             min_lat=self._min_lat,
             min_lon=self._min_lon,
             max_lat=self._max_lat,
-            max_lon=self._max_lon
+            max_lon=self._max_lon,
         )
 
         return packed
@@ -331,10 +476,7 @@ class FileHeader(Element):
     def encode(self):
         """Encode file header."""
         header = self._make_element_header()
-        packed = self.file_header_struct.pack(
-            version=self._gempak_version,
-            notes=self._notes
-        )
+        packed = self.file_header_struct.pack(version=self._gempak_version, notes=self._notes)
 
         return header + packed
 
@@ -383,8 +525,21 @@ class LineBase(Element):
 class TextBase(Element):
     """Base text class."""
 
-    def __init__(self, lon, lat, text, text_color, size, font, width, align, rotation,
-                 offset_x, offset_y, text_flag):
+    def __init__(
+        self,
+        lon,
+        lat,
+        text,
+        text_color,
+        size,
+        font,
+        width,
+        align,
+        rotation,
+        offset_x,
+        offset_y,
+        text_flag,
+    ):
         super().__init__()
         self._lat = lat
         self._lon = lon
@@ -452,8 +607,7 @@ class TextBase(Element):
     @font.setter
     def font(self, value):
         """Set font code."""
-        if (self._text_flag == 2
-           and value not in [1, 2, 3, 11, 12, 13, 21, 22, 23, 31, 32, 33]):
+        if self._text_flag == 2 and value not in [1, 2, 3, 11, 12, 13, 21, 22, 23, 31, 32, 33]:
             raise ValueError('Invalid hardware font code.')
         self._font = value
 
@@ -526,8 +680,15 @@ class Line(LineBase):
     """Line element."""
 
     line_struct = NamedStruct(
-        [('number_points', 'i'), ('line_type', 'i'), ('line_type_hardware', 'i'),
-         ('width', 'i'), ('line_width_hardware', 'i')], '>', 'LineInfo'
+        [
+            ('number_points', 'i'),
+            ('line_type', 'i'),
+            ('line_type_hardware', 'i'),
+            ('width', 'i'),
+            ('line_width_hardware', 'i'),
+        ],
+        '>',
+        'LineInfo',
     )
 
     def __init__(self, lon, lat, color, line_type, closed, filled=0, smooth=0, width=2):
@@ -599,8 +760,9 @@ class Line(LineBase):
         self._vg_type = 1
         self.line_type = line_type
         self._pts_struct = struct.Struct(f'>{self._number_points * 2}f')
-        self._record_size = (self.element_header_struct.size + self.line_struct.size
-                             + self._pts_struct.size)
+        self._record_size = (
+            self.element_header_struct.size + self.line_struct.size + self._pts_struct.size
+        )
 
     @property
     def line_type(self):
@@ -623,12 +785,10 @@ class Line(LineBase):
             line_type=self._line_type,
             line_type_hardware=self._line_type_hardware,
             width=self._width,
-            line_width_hardware=self._line_width_hardware
+            line_width_hardware=self._line_width_hardware,
         )
 
-        pts = self._pts_struct.pack(
-            *self._lat, *self._lon
-        )
+        pts = self._pts_struct.pack(*self._lat, *self._lon)
 
         return header + info + pts
 
@@ -637,12 +797,31 @@ class Front(Element):
     """Front element."""
 
     front_struct = NamedStruct(
-        [('number_points', 'i'), ('front_code', 'i'), ('pip_size', 'i'), ('pip_stroke', 'i'),
-         ('pip_direction', 'i'), ('width', 'i'), ('label', '4s')], '>', 'FrontInfo'
+        [
+            ('number_points', 'i'),
+            ('front_code', 'i'),
+            ('pip_size', 'i'),
+            ('pip_stroke', 'i'),
+            ('pip_direction', 'i'),
+            ('width', 'i'),
+            ('label', '4s'),
+        ],
+        '>',
+        'FrontInfo',
     )
 
-    def __init__(self, lon, lat, front_code, major_color, minor_color=None, smooth=2,
-                 pip_size=100, pip_stroke=1, pip_direction=1):
+    def __init__(
+        self,
+        lon,
+        lat,
+        front_code,
+        major_color,
+        minor_color=None,
+        smooth=2,
+        pip_size=100,
+        pip_stroke=1,
+        pip_direction=1,
+    ):
         """Create front.
 
         Parameters
@@ -748,8 +927,9 @@ class Front(Element):
         self.pip_direction = pip_direction
         self.smooth = smooth
         self._pts_struct = struct.Struct(f'>{self._number_points * 2}f')
-        self._record_size = (self.element_header_struct.size + self.front_struct.size
-                             + self._pts_struct.size)
+        self._record_size = (
+            self.element_header_struct.size + self.front_struct.size + self._pts_struct.size
+        )
 
         _code = f'{self._front_code:03d}'
         self._front_type = int(_code[0])
@@ -859,12 +1039,10 @@ class Front(Element):
             pip_stroke=self._pip_stroke,
             pip_direction=self._pip_direction,
             width=self._width,
-            label=self._label
+            label=self._label,
         )
 
-        pts = self._pts_struct.pack(
-            *self._lat, *self._lon
-        )
+        pts = self._pts_struct.pack(*self._lat, *self._lon)
 
         return header + info + pts
 
@@ -873,12 +1051,32 @@ class SpecialLine(LineBase):
     """Special line element."""
 
     special_line_struct = NamedStruct(
-        [('number_points', 'i'), ('line_type', 'i'), ('stroke', 'i'), ('direction', 'i'),
-         ('size', 'f'), ('width', 'i')], '>', 'SpecialLineInfo'
+        [
+            ('number_points', 'i'),
+            ('line_type', 'i'),
+            ('stroke', 'i'),
+            ('direction', 'i'),
+            ('size', 'f'),
+            ('width', 'i'),
+        ],
+        '>',
+        'SpecialLineInfo',
     )
 
-    def __init__(self, lon, lat, color, line_type, closed, filled=0, stroke=1, width=2,
-                 smooth=0, size=1, direction=1):
+    def __init__(
+        self,
+        lon,
+        lat,
+        color,
+        line_type,
+        closed,
+        filled=0,
+        stroke=1,
+        width=2,
+        smooth=0,
+        size=1,
+        direction=1,
+    ):
         """Create special line.
 
         Parameters
@@ -963,8 +1161,11 @@ class SpecialLine(LineBase):
         self._vg_class = 3
         self._vg_type = 20
         self._pts_struct = struct.Struct(f'>{self._number_points * 2}f')
-        self._record_size = (self.element_header_struct.size + self.special_line_struct.size
-                             + self._pts_struct.size)
+        self._record_size = (
+            self.element_header_struct.size
+            + self.special_line_struct.size
+            + self._pts_struct.size
+        )
 
         if self._line_type in [24, 25]:
             if stroke not in range(25, 76):
@@ -1023,12 +1224,10 @@ class SpecialLine(LineBase):
             stroke=self._stroke,
             direction=self._direction,
             size=self._size,
-            width=self._width
+            width=self._width,
         )
 
-        pts = self._pts_struct.pack(
-            *self._lat, *self._lon
-        )
+        pts = self._pts_struct.pack(*self._lat, *self._lon)
 
         return header + info + pts
 
@@ -1037,15 +1236,44 @@ class SpecialText(TextBase):
     """Special text element."""
 
     special_text_struct = NamedStruct(
-        [('rotation', 'f'), ('text_size', 'f'), ('text_type', 'i'), ('turbulence_symbol', 'i'),
-         ('font', 'i'), ('text_flag', 'i'), ('width', 'i'), ('text_color', 'i'),
-         ('line_color', 'i'), ('fill_color', 'i'), ('align', 'i'), ('lat', 'f'), ('lon', 'f'),
-         ('offset_x', 'i'), ('offset_y', 'i')], '>', 'SpecialTextInfo'
+        [
+            ('rotation', 'f'),
+            ('text_size', 'f'),
+            ('text_type', 'i'),
+            ('turbulence_symbol', 'i'),
+            ('font', 'i'),
+            ('text_flag', 'i'),
+            ('width', 'i'),
+            ('text_color', 'i'),
+            ('line_color', 'i'),
+            ('fill_color', 'i'),
+            ('align', 'i'),
+            ('lat', 'f'),
+            ('lon', 'f'),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ],
+        '>',
+        'SpecialTextInfo',
     )
 
-    def __init__(self, lon, lat, text, text_color, size=12, text_type=0, font=22, align=0,
-                 edgecolor=None, facecolor=None, rotation=0, offset_x=0, offset_y=0,
-                 turbulence_symbol=0):
+    def __init__(
+        self,
+        lon,
+        lat,
+        text,
+        text_color,
+        size=12,
+        text_type=0,
+        font=22,
+        align=0,
+        edgecolor=None,
+        facecolor=None,
+        rotation=0,
+        offset_x=0,
+        offset_y=0,
+        turbulence_symbol=0,
+    ):
         """Create special text.
 
         Parameters
@@ -1133,16 +1361,29 @@ class SpecialText(TextBase):
         """
         self._width = 1
         self._text_flag = 2
-        super().__init__(lon, lat, text, text_color, size, font, self._width, align, rotation,
-                         offset_x, offset_y, self._text_flag)
+        super().__init__(
+            lon,
+            lat,
+            text,
+            text_color,
+            size,
+            font,
+            self._width,
+            align,
+            rotation,
+            offset_x,
+            offset_y,
+            self._text_flag,
+        )
         self._vg_class = 5
         self._vg_type = 21
         self.text_type = text_type
         self.edgecolor = text_color if edgecolor is None else edgecolor
         self.facecolor = text_color if facecolor is None else facecolor
         self.turbulence_symbol = turbulence_symbol
-        self._record_size = (self.element_header_struct.size + self.special_text_struct.size
-                             + len(self._text))
+        self._record_size = (
+            self.element_header_struct.size + self.special_text_struct.size + len(self._text)
+        )
 
     @property
     def text_type(self):
@@ -1219,7 +1460,7 @@ class SpecialText(TextBase):
             lat=self._lat,
             lon=self._lon,
             offset_x=self._offset_x,
-            offset_y=self._offset_y
+            offset_y=self._offset_y,
         )
 
         text = struct.pack(f'{len(self._text)}s', self._text.encode())
@@ -1227,14 +1468,213 @@ class SpecialText(TextBase):
         return header + info + text
 
 
+class SymbolBase(Element):
+    """Base symbol class."""
+
+    symbol_struct = NamedStruct(
+        [
+            ('number_symbols', 'i'),
+            ('width', 'i'),
+            ('symbol_size', 'f'),
+            ('symbol_type', 'i'),
+            ('symbol_code', 'f'),
+            ('lat', 'f'),
+            ('lon', 'f'),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ],
+        '>',
+        'SymbolInfo',
+    )
+
+    def __init__(self, lon, lat, symbol_code, color, width=1, size=1, offset_x=0, offset_y=0):
+        super().__init__()
+        self._number_symbols = 1
+        self._width = width
+        self._size = size
+        self._symbol_type = 0
+        self._symbol_code = symbol_code
+        self._lat = lat
+        self._lon = lon
+        self._offset_x = offset_x
+        self._offset_y = offset_y
+        self._min_lon = lon
+        self._min_lat = lat
+        self._max_lon = lon
+        self._max_lat = lat
+        self.major_color = color
+        self.minor_color = color
+
+    @property
+    def width(self):
+        """Get symbol width."""
+        return self._width
+
+    @width.setter
+    def width(self, value):
+        """Set symbol width."""
+        if value < 1 or value > 10:
+            raise ValueError('Symbol width must be in range [1, 10].')
+        self._width = value
+
+    @property
+    def size(self):
+        """Get symbol size."""
+        return self._size
+
+    @size.setter
+    def size(self, value):
+        """Set symbol size."""
+        if value < 0.1 or value > 10:
+            raise ValueError('Symbol size must be in range [0.1, 10].')
+        self._size = value
+
+    @property
+    def symbol_code(self):
+        """Get symbol code."""
+        return self._symbol_code
+
+    @symbol_code.setter
+    def symbol_code(self, code):
+        """Set symbol code."""
+        self._validate_symbol_code(code)
+        self._symbol_code = code
+
+    @property
+    def offset_x(self):
+        """Get symbol offset in x-direction."""
+        return self._offset_x
+
+    @offset_x.setter
+    def offset_x(self, value):
+        """Set symbol offset in x-direction."""
+        self._offset_x = value
+
+    @property
+    def offset_y(self):
+        """Get symbol offset in y-direction."""
+        return self._offset_y
+
+    @offset_y.setter
+    def offset_y(self, value):
+        """Set symbol offset in y-direction."""
+        self._offset_y = value
+
+    def _validate_symbol_code(self, code):
+        if not isinstance(code, int):
+            raise TypeError('Symbol code must be integer')
+
+    def encode(self):
+        """Encode symbol symbol."""
+        header = self._make_element_header()
+
+        info = self.symbol_struct.pack(
+            number_symbols=self._number_symbols,
+            width=self._width,
+            symbol_size=self._size,
+            symbol_type=self._symbol_type,
+            symbol_code=self._symbol_code,
+            lat=self._lat,
+            lon=self._lon,
+            offset_x=self._offset_x,
+            offset_y=self._offset_y,
+        )
+
+        return header + info
+
+
+class SpecialSymbol(SymbolBase):
+    """Special symbol element."""
+
+    def __init__(self, lon, lat, symbol_code, color, width=1, size=1, offset_x=0, offset_y=0):
+        """Create special symbol.
+
+        Parameters
+        ----------
+        lon : float
+
+        lat : float
+
+        symbol_code: int
+            GEMPAK special symbol code. See Appendix C of GEMPAK documentation for
+            additional details. Must be in the range [0, 41].
+
+        color : int
+            GEMPAK color code. Must be in the range [0, 32].
+
+        width : int
+            Width of special symbol. Must be in range [1, 10]. Defaults to 1.
+            Depending on the symbol, this will either apply to the symbol itself
+            or the the border of the symbol.
+
+        size : float
+            Special symbol size. Must be in range [0.1, 10]. Defaults to 1.
+
+        offset_x : int
+            Offset in x-direction. Default is 0.
+
+        offset_y : int
+            Offset in y-direction. Default is 0.
+        """
+        super().__init__(lon, lat, symbol_code, color, width, size, offset_x, offset_y)
+        self._vg_class = 4
+        self._vg_type = 15
+        self._record_size = self.element_header_struct.size + self.symbol_struct.size
+
+    def _validate_symbol_code(self, code):
+        super()._validate_symbol_code(code)
+        if code < 1 or code > 41:
+            raise ValueError('Symbol code must be in range [1, 41].')
+
+
+class Marker(SymbolBase):
+    """Marker element."""
+
+    def __init__(self, lon, lat, symbol_code, color, width=1, size=1, offset_x=0, offset_y=0):
+        """Create marker.
+
+        Parameters
+        ----------
+        lon : float
+
+        lat : float
+
+        symbol_code: int
+            GEMPAK marker code. See Appendix C or marker parameter of GEMPAK documentation
+            for additional details. Must be in the range [0, 24].
+
+        color : int
+            GEMPAK color code. Must be in the range [0, 32].
+
+        width : int
+            Width of marker. Must be in range [1, 10]. Defaults to 1.
+
+        size : float
+            Special symbol size. Must be in range [0.1, 10]. Defaults to 1.
+
+        offset_x : int
+            Offset in x-direction. Default is 0.
+
+        offset_y : int
+            Offset in y-direction. Default is 0.
+        """
+        super().__init__(lon, lat, symbol_code, color, width, size, offset_x, offset_y)
+        self._vg_class = 4
+        self._vg_type = 19
+        self._record_size = self.element_header_struct.size + self.symbol_struct.size
+
+    def _validate_symbol_code(self, code):
+        super()._validate_symbol_code(code)
+        if code < 1 or code > 24:
+            raise ValueError('Marker code must be in range [1, 24].')
+
+
 class VGFile:
     """GEMPAK Vector Graphics Format encoder class."""
 
     def __init__(self):
         self.elements = []
-        self.add_element(
-            FileHeader()
-        )
+        self.add_element(FileHeader())
 
     def add_element(self, element):
         """Add vector graphic element to VGF."""

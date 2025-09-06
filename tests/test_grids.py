@@ -1,8 +1,7 @@
-# Copyright (c) 2021 Nathan Wendt.
+# Copyright (c) 2025 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
-
 
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,7 +14,7 @@ from gempakio import GempakGrid
 
 @pytest.mark.parametrize('order', ['little', 'big'])
 def test_byte_swap(order):
-    """"Test byte swapping."""
+    """Test byte swapping."""
     g = Path(__file__).parent / 'data' / f'{order}_endian.grd'
 
     grid = GempakGrid(g).gdxarray()[0].squeeze()
@@ -51,13 +50,13 @@ def test_multi_level_multi_time_access():
         coordinate='HGHT',
         level=0,
         date_time2='202403050000',
-        level2=1
+        level2=1,
     )
 
 
-@pytest.mark.parametrize('keyword,date_time', [
-    ('FIRST', '201204141200'), ('LAST', '201204150000')
-])
+@pytest.mark.parametrize(
+    'keyword,date_time', [('FIRST', '201204141200'), ('LAST', '201204150000')]
+)
 def test_time_keywords(keyword, date_time):
     """Test time keywords FIRST and LAST."""
     g = Path(__file__).parent / 'data' / 'multi_date.grd'
