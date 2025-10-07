@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 import re
 import struct
+from math import ceil
 
 import numpy as np
 import pyproj
@@ -903,25 +904,35 @@ class GridFile(DataManagementFile):
             ibit = 1
             rgrid = grid.ravel()
 
-            for ii in range(kxky):
-                if rgrid[ii] == self._missing_float:
-                    idat = imax
-                else:
-                    gggg = rgrid[ii] - qmin if rgrid[ii] - qmin > 0 else 0
-                    idat = round(gggg * scale)
+            rgrid_round = np.where(rgrid != self._missing_float, 
+                                   np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'), 
+                                   imax)
 
-                jshft = 33 - nbits - ibit
-                idat2 = self._fortran_ishift(idat, jshft)
-                out[iword] |= idat2
+            if nbits == 16:
+                # nbits=16 is easily vectorizable. Others should be possible, too, just a little more difficult.
+                evens = rgrid_round[::2]
+                odds = rgrid_round[1::2]
 
-                if jshft < 0:
-                    jshft += 32
-                    out[iword + 1] = self._fortran_ishift(idat, jshft)
+                if len(odds) < len(evens):
+                    odds = np.append(odds, [0])
 
-                ibit += nbits
-                if ibit > 32:
-                    ibit -= 32
-                    iword += 1
+                out = (evens << 16) | odds
+            else:
+                for ii in range(kxky):
+                    idat = rgrid_round[ii]
+
+                    jshft = 33 - nbits - ibit
+                    idat2 = self._fortran_ishift(idat, jshft)
+                    out[iword] |= idat2
+
+                    if jshft < 0:
+                        jshft += 32
+                        out[iword + 1] = self._fortran_ishift(idat, jshft)
+
+                    ibit += nbits
+                    if ibit > 32:
+                        ibit -= 32
+                        iword += 1
 
             scale **= -1
 
