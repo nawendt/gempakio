@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 import re
 import struct
-# from math import ceil
+from math import ceil
 
 import numpy as np
 import pyproj
@@ -904,92 +904,43 @@ class GridFile(DataManagementFile):
             ibit = 1
             rgrid = grid.ravel()
 
-            # For the test_grid_write() test case, stuff other than this function takes ~1.4 ms, this function is ~21 ms
-            # Vectorizing rgrid_round takes this function to ~7 ms
-            # Optimization for nbits=16 takes this function to ~0.4 ms
-
             rgrid_round = np.where(rgrid != self._missing_float, 
                                    np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'), 
                                    imax)
 
-            # 
-            # Out vals: |---|---|---|---|---|---|---|
-            #  In vals: |  |  |  |  |  |  |  |  |  |
-            # B1 index:  0   1   2   4   5   6   8
-            # B2 index:  1   2   3   5   6   7
-            # B1 shift:  24  16  8  24  16   8
-            # B2 shift:  0  -8  -16  0  -8  -16  0
+            niis_per_word = ceil(32 / nbits) + 2  # This is an overestimate, just to make sure everything gets covered
+            nii = 0
+            jshfts = np.zeros((lendat, niis_per_word), dtype=np.int8)
+            iis = np.zeros((lendat, niis_per_word), dtype=np.int64) - 1
 
-            # 12 24 36 48 60
-            # 12 24 16 8 20
-            # byte1_index = ((np.arange(lendat) * 32) // nbits).astype('int32')
-            # byte2_index = byte1_index + 1
+            for ii in range(kxky):
+                split_word = False
+
+                jshft = 33 - nbits - ibit
+                iis[iword, nii] = ii
+                jshfts[iword, nii] = jshft
+
+                if jshft < 0:
+                    jshft += 32
+                    iis[iword + 1, 0] = ii
+                    jshfts[iword + 1, 0] = jshft
+                    split_word = True
+                    nii = 1
+
+                ibit += nbits
+                if ibit > 32:
+                    ibit -= 32
+                    iword += 1
+                    if not split_word:
+                        nii = 0
+                else:
+                    nii += 1
+
+            rgrid_shifted = np.where(iis >= 0,
+                                     np.where(jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)),
+                                     0)
             
-            # keep_byte2 = byte2_index < len(rgrid_round)
-
-            # byte2_index = byte2_index[keep_byte2]
-
-            # mod = 32 - nbits
-            # gcd = np.gcd(nbits, 32)
-            
-            # byte1_shift = (((np.arange(lendat) + 1) * mod - gcd - 1) % nbits + 1 + gcd).astype('int32')
-            # byte2_shift = (byte1_shift - nbits).astype('int32')
-            # byte2_shift = byte2_shift[keep_byte2]
-
-            # rgrid_byte1 = rgrid_round[byte1_index]
-            # rgrid_byte2 = rgrid_round[byte2_index]
-
-            # byte1 = np.where(byte1_shift > 0, 
-            #                  rgrid_byte1 << byte1_shift,
-            #                  rgrid_byte1 >> np.abs(byte1_shift))
-            
-            # byte2 = np.where(byte2_shift > 0, 
-            #                  rgrid_byte2 << byte2_shift,
-            #                  rgrid_byte2 >> np.abs(byte2_shift))
-
-            # byte2 = np.pad(byte2, (0, len(byte1_index) - len(byte2_index)))
-
-            # iword_check = 1
-
-            # out = byte1 | byte2
-
-            # print(byte1_shift)
-            # print(rgrid_round[byte1_index[iword_check]], byte1_index[iword_check], byte1[iword_check], byte1_shift[iword_check])
-            # print(rgrid_round[byte2_index[iword_check]], byte2_index[iword_check], byte2[iword_check], byte2_shift[iword_check])
-
-            # print(out)
-
-            if nbits == 16:
-                # nbits=16 is easily vectorizable. Others should be possible, too, just a little more difficult.
-                evens = rgrid_round[::2]
-                odds = rgrid_round[1::2]
-
-                if len(odds) < len(evens):
-                    odds = np.append(odds, [0])
-
-                out = (evens << 16) | odds
-            else:
-                for ii in range(kxky):
-                    idat = rgrid_round[ii]
-
-                    jshft = 33 - nbits - ibit
-                    idat2 = self._fortran_ishift(idat, jshft)
-                    out[iword] |= idat2
-                    # if iword == iword_check:
-                    #     print(idat, ii, idat2, jshft)
-
-                    if jshft < 0:
-                        jshft += 32
-                        out[iword + 1] = self._fortran_ishift(idat, jshft)
-                        # if iword + 1 == iword_check:
-                        #     print(idat, ii, out[iword + 1], jshft)
-
-                    ibit += nbits
-                    if ibit > 32:
-                        ibit -= 32
-                        iword += 1
-
-            # print(out)
+            out = rgrid_shifted.sum(axis=1)
 
             scale **= -1
 
