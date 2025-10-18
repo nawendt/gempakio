@@ -299,20 +299,6 @@ class DataManagementFile:
         except KeyError as err:
             raise KeyError(f'`{coord}` has no numeric value.') from err
 
-    @staticmethod
-    def _fortran_ishift(i, shift):
-        """Python-friendly bit shifting."""
-        mask = 0xFFFFFFFF
-        if shift > 0:
-            shifted = ctypes.c_int32(i << shift).value
-        elif shift < 0:
-            shifted = (i & mask) >> abs(shift) if i < 0 else i >> abs(shift)
-        elif shift == 0:
-            shifted = i
-        else:
-            raise ValueError(f'Bad shift value {shift}.')
-        return shifted
-
     def _init_headers(self):
         self.make_column_header = namedtuple('ColumnHeader', self.column_names)
         self.make_row_header = namedtuple('RowHeader', self.row_names)
