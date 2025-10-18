@@ -37,6 +37,99 @@ from gempakio.common import (
 from gempakio.tools import NamedStruct, OrderedSet
 
 
+def pack_grib(grid, missing_float, nbits=16):
+    """Pack a grid of floats into integers."""
+    kxky = np.multiply(*grid.shape)
+
+    if nbits < 1 or nbits > 31:
+        raise ValueError('Precision requested is invalid.')
+
+    lendat = (nbits * kxky) // 32
+    if lendat * 32 != nbits * kxky:
+        lendat += 1
+
+    out = np.zeros(lendat, dtype=np.int32)
+
+    has_missing = bool((grid == missing_float).any())
+
+    all_missing = bool((grid == missing_float).all())
+
+    if all_missing:
+        qmin = missing_float
+        qmax = missing_float
+    else:
+        qmin = grid.min()
+        qmax = grid.max()
+
+    qdiff = qmax - qmin
+    idat = round(qdiff)
+    if qdiff < 0 or idat > 2147483647:  # Max 32-bit integer
+        raise ValueError('Problem packing grid.')
+
+    if qdiff == 0 and not has_missing:
+        # This is a constant grid
+        scale = 1
+    else:
+        imax = 2**nbits - 1
+        nnnn = 0
+        if abs(qdiff) > (2**-126 * imax):  # Smallest number for 32-bit float
+            if idat >= imax:
+                while idat >= imax:
+                    nnnn -= 1
+                    idat = qdiff * 2**nnnn
+            else:
+                while round(qdiff * 2 ** (nnnn + 1)) < imax:
+                    nnnn += 1
+
+        scale = 2**nnnn
+
+        iword = 0
+        ibit = 1
+        rgrid = grid.ravel()
+
+        rgrid_round = np.where(rgrid != missing_float, 
+                                np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'), 
+                                imax)
+
+        niis_per_word = ceil(32 / nbits) + 2  # This is an overestimate, just to make sure everything gets covered
+        nii = 0
+        jshfts = np.zeros((lendat, niis_per_word), dtype=np.int8)
+        iis = np.zeros((lendat, niis_per_word), dtype=np.int64) - 1
+
+        for ii in range(kxky):
+            split_word = False
+
+            jshft = 33 - nbits - ibit
+            iis[iword, nii] = ii
+            jshfts[iword, nii] = jshft
+
+            if jshft < 0:
+                jshft += 32
+                iis[iword + 1, 0] = ii
+                jshfts[iword + 1, 0] = jshft
+                split_word = True
+                nii = 1
+
+            ibit += nbits
+            if ibit > 32:
+                ibit -= 32
+                iword += 1
+                if not split_word:
+                    nii = 0
+            else:
+                nii += 1
+
+        rgrid_shifted = np.where(iis >= 0,
+                                    np.where(jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)),
+                                    0)
+        
+        out = rgrid_shifted.sum(axis=1)
+
+        scale **= -1
+
+    return qmin, scale, out
+
+
 class GempakStream(BytesIO):
     """In-memory bytes stream for GEMPAK data."""
 
@@ -856,95 +949,7 @@ class GridFile(DataManagementFile):
 
     def _pack_grib(self, grid, nbits=16):
         """Pack a grid of floats into integers."""
-        kxky = np.multiply(*grid.shape)
-
-        if nbits < 1 or nbits > 31:
-            raise ValueError('Precision requested is invalid.')
-
-        lendat = (nbits * kxky) // 32
-        if lendat * 32 != nbits * kxky:
-            lendat += 1
-
-        out = np.zeros(lendat, dtype=np.int32)
-
-        has_missing = bool((grid == self._missing_float).any())
-
-        all_missing = bool((grid == self._missing_float).all())
-
-        if all_missing:
-            qmin = self._missing_float
-            qmax = self._missing_float
-        else:
-            qmin = grid.min()
-            qmax = grid.max()
-
-        qdiff = qmax - qmin
-        idat = round(qdiff)
-        if qdiff < 0 or idat > 2147483647:  # Max 32-bit integer
-            raise ValueError('Problem packing grid.')
-
-        if qdiff == 0 and not has_missing:
-            # This is a constant grid
-            scale = 1
-        else:
-            imax = 2**nbits - 1
-            nnnn = 0
-            if abs(qdiff) > (2**-126 * imax):  # Smallest number for 32-bit float
-                if idat >= imax:
-                    while idat >= imax:
-                        nnnn -= 1
-                        idat = qdiff * 2**nnnn
-                else:
-                    while round(qdiff * 2 ** (nnnn + 1)) < imax:
-                        nnnn += 1
-
-            scale = 2**nnnn
-
-            iword = 0
-            ibit = 1
-            rgrid = grid.ravel()
-
-            rgrid_round = np.where(rgrid != self._missing_float, 
-                                   np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'), 
-                                   imax)
-
-            niis_per_word = ceil(32 / nbits) + 2  # This is an overestimate, just to make sure everything gets covered
-            nii = 0
-            jshfts = np.zeros((lendat, niis_per_word), dtype=np.int8)
-            iis = np.zeros((lendat, niis_per_word), dtype=np.int64) - 1
-
-            for ii in range(kxky):
-                split_word = False
-
-                jshft = 33 - nbits - ibit
-                iis[iword, nii] = ii
-                jshfts[iword, nii] = jshft
-
-                if jshft < 0:
-                    jshft += 32
-                    iis[iword + 1, 0] = ii
-                    jshfts[iword + 1, 0] = jshft
-                    split_word = True
-                    nii = 1
-
-                ibit += nbits
-                if ibit > 32:
-                    ibit -= 32
-                    iword += 1
-                    if not split_word:
-                        nii = 0
-                else:
-                    nii += 1
-
-            rgrid_shifted = np.where(iis >= 0,
-                                     np.where(jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)),
-                                     0)
-            
-            out = rgrid_shifted.sum(axis=1)
-
-            scale **= -1
-
-        return qmin, scale, out
+        return pack_grib(grid, self._missing_float, nbits=nbits)
 
     def _write_row_headers(self, stream):
         """Write row headers to a GridFile stream."""
