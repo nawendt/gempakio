@@ -83,45 +83,50 @@ def pack_grib(grid, missing_float, nbits=16):
 
         scale = 2**nnnn
 
-        iword = 0
-        ibit = 1
         rgrid = grid.ravel()
-
         rgrid_round = np.where(rgrid != missing_float, 
                                 np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'), 
                                 imax)
 
-        niis_per_word = ceil(32 / nbits) + 2  # This is an overestimate, just to make sure everything gets covered
-        nii = 0
-        jshfts = np.zeros((lendat, niis_per_word), dtype=np.int8)
-        iis = np.zeros((lendat, niis_per_word), dtype=np.int64) - 1
+        # Compute the amount of shifting for each input word and which input words contain the start of an output word
+        word_shifts = ((33 - ((np.arange(kxky) + 1) * nbits)) % 32 - 1) % 32
+        word_starts = (word_shifts >= (32 - nbits))
+        word_start_idxs = np.where(word_starts)[0]
 
-        for ii in range(kxky):
-            split_word = False
+        # The maximum number of input words covered by each output word (maybe tack on one for the other part of any
+        #   split words)
+        any_split_words = (32 / nbits) != (32 // nbits)
+        n_input_words = np.diff(word_start_idxs).max() + (1 if any_split_words else 0)
 
-            jshft = 33 - nbits - ibit
-            iis[iword, nii] = ii
-            jshfts[iword, nii] = jshft
+        # Now construct 2d arrays of shifts and input indexes, where each array is the output length by number of input
+        #   words per output word
+        jshfts = np.zeros((lendat, n_input_words), dtype=np.int8)
+        iis = np.zeros((lendat, n_input_words), dtype=np.int64)
 
-            if jshft < 0:
-                jshft += 32
-                iis[iword + 1, 0] = ii
-                jshfts[iword + 1, 0] = jshft
-                split_word = True
-                nii = 1
+        # Fill the first word with the relevant values from the word starts
+        jshfts[:, 0] = word_shifts[word_starts]
+        iis[:, 0] = word_start_idxs
 
-            ibit += nbits
-            if ibit > 32:
-                ibit -= 32
-                iword += 1
-                if not split_word:
-                    nii = 0
-            else:
-                nii += 1
+        # For each column, the max index is the start index for the next column. (Except for the last column, which has
+        #   the input data length as the max index)
+        iis_2d_max = np.roll(word_start_idxs, -1)
+        iis_2d_max[-1] = kxky - 1
 
+        for niw in range(1, n_input_words):
+            # Fill the next input word (indexes get incremented by one and shifts subtract nbits)
+            iis[:, niw] = iis[:, niw - 1] + 1
+            jshfts[:, niw] = jshfts[:, niw - 1] - nbits
+
+            # Check for unneeded words (indexes exceed the max for this word)
+            unneeded_words = (iis[:, niw] > iis_2d_max) | (iis[:, niw - 1] == -1)
+
+            iis[unneeded_words, niw] = -1
+            jshfts[unneeded_words, niw] = 0
+
+        # Shift and sum all the input words to get the correct output word
         rgrid_shifted = np.where(iis >= 0,
-                                    np.where(jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)),
-                                    0)
+                                 np.where(jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)),
+                                 0)
         
         out = rgrid_shifted.sum(axis=1)
 
@@ -1044,11 +1049,7 @@ class GridFile(DataManagementFile):
                 stream.write_int(self.next_free_word)
                 stream.jump_to(self.next_free_word)
                 if self.packing_type == PackingType.grib:
-                    from datetime import datetime
-                    start = datetime.now()
                     ref, scale, packed_grid = self._pack_grib(self.data[col], self.precision)
-                    end = datetime.now()
-                    print(end - start)
                     lendat = len(packed_grid)
                     stream.write_int(lendat + self._parts_dict['GRID']['header'] + 6)
                     stream.write_int(self.nx)
