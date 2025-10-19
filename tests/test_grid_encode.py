@@ -11,6 +11,7 @@ import pyproj
 import pytest
 
 from gempakio import GempakGrid, GridFile
+from gempakio.encode.gempak import pack_grib
 
 
 def test_grid_type_mismatch():
@@ -66,6 +67,24 @@ def test_grid_write():
         np.testing.assert_allclose(test_lon, lon, rtol=1e-6, atol=0)
     finally:
         gem.unlink()
+
+
+def test_grid_pack():
+    """Test packing grid with various values of nbits"""
+    src_grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
+    packed_grid = Path(__file__).parent / 'data' / 'surface_temp_pack.npz'
+
+    with np.load(src_grid) as dat:
+        tmpc = dat['tmpc']
+
+    with np.load(packed_grid) as dat:
+        tmpc_packed = dat
+
+        for nbits in range(4, 32):
+            tmpc_packed_reference = tmpc_packed[f'nbits={nbits}']
+            qmin, scale, tmpc_packed_test = pack_grib(tmpc, -9999.0, nbits=nbits)
+
+            np.testing.assert_equal(tmpc_packed_test, tmpc_packed_reference)
 
 
 def test_grid_write_incorrect_datetime_format():
