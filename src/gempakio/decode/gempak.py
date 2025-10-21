@@ -150,26 +150,36 @@ def unpack_grib(packed_buffer, nbits, kxky, reference, scale, missing_value=None
     imax = 2**nbits - 1
 
     word_shift = -(((33 - ((np.arange(kxky) + 1) * nbits)) % 32 - 1) % 32)
+    
+    # Figure out which output words are split
     split_words = (word_shift < (nbits - 32))
 
+    # Figure out which output words start on an input word boundary (the previous word shift is 0)
+    even_words = np.roll(word_shift, 1) == 0
+    even_words[0] = False
+
+    # If any output words are split across input words, then we need to keep track of 2 input words per output word.
+    #   Otherwise, only keep track of 1.
     n_input_words = 2 if split_words.any() else 1
 
     iis = np.zeros((kxky, n_input_words), dtype=np.int64)
     jshft = np.zeros((kxky, n_input_words), dtype=np.int8)
 
-    even_words = np.roll(word_shift, 1) == 0
-    even_words[0] = False
-
+    # Indexes increment where output words are split or if the output word starts on an input word boundary.
     iis[:, 0] = np.cumsum(split_words | even_words)
     jshft[:, 0] = word_shift
 
     if n_input_words > 1:
+        # If we have to keep track of multiple input words, the index should be the previous word and the shift should
+        #   reference the other part of the output word
         iis[:, 1] = iis[:, 0] - 1
         jshft[:, 1] = jshft[:, 0] + 32
         
+        # Mask out where the input words aren't actually split
         iis[~split_words, 1] = -1
         jshft[~split_words, 1] = 0
 
+    # Get the output words (being careful about negative values)
     buffer_indexed = packed_buffer[iis].astype(np.int32)
     unpacked_buffer_words = np.where(iis >= 0,
                                      np.where(jshft > 0, 
@@ -178,12 +188,13 @@ def unpack_grib(packed_buffer, nbits, kxky, reference, scale, missing_value=None
                                      0)
     
     unpacked_buffer_words &= imax
+    unpacked_buffer = unpacked_buffer_words.sum(axis=1)
 
     missing_flag = missing_value is not None
     if missing_value is None:
         missing_value = 0
 
-    unpacked_buffer = unpacked_buffer_words.sum(axis=1)
+    # And reconstruct the original grid
     grid = np.where((unpacked_buffer == imax) & missing_flag,
                     missing_value,
                     reference + unpacked_buffer * scale)
