@@ -170,8 +170,11 @@ def unpack_grib(packed_buffer, nbits, kxky, reference, scale, missing_value=None
         iis[~split_words, 1] = -1
         jshft[~split_words, 1] = 0
 
+    buffer_indexed = packed_buffer[iis].astype(np.int32)
     unpacked_buffer_words = np.where(iis >= 0,
-                                     np.where(jshft > 0, packed_buffer[iis] << jshft, (0xffffffff & packed_buffer[iis]) >> np.abs(jshft)),
+                                     np.where(jshft > 0, 
+                                              buffer_indexed << jshft, 
+                                              buffer_indexed.view(np.uint32) >> np.abs(jshft)),
                                      0)
     
     unpacked_buffer_words &= imax
@@ -895,11 +898,7 @@ class GempakGrid(GempakFile):
 
             grid = np.zeros(self.grid_meta_int.kxky, dtype=np.float32)
 
-            # Old timing: 8.9 ms / 7.3 ms
-            # New timing 2.9 ms / 1.2 ms
-
-            # Surely there's a way to do this properly with int32s, not int64s?
-            packed_buffer = np.array(self._buffer.read_struct(struct.Struct(packed_buffer_fmt)), dtype=np.int64)
+            packed_buffer = np.array(self._buffer.read_struct(struct.Struct(packed_buffer_fmt)), dtype=np.int32)
             if lendat > 1:                
                 missing_value = self.dm_label.missing_float if self.grid_meta_int.missing_flag else None
 
