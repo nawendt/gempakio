@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from gempakio import GempakGrid
+from gempakio.decode.gempak import unpack_grib
 
 
 @pytest.mark.parametrize('order', ['little', 'big'])
@@ -36,6 +37,22 @@ def test_grid_loading(grid_name):
     gempak = np.load(d)['values']
 
     np.testing.assert_allclose(gio, gempak, rtol=1e-6, atol=0)
+
+
+@pytest.mark.parametrize('nbits', list(range(4, 32)))
+def test_grid_unpack(nbits):
+    """Test packing grid with various values of nbits"""
+    src_grid = Path(__file__).parent / 'data' / 'surface_temp_pack.npz'
+    unpacked_grid = Path(__file__).parent / 'data' / 'surface_temp_unpack.npz'
+
+    with np.load(src_grid) as dat_packed:
+        tmpc_packed = dat_packed[f'nbits={nbits}']
+
+        with np.load(unpacked_grid) as dat_unpacked:
+            tmpc_unpacked_reference = dat_unpacked[f'nbits={nbits}']
+            tmpc_unpacked_test = unpack_grib(tmpc_packed.astype(np.int64), nbits, 17063, -22.233104705810547, 2**(6 - nbits), missing_value=-9999.0)
+
+            np.testing.assert_equal(tmpc_unpacked_test, tmpc_unpacked_reference)
 
 
 def test_multi_level_multi_time_access():

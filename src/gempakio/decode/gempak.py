@@ -146,6 +146,48 @@ def _data_source(source):
         return DataSource(source)
 
 
+def unpack_grib(packed_buffer, nbits, kxky, reference, scale, missing_value=None):
+    imax = 2**nbits - 1
+
+    word_shift = -(((33 - ((np.arange(kxky) + 1) * nbits)) % 32 - 1) % 32)
+    split_words = (word_shift < (nbits - 32))
+
+    n_input_words = 2 if split_words.any() else 1
+
+    iis = np.zeros((kxky, n_input_words), dtype=np.int64)
+    jshft = np.zeros((kxky, n_input_words), dtype=np.int8)
+
+    even_words = np.roll(word_shift, 1) == 0
+    even_words[0] = False
+
+    iis[:, 0] = np.cumsum(split_words | even_words)
+    jshft[:, 0] = word_shift
+
+    if n_input_words > 1:
+        iis[:, 1] = iis[:, 0] - 1
+        jshft[:, 1] = jshft[:, 0] + 32
+        
+        iis[~split_words, 1] = -1
+        jshft[~split_words, 1] = 0
+
+    unpacked_buffer_words = np.where(iis >= 0,
+                                     np.where(jshft > 0, packed_buffer[iis] << jshft, (0xffffffff & packed_buffer[iis]) >> np.abs(jshft)),
+                                     0)
+    
+    unpacked_buffer_words &= imax
+
+    missing_flag = missing_value is not None
+    if missing_value is None:
+        missing_value = 0
+
+    unpacked_buffer = unpacked_buffer_words.sum(axis=1)
+    grid = np.where((unpacked_buffer == imax) & missing_flag,
+                    missing_value,
+                    reference + unpacked_buffer * scale)
+    
+    return grid
+
+
 class GempakFile:
     """Base class for GEMPAK files.
 
@@ -852,32 +894,17 @@ class GempakGrid(GempakFile):
             packed_buffer_fmt = f'{self.prefmt}{lendat}i'
 
             grid = np.zeros(self.grid_meta_int.kxky, dtype=np.float32)
-            packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-            if lendat > 1:
-                imax = 2**self.grid_meta_int.bits - 1
-                ibit = 1
-                iword = 0
-                for cell in range(self.grid_meta_int.kxky):
-                    jshft = self.grid_meta_int.bits + ibit - 33
-                    idat = self._fortran_ishift(packed_buffer[iword], jshft)
-                    idat &= imax
 
-                    if jshft > 0:
-                        jshft -= 32
-                        idat2 = self._fortran_ishift(packed_buffer[iword + 1], jshft)
-                        idat |= idat2
+            # Old timing: 8.9 ms / 7.3 ms
+            # New timing 2.9 ms / 1.2 ms
 
-                    if (idat == imax) and self.grid_meta_int.missing_flag:
-                        grid[cell] = self.dm_label.missing_float
-                    else:
-                        grid[cell] = self.grid_meta_real.reference + (
-                            idat * self.grid_meta_real.scale
-                        )
+            # Surely there's a way to do this properly with int32s, not int64s?
+            packed_buffer = np.array(self._buffer.read_struct(struct.Struct(packed_buffer_fmt)), dtype=np.int64)
+            if lendat > 1:                
+                missing_value = self.dm_label.missing_float if self.grid_meta_int.missing_flag else None
 
-                    ibit += self.grid_meta_int.bits
-                    if ibit > 32:
-                        ibit -= 32
-                        iword += 1
+                grid = unpack_grib(packed_buffer, self.grid_meta_int.bits,self.grid_meta_int.kxky,
+                                   self.grid_meta_real.reference, self.grid_meta_real.scale, missing_value=missing_value)
             else:
                 grid = None
 

@@ -103,12 +103,12 @@ def pack_grib(grid, missing_float, nbits=16):
         jshfts = np.zeros((lendat, n_input_words), dtype=np.int8)
         iis = np.zeros((lendat, n_input_words), dtype=np.int64)
 
-        # Fill the first word with the relevant values from the word starts
+        # Fill the first input word with the relevant values from the word starts
         jshfts[:, 0] = word_shifts[word_starts]
         iis[:, 0] = word_start_idxs
 
-        # For each column, the max index is the start index for the next column. (Except for the last column, which has
-        #   the input data length as the max index)
+        # For each output word, the max index is the start index for the next output word. (Except for the last output
+        #   word, which has the input data length as the max index)
         iis_2d_max = np.roll(word_start_idxs, -1)
         iis_2d_max[-1] = kxky - 1
 
