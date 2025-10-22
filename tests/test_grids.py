@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from gempakio import GempakGrid
-from gempakio.decode.gempak import unpack_grib
+from gempakio.decode.gempak import _unpack_grib
 
 
 @pytest.mark.parametrize('order', ['little', 'big'])
@@ -50,7 +50,7 @@ def test_grid_unpack(nbits):
 
         with np.load(unpacked_grid) as dat_unpacked:
             tmpc_unpacked_reference = dat_unpacked[f'nbits={nbits}']
-            tmpc_unpacked_test = unpack_grib(
+            tmpc_unpacked_test = _unpack_grib(
                 tmpc_packed.astype(np.int64),
                 nbits,
                 17063,
