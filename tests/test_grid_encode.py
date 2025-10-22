@@ -71,7 +71,7 @@ def test_grid_write():
 
 @pytest.mark.parametrize('nbits', list(range(4, 32)))
 def test_grid_pack(nbits):
-    """Test packing grid with various values of nbits"""
+    """Test packing grid with various values of nbits."""
     src_grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
     packed_grid = Path(__file__).parent / 'data' / 'surface_temp_pack.npz'
 

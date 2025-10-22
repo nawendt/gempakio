@@ -4,12 +4,10 @@
 """Classes for encoding various GEMPAK file formats."""
 
 from collections import namedtuple
-import ctypes
 from datetime import datetime, timedelta
 from io import BytesIO
 import re
 import struct
-from math import ceil
 
 import numpy as np
 import pyproj
@@ -84,22 +82,25 @@ def pack_grib(grid, missing_float, nbits=16):
         scale = 2**nnnn
 
         rgrid = grid.ravel()
-        rgrid_round = np.where(rgrid != missing_float, 
-                                np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'), 
-                                imax)
+        rgrid_round = np.where(
+            rgrid != missing_float,
+            np.round(np.maximum(rgrid - qmin, 0) * scale).astype('int32'),
+            imax,
+        )
 
-        # Compute the amount of shifting for each input word and which input words contain the start of an output word
+        # Compute the amount of shifting for each input word and which input words contain the
+        # start of an output word
         word_shifts = ((33 - ((np.arange(kxky) + 1) * nbits)) % 32 - 1) % 32
-        word_starts = (word_shifts >= (32 - nbits))
+        word_starts = word_shifts >= (32 - nbits)
         word_start_idxs = np.where(word_starts)[0]
 
-        # The maximum number of input words covered by each output word (maybe tack on one for the other part of any
-        #   split words)
+        # The maximum number of input words covered by each output word (maybe tack on one for
+        # the other part of any split words)
         any_split_words = (32 / nbits) != (32 // nbits)
         n_input_words = np.diff(word_start_idxs).max() + (1 if any_split_words else 0)
 
-        # Now construct 2d arrays of shifts and input indexes, where each array is the output length by number of input
-        #   words per output word
+        # Now construct 2d arrays of shifts and input indexes, where each array is the output
+        # length by number of input words per output word
         jshfts = np.zeros((lendat, n_input_words), dtype=np.int8)
         iis = np.zeros((lendat, n_input_words), dtype=np.int64)
 
@@ -107,13 +108,14 @@ def pack_grib(grid, missing_float, nbits=16):
         jshfts[:, 0] = word_shifts[word_starts]
         iis[:, 0] = word_start_idxs
 
-        # For each output word, the max index is the start index for the next output word. (Except for the last output
-        #   word, which has the input data length as the max index)
+        # For each output word, the max index is the start index for the next output word.
+        # (Except for the last output word, which has the input data length as the max index)
         iis_2d_max = np.roll(word_start_idxs, -1)
         iis_2d_max[-1] = kxky - 1
 
         for niw in range(1, n_input_words):
-            # Fill the next input word (indexes get incremented by one and shifts subtract nbits)
+            # Fill the next input word (indexes get incremented by one and shifts
+            # subtract nbits)
             iis[:, niw] = iis[:, niw - 1] + 1
             jshfts[:, niw] = jshfts[:, niw - 1] - nbits
 
@@ -124,10 +126,14 @@ def pack_grib(grid, missing_float, nbits=16):
             jshfts[unneeded_words, niw] = 0
 
         # Shift and sum all the input words to get the correct output word
-        rgrid_shifted = np.where(iis >= 0,
-                                 np.where(jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)),
-                                 0)
-        
+        rgrid_shifted = np.where(
+            iis >= 0,
+            np.where(
+                jshfts > 0, rgrid_round[iis] << jshfts, rgrid_round[iis] >> np.abs(jshfts)
+            ),
+            0,
+        )
+
         out = rgrid_shifted.sum(axis=1)
 
         scale **= -1
