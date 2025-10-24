@@ -11,6 +11,7 @@ import pyproj
 import pytest
 
 from gempakio import GempakGrid, GridFile
+from gempakio.encode.gempak import pack_grib
 
 
 def test_grid_type_mismatch():
@@ -50,8 +51,8 @@ def test_grid_write():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -66,6 +67,24 @@ def test_grid_write():
         np.testing.assert_allclose(test_lon, lon, rtol=1e-6, atol=0)
     finally:
         gem.unlink()
+
+
+@pytest.mark.parametrize('nbits', list(range(4, 32)))
+def test_grid_pack(nbits):
+    """Test packing grid with various values of nbits."""
+    src_grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
+    packed_grid = Path(__file__).parent / 'data' / 'surface_temp_pack.npz'
+
+    with np.load(src_grid) as dat:
+        tmpc = dat['tmpc']
+
+    with np.load(packed_grid) as dat:
+        tmpc_packed = dat
+
+        tmpc_packed_reference = tmpc_packed[f'nbits={nbits}']
+        qmin, scale, tmpc_packed_test = pack_grib(tmpc, -9999.0, nbits=nbits)
+
+        np.testing.assert_equal(tmpc_packed_test, tmpc_packed_reference)
 
 
 def test_grid_write_incorrect_datetime_format():
@@ -106,8 +125,8 @@ def test_grid_write_incomplete_datetime():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -143,8 +162,8 @@ def test_grid_write_incomplete_datetime_forecast():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -180,8 +199,8 @@ def test_grid_write_minutes():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -238,8 +257,8 @@ def test_grid_write_multiple_times_levels():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -282,8 +301,8 @@ def test_grid_write_multiple_times_minutes():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -324,8 +343,8 @@ def test_grid_write_analysis():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -361,8 +380,8 @@ def test_grid_write_valid():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -398,8 +417,8 @@ def test_grid_write_forecast():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -435,8 +454,8 @@ def test_grid_write_guess():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -472,8 +491,8 @@ def test_grid_write_initial():
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpc = in_grid.gdxarray(
@@ -511,8 +530,8 @@ def test_grid_write_projected_using_xy(proj_type):
     kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
     try:
         with tempfile.NamedTemporaryFile(**kwargs) as tmp:
-            out_grid.to_gempak(tmp.name)
             gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
 
         in_grid = GempakGrid(gem)
         test_tmpk = in_grid.gdxarray(
