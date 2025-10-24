@@ -5172,8 +5172,8 @@ class VectorGraphicFile:
             delete < 0
             or delete > 1
             or vg_type < 0
-            or vg_type not in VGType
-            or vg_class not in VGClass
+            or vg_type not in VGType.__members__.values()
+            or vg_class not in VGClass.__members__.values()
             or major_color < 0
             or major_color > 32
             or minor_color < 0
