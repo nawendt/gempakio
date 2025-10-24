@@ -1270,6 +1270,7 @@ def test_watch():
             ],
             dtype='i4',
         ),
+        'county_status': np.array([], dtype='>i4'),
         'county_lat': np.array(
             [
                 37.24,
