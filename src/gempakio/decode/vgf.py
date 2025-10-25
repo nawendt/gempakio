@@ -4865,12 +4865,12 @@ class VectorGraphicFile:
                 county_status = np.array([], dtype=f'{self.prefmt}i4')
 
                 county_fips = self._buffer.read_array(watch.number_counties, f'{self.prefmt}i')
-                county_fips_blank_size = 4 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                county_fips_blank_size = 4 * (MAX_COUNTIES - watch.number_counties)
                 self._buffer.skip(county_fips_blank_size)
 
                 county_lat = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
                 county_lon = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
-                county_loc_blank_size = 8 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                county_loc_blank_size = 8 * (MAX_COUNTIES - watch.number_counties)
                 self._buffer.skip(county_loc_blank_size)
 
                 lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
