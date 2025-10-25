@@ -18,11 +18,14 @@ from gempakio.common import (
     LIST_MEMBER_SIZE,
     MAX_ASH,
     MAX_COUNTIES,
+    MAX_COUNTIES_LEGACY,
     MAX_JET_POINTS,
     MAX_POINTS,
     MAX_SGWX_POINTS,
     MAX_SIGMET,
     MAX_TRACKS,
+    MISSING_FLOAT,
+    MISSING_INT,
     TRACK_DT_SIZE,
     VGF_HEADER_SIZE,
 )
@@ -2588,6 +2591,7 @@ class WatchBoxElement(VectorGraphicElement):
         number_counties,
         plot_counties,
         county_fips,
+        county_status,
         county_lat,
         county_lon,
         lat,
@@ -2724,6 +2728,9 @@ class WatchBoxElement(VectorGraphicElement):
         county_fips : `numpy.ndarray`
             County FIPS codes.
 
+        county_status : `numpy.ndarray`
+            County status flag. Only used for older watch element versions.
+
         county_lat : `numpy.ndarray`
             Latitude of county centroid.
 
@@ -2780,6 +2787,7 @@ class WatchBoxElement(VectorGraphicElement):
         self.number_counties = number_counties
         self.plot_counties = plot_counties
         self.county_fips = county_fips
+        self.county_status = county_status
         self.county_lat = county_lat
         self.county_lon = county_lon
         self.lat = lat
@@ -3249,1245 +3257,1629 @@ class VectorGraphicFile:
 
         return json.dumps(serialized, cls=kwargs.get('cls', NumpyEncoder), **kwargs)
 
-    def _decode_elements(self):
-        """Decode elements of a VGF."""
-        while not self._buffer.at_end():
-            header_struct = self._read_header()
-            rec_size = header_struct.record_size
-            vg_type = header_struct.vg_type
-            vg_class = header_struct.vg_class
-            data_size = rec_size - VGF_HEADER_SIZE
+    def _decode_file_header(self, header_struct):
+        """Decode file header."""
+        version_size = 128
+        data_size = header_struct.record_size - VGF_HEADER_SIZE
+        version = self._decode_strip_null(self._buffer.read(version_size))
+        notes_size = data_size - version_size
+        notes = self._decode_strip_null(self._buffer.read(notes_size))
+        self._header = FileHeaderElement(header_struct, version, notes)
 
-            group_info = header_struct.group_type
+    def _decode_fronts(self, header_struct):
+        """Decode front elements."""
+        front_info = [
+            ('number_points', 'i'),
+            ('front_code', 'i'),
+            ('pip_size', 'i'),
+            ('pip_stroke', 'i'),
+            ('pip_direction', 'i'),
+            ('width', 'i'),
+            ('label', '4s', self._decode_strip_null),
+        ]
+        front = self._buffer.read_struct(NamedStruct(front_info, self.prefmt, 'FrontInfo'))
 
-            # Ignores the file header group
-            if group_info not in self._groups and group_info and vg_class != VGClass.header:
-                self._groups.append(group_info)
+        lat, lon = self._get_latlon(front.number_points)
 
-            if vg_class == VGClass.header and vg_type == VGType.file_header:
-                version_size = 128
-                version = self._decode_strip_null(self._buffer.read(version_size))
-                notes_size = data_size - version_size
-                notes = self._decode_strip_null(self._buffer.read(notes_size))
-                self._header = FileHeaderElement(header_struct, version, notes)
-            elif vg_class == VGClass.fronts:
-                front_info = [
+        self._elements.append(
+            FrontElement(
+                header_struct,
+                front.number_points,
+                front.front_code,
+                front.pip_size,
+                front.pip_stroke,
+                front.pip_direction,
+                front.width,
+                front.label,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_symbols(self, header_struct):
+        """Decode symbol elements."""
+        symbol_info = [
+            ('number_symbols', 'i'),
+            ('width', 'i'),
+            ('symbol_size', 'f', partial(round, ndigits=1)),
+            ('symbol_type', 'i'),
+            ('symbol_code', 'f', int),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ]
+        symbol = self._buffer.read_struct(NamedStruct(symbol_info, self.prefmt, 'SymbolInfo'))
+
+        self._elements.append(
+            SymbolElement(
+                header_struct,
+                symbol.number_symbols,
+                symbol.width,
+                symbol.symbol_size,
+                symbol.symbol_type,
+                symbol.symbol_code,
+                symbol.offset_x,
+                symbol.offset_y,
+                symbol.lat,
+                symbol.lon,
+            )
+        )
+
+    def _decode_circles(self, header_struct):
+        """Decode circle elements."""
+        line_info = [
+            ('number_points', 'i'),
+            ('line_type', 'i'),
+            ('line_type_hardware', 'i'),
+            ('width', 'i'),
+            ('line_width_hardware', 'i'),
+        ]
+        line = self._buffer.read_struct(NamedStruct(line_info, self.prefmt, 'LineInfo'))
+
+        # This is CircData
+        lat, lon = self._get_latlon(line.number_points)
+
+        self._elements.append(
+            CircleElement(
+                header_struct,
+                line.number_points,
+                line.line_type,
+                line.line_type_hardware,
+                line.width,
+                line.line_width_hardware,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_lines(self, header_struct):
+        """Decode line elements."""
+        line_info = [
+            ('number_points', 'i'),
+            ('line_type', 'i'),
+            ('line_type_hardware', 'i'),
+            ('width', 'i'),
+            ('line_width_hardware', 'i'),
+        ]
+        line = self._buffer.read_struct(NamedStruct(line_info, self.prefmt, 'LineInfo'))
+
+        lat, lon = self._get_latlon(line.number_points)
+        if isinstance(lat, int) and lat == -9999:
+            return
+
+        if header_struct.closed and line.number_points > 2:
+            lon, lat = self.close_coordinates(lon, lat)
+
+        self._elements.append(
+            LineElement(
+                header_struct,
+                line.number_points,
+                line.line_type,
+                line.line_type_hardware,
+                line.width,
+                line.line_width_hardware,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_special_lines(self, header_struct):
+        """Decode special line elements."""
+        special_line_info = [
+            ('number_points', 'i'),
+            ('line_type', 'i'),
+            ('stroke', 'i'),
+            ('direction', 'i'),
+            ('line_size', 'f', partial(round, ndigits=1)),
+            ('width', 'i'),
+        ]
+        special_line = self._buffer.read_struct(
+            NamedStruct(special_line_info, self.prefmt, 'SpecialLineInfo')
+        )
+
+        lat, lon = self._get_latlon(special_line.number_points)
+        if isinstance(lat, int) and lat == -9999:
+            return
+
+        if header_struct.closed and special_line.number_points > 2:
+            lon, lat = self.close_coordinates(lon, lat)
+
+        if special_line.direction == -1:
+            lon, lat = self.flip_coordinates(lon, lat)
+
+        self._elements.append(
+            SpecialLineElement(
+                header_struct,
+                special_line.number_points,
+                special_line.line_type,
+                special_line.stroke,
+                special_line.direction,
+                special_line.line_size,
+                special_line.width,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_lists(self, header_struct):
+        """Decode list elements."""
+        list_info = [
+            ('list_type', 'i'),
+            ('marker_type', 'i'),
+            ('marker_size', 'f', partial(round, ndigits=1)),
+            ('marker_width', 'i'),
+            ('number_items', 'i'),
+        ]
+        list_struct = NamedStruct(list_info, self.prefmt, 'ListInfo')
+        list_meta = self._buffer.read_struct(list_struct)
+        list_items = [
+            self._buffer.read(LIST_MEMBER_SIZE).split(b'\x00')[0].decode()
+            for _n in range(list_meta.number_items)
+        ]
+        list_item_blank_size = (MAX_POINTS - list_meta.number_items) * LIST_MEMBER_SIZE
+        self._buffer.skip(list_item_blank_size)
+
+        coord_blank_size = 4 * (MAX_POINTS - list_meta.number_items)
+        lat = self._buffer.read_array(list_meta.number_items, f'{self.prefmt}f')
+        self._buffer.skip(coord_blank_size)
+        lon = self._buffer.read_array(list_meta.number_items, f'{self.prefmt}f')
+        self._buffer.skip(coord_blank_size)
+
+        self._elements.append(
+            ListElement(
+                header_struct,
+                list_meta.list_type,
+                list_meta.marker_type,
+                list_meta.marker_size,
+                list_meta.marker_width,
+                list_meta.number_items,
+                list_items,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_text(self, header_struct):
+        """Decode text elements."""
+        text_info = [
+            ('rotation', 'f', partial(round, ndigits=1)),
+            ('text_size', 'f', partial(round, ndigits=3)),
+            ('font', 'i'),
+            ('text_flag', 'i'),
+            ('width', 'i'),
+            ('align', 'i'),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ]
+        text_struct = NamedStruct(text_info, self.prefmt, 'TextInfo')
+        text = self._buffer.read_struct(text_struct)
+
+        text_length = header_struct.record_size - VGF_HEADER_SIZE - text_struct.size
+        text_string = self._buffer.read(text_length).split(b'\x00')[0].decode()
+        clean_text = text_string.replace('$$', '\n').strip()
+
+        self._elements.append(
+            TextElement(
+                header_struct,
+                text.rotation,
+                text.text_size,
+                text.font,
+                text.text_flag,
+                text.width,
+                text.align,
+                text.lat,
+                text.lon,
+                text.offset_x,
+                text.offset_y,
+                clean_text,
+            )
+        )
+
+    def _decode_special_text(self, header_struct):
+        """Decode special text elements."""
+        special_text_info = [
+            ('rotation', 'f', partial(round, ndigits=1)),
+            ('text_size', 'f', partial(round, ndigits=3)),
+            ('text_type', 'i'),
+            ('turbulence_symbol', 'i'),
+            ('font', 'i'),
+            ('text_flag', 'i'),
+            ('width', 'i'),
+            ('text_color', 'i'),
+            ('line_color', 'i'),
+            ('fill_color', 'i'),
+            ('align', 'i'),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ]
+        text_struct = NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
+        text = self._buffer.read_struct(text_struct)
+
+        text_length = header_struct.record_size - VGF_HEADER_SIZE - text_struct.size
+        text_string = self._buffer.read(text_length).split(b'\x00')[0].decode()
+        clean_text = text_string.replace('$$', '\n').strip()
+
+        self._elements.append(
+            SpecialTextElement(
+                header_struct,
+                text.rotation,
+                text.text_size,
+                text.text_type,
+                text.turbulence_symbol,
+                text.font,
+                text.text_flag,
+                text.width,
+                text.text_color,
+                text.line_color,
+                text.fill_color,
+                text.align,
+                text.lat,
+                text.lon,
+                text.offset_x,
+                text.offset_y,
+                clean_text,
+            )
+        )
+
+    def _decode_tracks(self, header_struct):
+        """Decode track elements.
+
+        Notes
+        -----
+        Given changes to the storm track element documented in vgstruct.h, this parser
+        attempts to properly decode the element. No version information is stored for
+        this element in the C structs. It assumes the lastest iteration of the
+        element and then checks values for out of range values to determine if an older
+        version is present.
+        """
+        mark = self._buffer.set_mark()
+        skip = 0
+        font = 1
+        font_flag = 2
+
+        track_info = [
+            ('track_type', 'i'),
+            ('total_points', 'i'),
+            ('initial_points', 'i'),
+            ('initial_line_type', 'i'),
+            ('extrapolated_line_type', 'i'),
+            ('initial_mark_type', 'i'),
+            ('extrapolated_mark_type', 'i'),
+            ('line_width', 'i'),
+            ('speed', 'f', partial(round, ndigits=2)),
+            ('direction', 'f', partial(round, ndigits=2)),
+            ('increment', 'i'),
+            ('skip', 'i'),
+            ('font', 'i'),
+            ('font_flag', 'i'),
+        ]
+        track = self._buffer.read_struct(NamedStruct(track_info, self.prefmt, 'TrackInfo'))
+
+        # sztext seems to always be little endian. It is not swapped like other
+        # elements in the storm track struct. See storm track section of cvgswap.c.
+        track_font_size = round(self._buffer.read_binary(1, '<f')[0], 1)
+
+        if track.skip < -3 or track.skip > 4:
+            self._buffer.jump_to(mark)
+            track_info = [
+                ('track_type', 'i'),
+                ('total_points', 'i'),
+                ('initial_points', 'i'),
+                ('initial_line_type', 'i'),
+                ('extrapolated_line_type', 'i'),
+                ('initial_mark_type', 'i'),
+                ('extrapolated_mark_type', 'i'),
+                ('line_width', 'i'),
+                ('speed', 'f', partial(round, ndigits=2)),
+                ('direction', 'f', partial(round, ndigits=2)),
+                ('increment', 'i'),
+            ]
+            track = self._buffer.read_struct(NamedStruct(track_info, self.prefmt, 'TrackInfo'))
+            track_font_size = 1.0
+        elif track.font < 0 or track.font > 33:
+            self._buffer.jump_to(mark)
+            track_info = [
+                ('track_type', 'i'),
+                ('total_points', 'i'),
+                ('initial_points', 'i'),
+                ('initial_line_type', 'i'),
+                ('extrapolated_line_type', 'i'),
+                ('initial_mark_type', 'i'),
+                ('extrapolated_mark_type', 'i'),
+                ('line_width', 'i'),
+                ('speed', 'f', partial(round, ndigits=2)),
+                ('direction', 'f', partial(round, ndigits=2)),
+                ('increment', 'i'),
+                ('skip', 'i'),
+            ]
+            track = self._buffer.read_struct(NamedStruct(track_info, self.prefmt, 'TrackInfo'))
+            track_font_size = 1.0
+
+        times = [
+            self._buffer.read(TRACK_DT_SIZE).split(b'\x00')[0].decode()
+            for _n in range(track.total_points)
+        ]
+
+        blank_times_size = (MAX_TRACKS - track.total_points) * TRACK_DT_SIZE
+        self._buffer.skip(blank_times_size)
+
+        lat, lon = self._get_latlon(track.total_points)
+        blank_latlon_size = 8 * (MAX_TRACKS - track.total_points)
+        self._buffer.skip(blank_latlon_size)
+
+        self._elements.append(
+            TrackElement(
+                header_struct,
+                track.track_type,
+                track.total_points,
+                track.initial_points,
+                track.initial_line_type,
+                track.extrapolated_line_type,
+                track.initial_mark_type,
+                track.extrapolated_mark_type,
+                track.line_width,
+                track.speed,
+                track.direction,
+                track.increment,
+                track.skip if hasattr(track, 'skip') else skip,
+                track.font if hasattr(track, 'font') else font,
+                track.font_flag if hasattr(track, 'font_flag') else font_flag,
+                track_font_size,
+                times,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_sigmet(self, header_struct):
+        """Decode SIGMET elements."""
+        match header_struct.version:
+            case 0:
+                sigmet_info = [
+                    ('subtype', 'i'),
                     ('number_points', 'i'),
-                    ('front_code', 'i'),
-                    ('pip_size', 'i'),
-                    ('pip_stroke', 'i'),
-                    ('pip_direction', 'i'),
-                    ('width', 'i'),
-                    ('label', '4s', self._decode_strip_null),
-                ]
-                front = self._buffer.read_struct(
-                    NamedStruct(front_info, self.prefmt, 'FrontInfo')
-                )
-
-                lat, lon = self._get_latlon(front.number_points)
-
-                self._elements.append(
-                    FrontElement(
-                        header_struct,
-                        front.number_points,
-                        front.front_code,
-                        front.pip_size,
-                        front.pip_stroke,
-                        front.pip_direction,
-                        front.width,
-                        front.label,
-                        lat,
-                        lon,
-                    )
-                )
-            elif vg_class == VGClass.symbols:
-                symbol_info = [
-                    ('number_symbols', 'i'),
-                    ('width', 'i'),
-                    ('symbol_size', 'f', partial(round, ndigits=1)),
-                    ('symbol_type', 'i'),
-                    ('symbol_code', 'f', int),
-                    ('lat', 'f', partial(round, ndigits=2)),
-                    ('lon', 'f', partial(round, ndigits=2)),
-                    ('offset_x', 'i'),
-                    ('offset_y', 'i'),
-                ]
-                symbol = self._buffer.read_struct(
-                    NamedStruct(symbol_info, self.prefmt, 'SymbolInfo')
-                )
-
-                self._elements.append(
-                    SymbolElement(
-                        header_struct,
-                        symbol.number_symbols,
-                        symbol.width,
-                        symbol.symbol_size,
-                        symbol.symbol_type,
-                        symbol.symbol_code,
-                        symbol.offset_x,
-                        symbol.offset_y,
-                        symbol.lat,
-                        symbol.lon,
-                    )
-                )
-            elif vg_class == VGClass.circle:
-                if vg_type == VGType.circle:
-                    line_info = [
-                        ('number_points', 'i'),
-                        ('line_type', 'i'),
-                        ('line_type_hardware', 'i'),
-                        ('width', 'i'),
-                        ('line_width_hardware', 'i'),
-                    ]
-                    line = self._buffer.read_struct(
-                        NamedStruct(line_info, self.prefmt, 'LineInfo')
-                    )
-
-                    # This is CircData
-                    lat, lon = self._get_latlon(line.number_points)
-
-                    self._elements.append(
-                        CircleElement(
-                            header_struct,
-                            line.number_points,
-                            line.line_type,
-                            line.line_type_hardware,
-                            line.width,
-                            line.line_width_hardware,
-                            lat,
-                            lon,
-                        )
-                    )
-            elif vg_class == VGClass.lines:
-                if vg_type == VGType.line:
-                    line_info = [
-                        ('number_points', 'i'),
-                        ('line_type', 'i'),
-                        ('line_type_hardware', 'i'),
-                        ('width', 'i'),
-                        ('line_width_hardware', 'i'),
-                    ]
-                    line = self._buffer.read_struct(
-                        NamedStruct(line_info, self.prefmt, 'LineInfo')
-                    )
-
-                    lat, lon = self._get_latlon(line.number_points)
-                    if isinstance(lat, int) and lat == -9999:
-                        continue
-
-                    if header_struct.closed and line.number_points > 2:
-                        lon, lat = self.close_coordinates(lon, lat)
-
-                    self._elements.append(
-                        LineElement(
-                            header_struct,
-                            line.number_points,
-                            line.line_type,
-                            line.line_type_hardware,
-                            line.width,
-                            line.line_width_hardware,
-                            lat,
-                            lon,
-                        )
-                    )
-                elif vg_type == VGType.special_line:
-                    special_line_info = [
-                        ('number_points', 'i'),
-                        ('line_type', 'i'),
-                        ('stroke', 'i'),
-                        ('direction', 'i'),
-                        ('line_size', 'f', partial(round, ndigits=1)),
-                        ('width', 'i'),
-                    ]
-                    special_line = self._buffer.read_struct(
-                        NamedStruct(special_line_info, self.prefmt, 'SpecialLineInfo')
-                    )
-
-                    lat, lon = self._get_latlon(special_line.number_points)
-                    if isinstance(lat, int) and lat == -9999:
-                        continue
-
-                    if header_struct.closed and special_line.number_points > 2:
-                        lon, lat = self.close_coordinates(lon, lat)
-
-                    if special_line.direction == -1:
-                        lon, lat = self.flip_coordinates(lon, lat)
-
-                    self._elements.append(
-                        SpecialLineElement(
-                            header_struct,
-                            special_line.number_points,
-                            special_line.line_type,
-                            special_line.stroke,
-                            special_line.direction,
-                            special_line.line_size,
-                            special_line.width,
-                            lat,
-                            lon,
-                        )
-                    )
-                else:
-                    raise NotImplementedError(f'Line type `{vg_type}` is not implemented.')
-            elif vg_class == VGClass.lists:
-                list_info = [
-                    ('list_type', 'i'),
-                    ('marker_type', 'i'),
-                    ('marker_size', 'f', partial(round, ndigits=1)),
-                    ('marker_width', 'i'),
-                    ('number_items', 'i'),
-                ]
-                list_struct = NamedStruct(list_info, self.prefmt, 'ListInfo')
-                list_meta = self._buffer.read_struct(list_struct)
-
-                list_items = [
-                    self._buffer.read_ascii(LIST_MEMBER_SIZE).replace('\x00', '')
-                    for _n in range(list_meta.number_items)
-                ]
-                list_item_blank_size = (MAX_POINTS - list_meta.number_items) * LIST_MEMBER_SIZE
-                self._buffer.skip(list_item_blank_size)
-
-                coord_blank_size = 4 * (MAX_POINTS - list_meta.number_items)
-                lat = self._buffer.read_array(list_meta.number_items, f'{self.prefmt}f')
-                self._buffer.skip(coord_blank_size)
-                lon = self._buffer.read_array(list_meta.number_items, f'{self.prefmt}f')
-                self._buffer.skip(coord_blank_size)
-
-                self._elements.append(
-                    ListElement(
-                        header_struct,
-                        list_meta.list_type,
-                        list_meta.marker_type,
-                        list_meta.marker_size,
-                        list_meta.marker_width,
-                        list_meta.number_items,
-                        list_items,
-                        lat,
-                        lon,
-                    )
-                )
-            elif vg_class == VGClass.text:
-                if vg_type == VGType.text or vg_type == VGType.justified_text:
-                    text_info = [
-                        ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)),
-                        ('font', 'i'),
-                        ('text_flag', 'i'),
-                        ('width', 'i'),
-                        ('align', 'i'),
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'),
-                        ('offset_y', 'i'),
-                    ]
-                    text_struct = NamedStruct(text_info, self.prefmt, 'TextInfo')
-                    text = self._buffer.read_struct(text_struct)
-
-                    text_length = rec_size - VGF_HEADER_SIZE - text_struct.size
-                    text_string = self._buffer.read_ascii(text_length)
-                    clean_text = text_string.replace('$$', '\n').replace('\x00', '').strip()
-
-                    self._elements.append(
-                        TextElement(
-                            header_struct,
-                            text.rotation,
-                            text.text_size,
-                            text.font,
-                            text.text_flag,
-                            text.width,
-                            text.align,
-                            text.lat,
-                            text.lon,
-                            text.offset_x,
-                            text.offset_y,
-                            clean_text,
-                        )
-                    )
-                elif vg_type == VGType.special_text:
-                    special_text_info = [
-                        ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)),
-                        ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'),
-                        ('font', 'i'),
-                        ('text_flag', 'i'),
-                        ('width', 'i'),
-                        ('text_color', 'i'),
-                        ('line_color', 'i'),
-                        ('fill_color', 'i'),
-                        ('align', 'i'),
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'),
-                        ('offset_y', 'i'),
-                    ]
-                    text_struct = NamedStruct(
-                        special_text_info, self.prefmt, 'SpecialTextInfo'
-                    )
-                    text = self._buffer.read_struct(text_struct)
-
-                    text_length = rec_size - VGF_HEADER_SIZE - text_struct.size
-                    text_string = self._buffer.read_ascii(text_length)
-                    clean_text = text_string.replace('$$', '\n').replace('\x00', '').strip()
-
-                    self._elements.append(
-                        SpecialTextElement(
-                            header_struct,
-                            text.rotation,
-                            text.text_size,
-                            text.text_type,
-                            text.turbulence_symbol,
-                            text.font,
-                            text.text_flag,
-                            text.width,
-                            text.text_color,
-                            text.line_color,
-                            text.fill_color,
-                            text.align,
-                            text.lat,
-                            text.lon,
-                            text.offset_x,
-                            text.offset_y,
-                            clean_text,
-                        )
-                    )
-                else:
-                    raise NotImplementedError(f'Text type `{vg_type}` is not implemented.')
-            elif vg_class == VGClass.tracks:
-                track_info = [
-                    ('track_type', 'i'),
-                    ('total_points', 'i'),
-                    ('initial_points', 'i'),
-                    ('initial_line_type', 'i'),
-                    ('extrapolated_line_type', 'i'),
-                    ('initial_mark_type', 'i'),
-                    ('extrapolated_mark_type', 'i'),
+                    ('line_type', 'i'),
                     ('line_width', 'i'),
-                    ('speed', 'f', partial(round, ndigits=2)),
-                    ('direction', 'f', partial(round, ndigits=2)),
-                    ('increment', 'i'),
-                    ('skip', 'i'),
-                    ('font', 'i'),
-                    ('font_flag', 'i'),
+                    ('side_of_line', 'i'),
+                    ('area', '8s', self._decode_strip_null),
+                    ('flight_info_region', '32s', self._decode_strip_null),
+                    ('status', 'i'),
+                    ('distance', 'f'),
+                    ('message_id', '12s', self._decode_strip_null),
+                    ('sequence_number', 'i'),
+                    ('start_time', '20s', self._decode_strip_null),
+                    ('end_time', '20s', self._decode_strip_null),
+                    ('remarks', '80s', self._decode_strip_null),
+                    ('sonic', 'i'),
+                    ('phenomena', '32s', self._decode_strip_null),
+                    ('trend', '8s', self._decode_strip_null),
+                    ('movement', '8s', self._decode_strip_null),
+                    ('type_indicator', 'i'),
+                    ('type_time', '20s', self._decode_strip_null),
+                    ('flight_level', 'i'),
+                    ('speed', 'i'),
+                    ('direction', '4s', self._decode_strip_null),
+                    ('tops', '80s', self._decode_strip_null),
+                    ('forecaster', '16s', self._decode_strip_null),
                 ]
-                track = self._buffer.read_struct(
-                    NamedStruct(track_info, self.prefmt, 'TrackInfo')
+            case 1:
+                sigmet_info = [
+                    ('subtype', 'i'),
+                    ('number_points', 'i'),
+                    ('line_type', 'i'),
+                    ('line_width', 'i'),
+                    ('side_of_line', 'i'),
+                    ('area', '8s', self._decode_strip_null),
+                    ('flight_info_region', '32s', self._decode_strip_null),
+                    ('status', 'i'),
+                    ('distance', 'f'),
+                    ('message_id', '12s', self._decode_strip_null),
+                    ('sequence_number', 'i'),
+                    ('start_time', '20s', self._decode_strip_null),
+                    ('end_time', '20s', self._decode_strip_null),
+                    ('remarks', '80s', self._decode_strip_null),
+                    ('sonic', 'i'),
+                    ('phenomena', '32s', self._decode_strip_null),
+                    ('phenomena2', '32s', self._decode_strip_null),
+                    ('phenomena_name', '36s', self._decode_strip_null),
+                    ('phenomena_lat', '8s', self._decode_strip_null),
+                    ('phenomena_lon', '8s', self._decode_strip_null),
+                    ('pressure', 'i'),
+                    ('max_wind', 'i'),
+                    ('free_text', '256s', self._decode_strip_null),
+                    ('trend', '8s', self._decode_strip_null),
+                    ('movement', '8s', self._decode_strip_null),
+                    ('type_indicator', 'i'),
+                    ('type_time', '20s', self._decode_strip_null),
+                    ('flight_level', 'i'),
+                    ('speed', 'i'),
+                    ('direction', '4s', self._decode_strip_null),
+                    ('tops', '80s', self._decode_strip_null),
+                    ('forecaster', '16s', self._decode_strip_null),
+                ]
+
+        sigmet = self._buffer.read_struct(NamedStruct(sigmet_info, self.prefmt, 'SigmetInfo'))
+
+        lat = self._buffer.read_array(sigmet.number_points, f'{self.prefmt}f')
+        lon = self._buffer.read_array(sigmet.number_points, f'{self.prefmt}f')
+
+        self._elements.append(
+            SigmetElement(
+                header_struct,
+                sigmet.subtype,
+                sigmet.number_points,
+                sigmet.line_type,
+                sigmet.line_width,
+                sigmet.side_of_line,
+                sigmet.area,
+                sigmet.flight_info_region,
+                sigmet.area,
+                sigmet.distance,
+                sigmet.message_id,
+                sigmet.sequence_number,
+                sigmet.start_time,
+                sigmet.end_time,
+                sigmet.remarks,
+                sigmet.sonic,
+                sigmet.phenomena,
+                sigmet.phenomena2 if hasattr(sigmet, 'phenomena2') else '',
+                sigmet.phenomena_name if hasattr(sigmet, 'phenomena_name') else '',
+                sigmet.phenomena_lat if hasattr(sigmet, 'phenomena_lat') else '',
+                sigmet.phenomena_lon if hasattr(sigmet, 'phenomena_lon') else '',
+                sigmet.pressure if hasattr(sigmet, 'pressure') else MISSING_INT,
+                sigmet.max_wind if hasattr(sigmet, 'max_wind') else MISSING_INT,
+                sigmet.free_text if hasattr(sigmet, 'free_text') else '',
+                sigmet.trend,
+                sigmet.movement,
+                sigmet.type_indicator,
+                sigmet.type_time,
+                sigmet.flight_level,
+                sigmet.speed,
+                sigmet.direction,
+                sigmet.tops,
+                sigmet.forecaster,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_ccf(self, header_struct):
+        """Decode CCF elements."""
+        ccf_info = [
+            ('subtype', 'i'),
+            ('number_points', 'i'),
+            ('coverage', 'i'),
+            ('storm_tops', 'i'),
+            ('probability', 'i'),
+            ('growth', 'i'),
+            ('speed', 'f', partial(round, ndigits=2)),
+            ('direction', 'f', partial(round, ndigits=2)),
+        ]
+
+        # See cvgswap.c in GEMPAK source. These are not swapped.
+        ccf_info_noswap = [
+            ('text_lat', 'f', partial(round, ndigits=2)),
+            ('text_lon', 'f', partial(round, ndigits=2)),
+            ('arrow_lat', 'f', partial(round, ndigits=2)),
+            ('arrow_lon', 'f', partial(round, ndigits=2)),
+            ('high_fill', 'i'),
+            ('med_fill', 'i'),
+            ('low_fill', 'i'),
+            ('line_type', 'i'),
+            ('arrow_size', 'f', partial(round, ndigits=1)),
+        ]
+
+        ccf = self._buffer.read_struct(NamedStruct(ccf_info, self.prefmt, 'CCFInfo'))
+
+        ccf_noswap = self._buffer.read_struct(NamedStruct(ccf_info_noswap, '', 'CCFInfoRaw'))
+
+        # Because of how CCF elements are handled, swapping does not occur on
+        # the special text element in the struct. We handle that manually here
+        # for the few attributes it affects. See cvgswap.c in GEMPAK source.
+        ccf_text_info = [
+            ('rotation', 'f', partial(round, ndigits=1)),
+            ('text_size', 'f', partial(round, ndigits=3)),
+            ('text_type', 'i'),
+            ('turbulence_symbol', 'i'),
+            ('font', 'i', self._swap32),
+            ('text_flag', 'i', self._swap32),
+            ('width', 'i', self._swap32),
+            ('text_color', 'i'),
+            ('line_color', 'i'),
+            ('fill_color', 'i'),
+            ('align', 'i'),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+            ('text', '255s', self._decode_strip_null),
+            (None, '1x'),  # skip struct alignment padding byte
+        ]
+
+        ccf_text = self._buffer.read_struct(
+            NamedStruct(ccf_text_info, self.prefmt, 'CCFTextInfo')
+        )
+
+        text_layout = self._buffer.read(256).split(b'\x00')[0].decode()
+
+        lat, lon = self._get_latlon(ccf.number_points)
+
+        self._elements.append(
+            CollaborativeConvectiveForecastElement(
+                header_struct,
+                ccf.subtype,
+                ccf.number_points,
+                ccf.coverage,
+                ccf.storm_tops,
+                ccf.probability,
+                ccf.growth,
+                ccf.speed,
+                ccf.direction,
+                ccf_noswap.text_lat,
+                ccf_noswap.text_lon,
+                ccf_noswap.arrow_lat,
+                ccf_noswap.arrow_lon,
+                ccf_noswap.high_fill,
+                ccf_noswap.med_fill,
+                ccf_noswap.low_fill,
+                ccf_noswap.line_type,
+                ccf_noswap.arrow_size,
+                ccf_text.rotation,
+                ccf_text.text_size,
+                ccf_text.text_type,
+                ccf_text.turbulence_symbol,
+                ccf_text.font,
+                ccf_text.text_flag,
+                ccf_text.width,
+                ccf_text.fill_color,
+                ccf_text.align,
+                ccf_text.offset_x,
+                ccf_text.offset_y,
+                ccf_text.text,
+                text_layout,
+                lat,
+                lon,
+            )
+        )
+        self._buffer.skip((MAX_SIGMET - ccf.number_points) * 8)
+
+    def _decode_volcanoes(self, header_struct):
+        """Decode volcano elements."""
+        volcano_info = [
+            ('name', '64s', self._decode_strip_null),
+            ('code', 'f', partial(round, ndigits=1)),
+            ('size', 'f', partial(round, ndigits=1)),
+            ('width', 'i'),
+            ('number', '17s', self._decode_strip_null),
+            ('location', '17s', self._decode_strip_null),
+            ('area', '33s', self._decode_strip_null),
+            ('origin_station', '17s', self._decode_strip_null),
+            ('vaac', '33s', self._decode_strip_null),
+            ('wmo_id', '8s', self._decode_strip_null),
+            ('header_number', '9s', self._decode_strip_null),
+            ('elevation', '9s', self._decode_strip_null),
+            ('year', '9s', self._decode_strip_null),
+            ('advisory_number', '9s', self._decode_strip_null),
+            ('correction', '4s', self._decode_strip_null),
+            ('info_source', '256s', self._decode_strip_null),
+            ('additional_source', '256s', self._decode_strip_null),
+            ('aviation_color', '16s', self._decode_strip_null),
+            ('details', '256s', self._decode_strip_null),
+            ('obs_date', '16s', self._decode_strip_null),
+            ('obs_time', '16s', self._decode_strip_null),
+            ('obs_ash', '1024s', self._decode_strip_null),
+            ('forecast_6hr', '1024s', self._decode_strip_null),
+            ('forecast_12hr', '1024s', self._decode_strip_null),
+            ('forecast_18hr', '1024s', self._decode_strip_null),
+            ('remarks', '512s', self._decode_strip_null),
+            ('next_advisory', '128s', self._decode_strip_null),
+            ('forecaster', '64s', self._decode_strip_null),
+            (None, '3x'),  # skip struct alignment padding bytes
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ]
+
+        volcano = self._buffer.read_struct(
+            NamedStruct(volcano_info, self.prefmt, 'VolcanoInfo')
+        )
+
+        self._elements.append(
+            VolcanoElement(
+                header_struct,
+                volcano.name,
+                volcano.code,
+                volcano.size,
+                volcano.width,
+                volcano.number,
+                volcano.location,
+                volcano.area,
+                volcano.origin_station,
+                volcano.vaac,
+                volcano.wmo_id,
+                volcano.header_number,
+                volcano.elevation,
+                volcano.year,
+                volcano.advisory_number,
+                volcano.correction,
+                volcano.info_source,
+                volcano.additional_source,
+                volcano.aviation_color,
+                volcano.details,
+                volcano.obs_date,
+                volcano.obs_time,
+                volcano.obs_ash,
+                volcano.forecast_6hr,
+                volcano.forecast_12hr,
+                volcano.forecast_18hr,
+                volcano.remarks,
+                volcano.next_advisory,
+                volcano.forecaster,
+                volcano.offset_x,
+                volcano.offset_y,
+                volcano.lat,
+                volcano.lon,
+            )
+        )
+
+    def _decode_ash_clouds(self, header_struct):
+        """Decode ash cloud elements."""
+        ash_info = [
+            ('subtype', 'i'),
+            ('number_points', 'i'),
+            ('distance', 'f', partial(round, ndigits=2)),
+            ('forecast_hour', 'i'),
+            ('line_type', 'i'),
+            ('line_width', 'i'),
+            ('side_of_line', 'i'),
+            ('speed', 'f', partial(round, ndigits=2)),
+            ('speeds', '16s', self._decode_strip_null),
+            ('direction', '4s', self._decode_strip_null),
+            ('flight_level_1', '16s', self._decode_strip_null),
+            ('flight_level_2', '16s', self._decode_strip_null),
+        ]
+
+        ash = self._buffer.read_struct(NamedStruct(ash_info, self.prefmt, 'AshInfo'))
+
+        special_text_info = [
+            ('rotation', 'f', partial(round, ndigits=1)),
+            ('text_size', 'f', partial(round, ndigits=3)),
+            ('text_type', 'i'),
+            ('turbulence_symbol', 'i'),
+            ('font', 'i'),
+            ('text_flag', 'i'),
+            ('width', 'i'),
+            ('text_color', 'i'),
+            ('line_color', 'i'),
+            ('fill_color', 'i'),
+            ('align', 'i'),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ]
+
+        text = self._buffer.read_struct(
+            NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
+        )
+
+        text_string = self._buffer.read(255).split(b'\x00')[0].decode()
+        self._buffer.skip(1)  # skip byte for struct alignment
+
+        lat, lon = self._get_latlon(ash.number_points)
+        self._buffer.skip((MAX_ASH - ash.number_points) * 8)
+
+        self._elements.append(
+            AshCloudElement(
+                header_struct,
+                ash.subtype,
+                ash.number_points,
+                ash.distance,
+                ash.forecast_hour,
+                ash.line_type,
+                ash.line_width,
+                ash.side_of_line,
+                ash.speed,
+                ash.speeds,
+                ash.direction,
+                ash.flight_level_1,
+                ash.flight_level_2,
+                text.rotation,
+                text.text_size,
+                text.text_type,
+                text.turbulence_symbol,
+                text.font,
+                text.text_flag,
+                text.width,
+                text.text_color,
+                text.line_color,
+                text.fill_color,
+                text.align,
+                text.lat,
+                text.lon,
+                text.offset_x,
+                text.offset_y,
+                text_string,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_gfa(self, header_struct):
+        """Decode GFA elements."""
+        gfa_info = [('number_blocks', 'i'), ('number_points', 'i')]
+
+        gfa = self._buffer.read_struct(NamedStruct(gfa_info, self.prefmt, 'GFAInfo'))
+
+        blocks = []
+        for _ in range(gfa.number_blocks):
+            blocks.append(self._decode_strip_null(self._buffer.read_binary(1024, 's')[0]))
+
+        lat, lon = self._get_latlon(gfa.number_points)
+
+        self._elements.append(
+            GraphicalForecastAreaElement(
+                header_struct,
+                gfa.number_blocks,
+                gfa.number_points,
+                blocks,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_jet(self, header_struct):
+        """Decode jet elements."""
+        jet_line_info = [
+            ('line_color', 'i'),
+            ('number_points', 'i'),
+            ('line_type', 'i'),
+            ('stroke', 'i'),
+            ('direction', 'i'),
+            ('size', 'f', partial(round, ndigits=1)),
+            ('width', 'i'),
+        ]
+        jet_line = self._buffer.read_struct(
+            NamedStruct(jet_line_info, self.prefmt, 'JetLineInfo')
+        )
+        jet_line_lat, jet_line_lon = self._get_latlon(jet_line.number_points)
+        line_attr = LineAttribute(
+            jet_line.line_color,
+            jet_line.number_points,
+            jet_line.line_type,
+            jet_line.stroke,
+            jet_line.direction,
+            jet_line.size,
+            jet_line.width,
+            jet_line_lat,
+            jet_line_lon,
+        )
+
+        self._buffer.skip((MAX_POINTS - jet_line.number_points) * 8)
+
+        number_barbs = self._buffer.read_int(4, 'big', False)
+
+        jet_barb_info = [
+            ('wind_color', 'i'),
+            ('number_wind', 'i'),
+            ('width', 'i'),
+            ('size', 'f', partial(round, ndigits=1)),
+            ('wind_type', 'i'),
+            ('head_size', 'f', partial(round, ndigits=1)),
+            ('speed', 'f', partial(round, ndigits=2)),
+            ('direction', 'f', partial(round, ndigits=2)),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('flight_level_color', 'i'),
+            ('text_rotation', 'f', partial(round, ndigits=1)),
+            ('text_size', 'f', partial(round, ndigits=3)),
+            ('text_type', 'i'),
+            ('turbulence_symbol', 'i'),
+            ('font', 'i'),
+            ('text_flag', 'i'),
+            ('text_width', 'i'),
+            ('text_color', 'i'),
+            ('line_color', 'i'),
+            ('fill_color', 'i'),
+            ('align', 'i'),
+            ('text_lat', 'f', partial(round, ndigits=2)),
+            ('text_lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+            ('text', '255s', self._decode_strip_null),
+            (None, '1x'),  # skip struct alignment padding byte
+        ]
+
+        barbs = []
+        barb_struct = NamedStruct(jet_barb_info, self.prefmt, 'JetBarbInfo')
+        for _ in range(number_barbs):
+            jet_barb = self._buffer.read_struct(barb_struct)
+
+            barbs.append(
+                BarbAttribute(
+                    jet_barb.wind_color,
+                    jet_barb.number_wind,
+                    jet_barb.width,
+                    jet_barb.size,
+                    jet_barb.wind_type,
+                    jet_barb.head_size,
+                    jet_barb.speed,
+                    jet_barb.direction,
+                    jet_barb.lat,
+                    jet_barb.lon,
+                    jet_barb.flight_level_color,
+                    jet_barb.text_rotation,
+                    jet_barb.text_size,
+                    jet_barb.text_type,
+                    jet_barb.turbulence_symbol,
+                    jet_barb.font,
+                    jet_barb.text_flag,
+                    jet_barb.text_width,
+                    jet_barb.text_color,
+                    jet_barb.line_color,
+                    jet_barb.fill_color,
+                    jet_barb.align,
+                    jet_barb.text_lat,
+                    jet_barb.text_lon,
+                    jet_barb.offset_x,
+                    jet_barb.offset_y,
+                    jet_barb.text,
+                )
+            )
+
+        self._buffer.skip((MAX_JET_POINTS - number_barbs) * barb_struct.size)
+
+        number_hash = self._buffer.read_int(4, 'big', False)
+
+        jet_hash_info = [
+            ('wind_color', 'i'),
+            ('number_wind', 'i'),
+            ('width', 'i'),
+            ('size', 'f', partial(round, ndigits=1)),
+            ('wind_type', 'i'),
+            ('head_size', 'f', partial(round, ndigits=1)),
+            ('speed', 'f', partial(round, ndigits=2)),
+            ('direction', 'f', partial(round, ndigits=2)),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+        ]
+
+        hashes = []
+        hash_struct = NamedStruct(jet_hash_info, self.prefmt, 'JetHashInfo')
+        for _ in range(number_hash):
+            jet_hash = self._buffer.read_struct(hash_struct)
+
+            hashes.append(
+                HashAttribute(
+                    jet_hash.wind_color,
+                    jet_hash.number_wind,
+                    jet_hash.width,
+                    jet_hash.size,
+                    jet_hash.wind_type,
+                    jet_hash.head_size,
+                    jet_hash.speed,
+                    jet_hash.direction,
+                    jet_hash.lat,
+                    jet_hash.lon,
+                )
+            )
+
+        self._buffer.skip((MAX_JET_POINTS - number_hash) * hash_struct.size)
+
+        self._elements.append(
+            JetElement(header_struct, line_attr, number_barbs, barbs, number_hash, hashes)
+        )
+
+    def _decode_tca(self, header_struct):
+        """Decode tropical cyclone advisory element."""
+        tca_string_length = header_struct.record_size - VGF_HEADER_SIZE
+        tca_string = self._buffer.read(tca_string_length).split(b'\x00')[0].decode()
+
+        storm_number = int(re.search(r'(?<=<tca_stormNum>)(.+?)(?=<)', tca_string).group())
+
+        issue_status = re.search(r'(?<=<tca_issueStatus>)(.+?)(?=<)', tca_string).group()
+
+        basin = int(re.search(r'(?<=<tca_basin>)(.+?)(?=<)', tca_string).group())
+
+        advisory_number = int(
+            re.search(r'(?<=<tca_advisoryNum>)(.+?)(?=<)', tca_string).group()
+        )
+
+        storm_name = re.search(r'(?<=<tca_stormName>)(.+?)(?=<)', tca_string).group()
+
+        storm_type = int(re.search(r'(?<=<tca_stormType>)(.+?)(?=<)', tca_string).group())
+
+        valid = re.search(r'(?<=<tca_validTime>)(.+?)(?=<)', tca_string).group()
+
+        tz = re.search(r'(?<=<tca_timezone>)(.+?)(?=<)', tca_string).group()
+
+        text_lat = float(re.search(r'(?<=<tca_textLat>)(.+?)(?=<)', tca_string).group())
+
+        text_lon = float(re.search(r'(?<=<tca_textLon>)(.+?)(?=<)', tca_string).group())
+
+        text_font = int(re.search(r'(?<=<tca_textFont>)(.+?)(?=<)', tca_string).group())
+
+        text_size = float(re.search(r'(?<=<tca_textSize>)(.+?)(?=<)', tca_string).group())
+
+        text_width = int(re.search(r'(?<=<tca_textWidth>)(.+?)(?=<)', tca_string).group())
+
+        wwnum = int(re.search(r'(?<=<tca_wwNum>)(.+?)(?=<)', tca_string).group())
+
+        ww = []
+        for n in range(wwnum):
+            wwstr = re.search(rf'(?<=<tca_tcawwStr_{n}>)(.+?)(?=<)', tca_string).group()
+            nbreaks = int(
+                re.search(rf'(?<=<tca_numBreakPts_{n}>)(.+?)(?=<)', tca_string).group()
+            )
+            breakpts = re.search(rf'(?<=<tca_breakPts_{n}>)(.+?)(?=<|$)', tca_string).group()
+
+            severity, advisory_type, special_geog = wwstr.split('|')
+
+            parsed_breaks = np.array_split(breakpts.split('|'), nbreaks)
+            decode_breaks = [
+                [float(lat), float(lon), bname] for lat, lon, bname in parsed_breaks
+            ]
+
+            ww.append(
+                {
+                    'severity': Severity(int(severity)),
+                    'advisory_type': AdvisoryType(int(advisory_type)),
+                    'special_geography': SpecialGeography(int(special_geog)),
+                    'number_breaks': nbreaks,
+                    'break_points': decode_breaks,
+                }
+            )
+
+            self._elements.append(
+                TropicalCycloneAdvisoryElement(
+                    header_struct,
+                    storm_number,
+                    issue_status,
+                    basin,
+                    advisory_number,
+                    storm_name,
+                    storm_type,
+                    valid,
+                    tz,
+                    text_lat,
+                    text_lon,
+                    text_font,
+                    text_size,
+                    text_width,
+                    wwnum,
+                    ww,
+                )
+            )
+
+    def _decode_tc_error(self, header_struct):
+        """Decode TC error cone elements."""
+        tc_info = [
+            ('storm_number', '5s', self._decode_strip_null),
+            ('issue_status', '2s', self._decode_strip_null),
+            ('basin', '5s', self._decode_strip_null),
+            ('advisory_number', '5s', self._decode_strip_null),
+            ('storm_name', '128s', self._decode_strip_null),
+            ('storm_type', '5s', self._decode_strip_null),
+            ('valid_time', '21s', self._decode_strip_null),
+            ('timezone', '4s', self._decode_strip_null),
+            ('forecast_period', '5s', self._decode_strip_null),
+        ]
+
+        tc = self._buffer.read_struct(NamedStruct(tc_info, self.prefmt, 'TCInfo'))
+
+        cone_info = [
+            ('line_color', 'i'),
+            ('line_type', 'i'),
+            ('fill_color', 'i'),
+            ('fill_type', 'i'),
+            ('number_points', 'i'),
+        ]
+
+        cone = self._buffer.read_struct(NamedStruct(cone_info, self.prefmt, 'TCConeInfo'))
+
+        lat, lon = self._get_latlon(cone.number_points)
+
+        self._elements.append(
+            TropicalCycloneErrorElement(
+                header_struct,
+                tc.storm_number,
+                tc.issue_status,
+                tc.basin,
+                tc.advisory_number,
+                tc.storm_name,
+                tc.storm_type,
+                tc.valid_time,
+                tc.timezone,
+                tc.forecast_period,
+                cone.line_color,
+                cone.line_type,
+                cone.fill_color,
+                cone.fill_type,
+                cone.number_points,
+                lat,
+                lon,
+            )
+        )
+
+    def _decode_tc_track(self, header_struct):
+        """Decode TC track element."""
+        tc_info = [
+            ('storm_number', '5s', self._decode_strip_null),
+            ('issue_status', '2s', self._decode_strip_null),
+            ('basin', '5s', self._decode_strip_null),
+            ('advisory_number', '5s', self._decode_strip_null),
+            ('storm_name', '128s', self._decode_strip_null),
+            ('storm_type', '5s', self._decode_strip_null),
+            ('valid_time', '21s', self._decode_strip_null),
+            ('timezone', '4s', self._decode_strip_null),
+            ('forecast_period', '5s', self._decode_strip_null),
+        ]
+
+        tc = self._buffer.read_struct(NamedStruct(tc_info, self.prefmt, 'TCInfo'))
+
+        track_info = [
+            ('line_color', 'i'),
+            ('line_type', 'i'),
+            ('number_points', 'i'),
+        ]
+
+        track = self._buffer.read_struct(NamedStruct(track_info, self.prefmt, 'TCTrackInfo'))
+
+        track_point_info = [
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('advisory_date', '50s', self._decode_strip_null),
+            ('tau', '50s', self._decode_strip_null),
+            ('max_wind', '50s', self._decode_strip_null),
+            ('wind_gust', '50s', self._decode_strip_null),
+            ('minimum_pressure', '50s', self._decode_strip_null),
+            ('development_level', '50s', self._decode_strip_null),
+            ('development_label', '50s', self._decode_strip_null),
+            ('direction', '50s', self._decode_strip_null),
+            ('speed', '50s', self._decode_strip_null),
+            ('date_label', '50s', self._decode_strip_null),
+            ('storm_source', '50s', self._decode_strip_null),
+            (None, '2x'),  # skip struct alignment padding bytes
+        ]
+
+        point_struct = NamedStruct(track_point_info, self.prefmt, 'TrackPointInfo')
+
+        track_points = []
+        for _ in range(track.number_points):
+            pt = self._buffer.read_struct(point_struct)
+            track_points.append(
+                TrackAttribute(
+                    pt.advisory_date,
+                    pt.tau,
+                    pt.max_wind,
+                    pt.wind_gust,
+                    pt.minimum_pressure,
+                    pt.development_level,
+                    pt.development_label,
+                    pt.direction,
+                    pt.speed,
+                    pt.date_label,
+                    pt.storm_source,
+                    pt.lat,
+                    pt.lon,
+                )
+            )
+
+        self.elements.append(
+            TropicalCycloneTrackElement(
+                header_struct,
+                tc.storm_number,
+                tc.issue_status,
+                tc.basin,
+                tc.advisory_number,
+                tc.storm_name,
+                tc.storm_type,
+                tc.valid_time,
+                tc.timezone,
+                tc.forecast_period,
+                track.line_color,
+                track.line_type,
+                track.number_points,
+                track_points,
+            )
+        )
+
+    def _decode_tc_break_point(self, header_struct):
+        """Decode TC break point elements."""
+        tc_info = [
+            ('storm_number', '5s', self._decode_strip_null),
+            ('issue_status', '2s', self._decode_strip_null),
+            ('basin', '5s', self._decode_strip_null),
+            ('advisory_number', '5s', self._decode_strip_null),
+            ('storm_name', '128s', self._decode_strip_null),
+            ('storm_type', '5s', self._decode_strip_null),
+            ('valid_time', '21s', self._decode_strip_null),
+            ('timezone', '4s', self._decode_strip_null),
+            ('forecast_period', '5s', self._decode_strip_null),
+        ]
+
+        tc = self._buffer.read_struct(NamedStruct(tc_info, self.prefmt, 'TCInfo'))
+
+        break_info = [
+            ('line_color', 'i'),
+            ('line_width', 'i'),
+            ('ww_level', 'i'),
+            ('number_points', 'i'),
+        ]
+
+        brkpt = self._buffer(break_info, self.prefmt, 'BreakPointInfo')
+
+        break_meta = [
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('name', '256s', self._decode_strip_null),
+        ]
+
+        break_struct = NamedStruct(break_meta, self.prefmt, 'BreakPoint')
+
+        breakpoints = []
+        for _ in range(brkpt.number_points):
+            bp = self._buffer.read_struct(break_struct)
+            breakpoints.append(BreakPointAttribute(bp.lat, bp.lon, bp.name))
+
+        self._elements.append(
+            TropicalCycloneBreakPointElement(
+                header_struct,
+                tc.storm_number,
+                tc.issue_status,
+                tc.basin,
+                tc.advisory_number,
+                tc.storm_name,
+                tc.storm_type,
+                tc.valid_time,
+                tc.timezone,
+                tc.forecast_period,
+                brkpt.line_color,
+                brkpt.line_width,
+                brkpt.ww_level,
+                brkpt.number_points,
+                breakpoints,
+            )
+        )
+
+    def _decode_sgwx(self, header_struct):
+        """Decode significant weather element."""
+        sgwx_info = [
+            ('subtype', 'i'),
+            ('number_points', 'i'),
+            ('text_lat', 'f', partial(round, ndigits=2)),
+            ('text_lon', 'f', partial(round, ndigits=2)),
+            ('arrow_lat', 'f', partial(round, ndigits=2)),
+            ('arrow_lon', 'f', partial(round, ndigits=2)),
+            ('line_element', 'i'),
+            ('line_type', 'i'),
+            ('line_width', 'i'),
+            ('arrow_size', 'f', partial(round, ndigits=1)),
+            ('special_symbol', 'i'),
+            ('weather_symbol', 'i'),
+        ]
+
+        sgwx = self._buffer.read_struct(NamedStruct(sgwx_info, self.prefmt, 'SGWXInfo'))
+
+        special_text_info = [
+            ('rotation', 'f', partial(round, ndigits=1)),
+            ('text_size', 'f', partial(round, ndigits=3)),
+            ('text_type', 'i'),
+            ('turbulence_symbol', 'i'),
+            ('font', 'i'),
+            ('text_flag', 'i'),
+            ('width', 'i'),
+            ('text_color', 'i'),
+            ('line_color', 'i'),
+            ('fill_color', 'i'),
+            ('align', 'i'),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+            ('offset_x', 'i'),
+            ('offset_y', 'i'),
+        ]
+
+        text = self._buffer.read_struct(
+            NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
+        )
+
+        lat, lon = self._get_latlon(sgwx.number_points)
+
+        self._elements.append(
+            SignificantWeatherElement(
+                header_struct,
+                sgwx.subtype,
+                sgwx.number_points,
+                sgwx.text_lat,
+                sgwx.text_lon,
+                sgwx.arrow_lat,
+                sgwx.arrow_lon,
+                sgwx.line_element,
+                sgwx.line_type,
+                sgwx.line_width,
+                sgwx.arrow_size,
+                sgwx.special_symbol,
+                sgwx.weather_symbol,
+                text.rotation,
+                text.text_size,
+                text.text_type,
+                text.turbulence_symbol,
+                text.font,
+                text.text_flag,
+                text.text_width,
+                text.text_color,
+                text.line_color,
+                text.fill_color,
+                text.text_align,
+                text.offset_x,
+                text.offset_y,
+                text.text,
+                lat,
+                lon,
+            )
+        )
+
+        self._buffer.skip((MAX_SGWX_POINTS - sgwx.number_points) * 4)
+
+    def _decode_watches(self, header_struct):
+        """Decode watch elements."""
+        match header_struct.version:
+            case 0:
+                watch_info = [
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('watch_type', 'i'),
+                    ('number', 'i'),
+                    ('filename', '128s', self._decode_strip_null),
+                    ('shape', 'i'),
+                ]
+
+                watch = self._buffer.read_struct(
+                    NamedStruct(watch_info, self.prefmt, 'WatchBoxInfo')
                 )
 
-                # sztext seems to always be little endian. It is not swapped like other
-                # elements in the storm track struct. See storm track section of cvgswap.c.
-                track_font_size = round(self._buffer.read_binary(1, '<f')[0], 1)
+                county_fips = np.array([], dtype=f'{self.prefmt}i')
 
-                times = [
-                    self._buffer.read_ascii(TRACK_DT_SIZE).replace('\x00', '')
-                    for _n in range(track.total_points)
+                county_status = np.array([], dtype=f'{self.prefmt}i4')
+
+                county_lat = np.array([], dtype=f'{self.prefmt}f')
+                county_lon = np.array([], dtype=f'{self.prefmt}f')
+
+                lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+                lon = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+
+                # Manually close watch parallelogram
+                if watch.number_points > 2:
+                    lon, lat = self.close_coordinates(lon, lat)
+            case 1:
+                watch_info = [
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('shape', 'i'),
+                    ('status', 'i'),
+                    ('number', 'i'),
+                    ('issue_time', '20s', self._decode_strip_null),
+                    ('expire_time', '20s', self._decode_strip_null),
+                    ('watch_type', 'i'),
+                    ('severity', 'i'),
+                    ('timezone', '4s', self._decode_strip_null),
+                    ('max_hail', '8s', self._decode_strip_null),
+                    ('max_wind', '8s', self._decode_strip_null),
+                    ('max_tops', '8s', self._decode_strip_null),
+                    ('mean_storm_direction', '8s', self._decode_strip_null),
+                    ('mean_storm_speed', '8s', self._decode_strip_null),
+                    ('states', '20s', self._decode_strip_null),
+                    ('adjacent_areas', '20s', self._decode_strip_null),
+                    ('replacing', '24s', self._decode_strip_null),
+                    ('forecaster', '64s', self._decode_strip_null),
+                    ('filename', '128s', self._decode_strip_null),
+                    ('issue_flag', 'i'),
+                    ('wsm_issue_time', '20s', self._decode_strip_null),
+                    ('wsm_expire_time', '20s', self._decode_strip_null),
+                    ('wsm_reference_direction', '32s', self._decode_strip_null),
+                    ('wsm_recent_from_line', '128s', self._decode_strip_null),
+                    ('wsm_md_number', '8s', self._decode_strip_null),
+                    ('wsm_forecaster', '64s', self._decode_strip_null),
                 ]
 
-                blank_times_size = (MAX_TRACKS - track.total_points) * TRACK_DT_SIZE
-                self._buffer.skip(blank_times_size)
-
-                lat, lon = self._get_latlon(track.total_points)
-                blank_latlon_size = 8 * (MAX_TRACKS - track.total_points)
-                self._buffer.skip(blank_latlon_size)
-
-                self._elements.append(
-                    TrackElement(
-                        header_struct,
-                        track.track_type,
-                        track.total_points,
-                        track.initial_points,
-                        track.initial_line_type,
-                        track.extrapolated_line_type,
-                        track.initial_mark_type,
-                        track.extrapolated_mark_type,
-                        track.line_width,
-                        track.speed,
-                        track.direction,
-                        track.increment,
-                        track.skip,
-                        track.font,
-                        track.font_flag,
-                        track_font_size,
-                        times,
-                        lat,
-                        lon,
-                    )
+                watch = self._buffer.read_struct(
+                    NamedStruct(watch_info, self.prefmt, 'WatchBoxInfo')
                 )
-            elif vg_class == VGClass.sigmets:
-                if vg_type in [
-                    VGType.convective_outlook,
-                    VGType.convective_sigmet,
-                    VGType.nonconvective_sigmet,
-                    VGType.airmet,
-                    VGType.international_sigmet,
-                ]:
-                    sigmet_info = [
-                        ('subtype', 'i'),
-                        ('number_points', 'i'),
-                        ('line_type', 'i'),
-                        ('line_width', 'i'),
-                        ('side_of_line', 'i'),
-                        ('area', '8s', self._decode_strip_null),
-                        ('flight_info_region', '32s', self._decode_strip_null),
-                        ('status', 'i'),
-                        ('distance', 'f'),
-                        ('message_id', '12s', self._decode_strip_null),
-                        ('sequence_number', 'i'),
-                        ('start_time', '20s', self._decode_strip_null),
-                        ('end_time', '20s', self._decode_strip_null),
-                        ('remarks', '80s', self._decode_strip_null),
-                        ('sonic', 'i'),
-                        ('phenomena', '32s', self._decode_strip_null),
-                        ('phenomena2', '32s', self._decode_strip_null),
-                        ('phenomena_name', '36s', self._decode_strip_null),
-                        ('phenomena_lat', '8s', self._decode_strip_null),
-                        ('phenomena_lon', '8s', self._decode_strip_null),
-                        ('pressure', 'i'),
-                        ('max_wind', 'i'),
-                        ('free_text', '256s', self._decode_strip_null),
-                        ('trend', '8s', self._decode_strip_null),
-                        ('movement', '8s', self._decode_strip_null),
-                        ('type_indicator', 'i'),
-                        ('type_time', '20s', self._decode_strip_null),
-                        ('flight_level', 'i'),
-                        ('speed', 'i'),
-                        ('direction', '4s', self._decode_strip_null),
-                        ('tops', '80s', self._decode_strip_null),
-                        ('forecaster', '16s', self._decode_strip_null),
-                    ]
 
-                    sigmet = self._buffer.read_struct(
-                        NamedStruct(sigmet_info, self.prefmt, 'SigmetInfo')
-                    )
-
-                    lat = self._buffer.read_array(sigmet.number_points, f'{self.prefmt}f')
-                    lon = self._buffer.read_array(sigmet.number_points, f'{self.prefmt}f')
-
-                    self._elements.append(
-                        SigmetElement(
-                            header_struct,
-                            sigmet.subtype,
-                            sigmet.number_points,
-                            sigmet.line_type,
-                            sigmet.line_width,
-                            sigmet.side_of_line,
-                            sigmet.area,
-                            sigmet.flight_info_region,
-                            sigmet.area,
-                            sigmet.distance,
-                            sigmet.message_id,
-                            sigmet.sequence_number,
-                            sigmet.start_time,
-                            sigmet.end_time,
-                            sigmet.remarks,
-                            sigmet.sonic,
-                            sigmet.phenomena,
-                            sigmet.phenomena2,
-                            sigmet.phenomena_name,
-                            sigmet.phenomena_lat,
-                            sigmet.phenomena_lon,
-                            sigmet.pressure,
-                            sigmet.max_wind,
-                            sigmet.free_text,
-                            sigmet.trend,
-                            sigmet.movement,
-                            sigmet.type_indicator,
-                            sigmet.type_time,
-                            sigmet.flight_level,
-                            sigmet.speed,
-                            sigmet.direction,
-                            sigmet.tops,
-                            sigmet.forecaster,
-                            lat,
-                            lon,
-                        )
-                    )
-                elif vg_type == VGType.ccf:
-                    ccf_info = [
-                        ('subtype', 'i'),
-                        ('number_points', 'i'),
-                        ('coverage', 'i'),
-                        ('storm_tops', 'i'),
-                        ('probability', 'i'),
-                        ('growth', 'i'),
-                        ('speed', 'f', partial(round, ndigits=2)),
-                        ('direction', 'f', partial(round, ndigits=2)),
-                    ]
-
-                    # See cvgswap.c in GEMPAK source. These are not swapped.
-                    ccf_info_noswap = [
-                        ('text_lat', 'f', partial(round, ndigits=2)),
-                        ('text_lon', 'f', partial(round, ndigits=2)),
-                        ('arrow_lat', 'f', partial(round, ndigits=2)),
-                        ('arrow_lon', 'f', partial(round, ndigits=2)),
-                        ('high_fill', 'i'),
-                        ('med_fill', 'i'),
-                        ('low_fill', 'i'),
-                        ('line_type', 'i'),
-                        ('arrow_size', 'f', partial(round, ndigits=1)),
-                    ]
-
-                    ccf = self._buffer.read_struct(
-                        NamedStruct(ccf_info, self.prefmt, 'CCFInfo')
-                    )
-
-                    ccf_noswap = self._buffer.read_struct(
-                        NamedStruct(ccf_info_noswap, '', 'CCFInfoRaw')
-                    )
-
-                    # Because of how CCF elements are handled, swapping does not occur on
-                    # the special text element in the struct. We handle that manually here
-                    # for the few attributes it affects. See cvgswap.c in GEMPAK source.
-                    ccf_text_info = [
-                        ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)),
-                        ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'),
-                        ('font', 'i', self._swap32),
-                        ('text_flag', 'i', self._swap32),
-                        ('width', 'i', self._swap32),
-                        ('text_color', 'i'),
-                        ('line_color', 'i'),
-                        ('fill_color', 'i'),
-                        ('align', 'i'),
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'),
-                        ('offset_y', 'i'),
-                        ('text', '255s', self._decode_strip_null),
-                        (None, '1x'),  # skip struct alignment padding byte
-                    ]
-
-                    ccf_text = self._buffer.read_struct(
-                        NamedStruct(ccf_text_info, self.prefmt, 'CCFTextInfo')
-                    )
-
-                    text_layout = self._buffer.read_ascii(256).replace('\x00', '')
-
-                    lat, lon = self._get_latlon(ccf.number_points)
-
-                    self._elements.append(
-                        CollaborativeConvectiveForecastElement(
-                            header_struct,
-                            ccf.subtype,
-                            ccf.number_points,
-                            ccf.coverage,
-                            ccf.storm_tops,
-                            ccf.probability,
-                            ccf.growth,
-                            ccf.speed,
-                            ccf.direction,
-                            ccf_noswap.text_lat,
-                            ccf_noswap.text_lon,
-                            ccf_noswap.arrow_lat,
-                            ccf_noswap.arrow_lon,
-                            ccf_noswap.high_fill,
-                            ccf_noswap.med_fill,
-                            ccf_noswap.low_fill,
-                            ccf_noswap.line_type,
-                            ccf_noswap.arrow_size,
-                            ccf_text.rotation,
-                            ccf_text.text_size,
-                            ccf_text.text_type,
-                            ccf_text.turbulence_symbol,
-                            ccf_text.font,
-                            ccf_text.text_flag,
-                            ccf_text.width,
-                            ccf_text.fill_color,
-                            ccf_text.align,
-                            ccf_text.offset_x,
-                            ccf_text.offset_y,
-                            ccf_text.text,
-                            text_layout,
-                            lat,
-                            lon,
-                        )
-                    )
-                    self._buffer.skip((MAX_SIGMET - ccf.number_points) * 8)
-                elif vg_type == VGType.volcano:
-                    volcano_info = [
-                        ('name', '64s', self._decode_strip_null),
-                        ('code', 'f', partial(round, ndigits=1)),
-                        ('size', 'f', partial(round, ndigits=1)),
-                        ('width', 'i'),
-                        ('number', '17s', self._decode_strip_null),
-                        ('location', '17s', self._decode_strip_null),
-                        ('area', '33s', self._decode_strip_null),
-                        ('origin_station', '17s', self._decode_strip_null),
-                        ('vaac', '33s', self._decode_strip_null),
-                        ('wmo_id', '8s', self._decode_strip_null),
-                        ('header_number', '9s', self._decode_strip_null),
-                        ('elevation', '9s', self._decode_strip_null),
-                        ('year', '9s', self._decode_strip_null),
-                        ('advisory_number', '9s', self._decode_strip_null),
-                        ('correction', '4s', self._decode_strip_null),
-                        ('info_source', '256s', self._decode_strip_null),
-                        ('additional_source', '256s', self._decode_strip_null),
-                        ('aviation_color', '16s', self._decode_strip_null),
-                        ('details', '256s', self._decode_strip_null),
-                        ('obs_date', '16s', self._decode_strip_null),
-                        ('obs_time', '16s', self._decode_strip_null),
-                        ('obs_ash', '1024s', self._decode_strip_null),
-                        ('forecast_6hr', '1024s', self._decode_strip_null),
-                        ('forecast_12hr', '1024s', self._decode_strip_null),
-                        ('forecast_18hr', '1024s', self._decode_strip_null),
-                        ('remarks', '512s', self._decode_strip_null),
-                        ('next_advisory', '128s', self._decode_strip_null),
-                        ('forecaster', '64s', self._decode_strip_null),
-                        (None, '3x'),  # skip struct alignment padding bytes
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'),
-                        ('offset_y', 'i'),
-                    ]
-
-                    volcano = self._buffer.read_struct(
-                        NamedStruct(volcano_info, self.prefmt, 'VolcanoInfo')
-                    )
-
-                    self._elements.append(
-                        VolcanoElement(
-                            header_struct,
-                            volcano.name,
-                            volcano.code,
-                            volcano.size,
-                            volcano.width,
-                            volcano.number,
-                            volcano.location,
-                            volcano.area,
-                            volcano.origin_station,
-                            volcano.vaac,
-                            volcano.wmo_id,
-                            volcano.header_number,
-                            volcano.elevation,
-                            volcano.year,
-                            volcano.advisory_number,
-                            volcano.correction,
-                            volcano.info_source,
-                            volcano.additional_source,
-                            volcano.aviation_color,
-                            volcano.details,
-                            volcano.obs_date,
-                            volcano.obs_time,
-                            volcano.obs_ash,
-                            volcano.forecast_6hr,
-                            volcano.forecast_12hr,
-                            volcano.forecast_18hr,
-                            volcano.remarks,
-                            volcano.next_advisory,
-                            volcano.forecaster,
-                            volcano.offset_x,
-                            volcano.offset_y,
-                            volcano.lat,
-                            volcano.lon,
-                        )
-                    )
-                elif vg_type == VGType.ash_cloud:
-                    ash_info = [
-                        ('subtype', 'i'),
-                        ('number_points', 'i'),
-                        ('distance', 'f', partial(round, ndigits=2)),
-                        ('forecast_hour', 'i'),
-                        ('line_type', 'i'),
-                        ('line_width', 'i'),
-                        ('side_of_line', 'i'),
-                        ('speed', 'f', partial(round, ndigits=2)),
-                        ('speeds', '16s', self._decode_strip_null),
-                        ('direction', '4s', self._decode_strip_null),
-                        ('flight_level_1', '16s', self._decode_strip_null),
-                        ('flight_level_2', '16s', self._decode_strip_null),
-                    ]
-
-                    ash = self._buffer.read_struct(
-                        NamedStruct(ash_info, self.prefmt, 'AshInfo')
-                    )
-
-                    special_text_info = [
-                        ('rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)),
-                        ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'),
-                        ('font', 'i'),
-                        ('text_flag', 'i'),
-                        ('width', 'i'),
-                        ('text_color', 'i'),
-                        ('line_color', 'i'),
-                        ('fill_color', 'i'),
-                        ('align', 'i'),
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'),
-                        ('offset_y', 'i'),
-                    ]
-
-                    text = self._buffer.read_struct(
-                        NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
-                    )
-
-                    text_string = self._buffer.read_ascii(255).replace('\x00', '')
-                    self._buffer.skip(1)  # skip byte for struct alignment
-
-                    lat, lon = self._get_latlon(ash.number_points)
-                    self._buffer.skip((MAX_ASH - ash.number_points) * 8)
-
-                    self._elements.append(
-                        AshCloudElement(
-                            header_struct,
-                            ash.subtype,
-                            ash.number_points,
-                            ash.distance,
-                            ash.forecast_hour,
-                            ash.line_type,
-                            ash.line_width,
-                            ash.side_of_line,
-                            ash.speed,
-                            ash.speeds,
-                            ash.direction,
-                            ash.flight_level_1,
-                            ash.flight_level_2,
-                            text.rotation,
-                            text.text_size,
-                            text.text_type,
-                            text.turbulence_symbol,
-                            text.font,
-                            text.text_flag,
-                            text.width,
-                            text.text_color,
-                            text.line_color,
-                            text.fill_color,
-                            text.align,
-                            text.lat,
-                            text.lon,
-                            text.offset_x,
-                            text.offset_y,
-                            text_string,
-                            lat,
-                            lon,
-                        )
-                    )
-                else:
-                    raise NotImplementedError(f'SIGMET type `{vg_type}` not implemented.')
-            elif vg_class == VGClass.met:
-                if vg_type == VGType.gfa:
-                    gfa_info = [('number_blocks', 'i'), ('number_points', 'i')]
-
-                    gfa = self._buffer.read_struct(
-                        NamedStruct(gfa_info, self.prefmt, 'GFAInfo')
-                    )
-
-                    blocks = []
-                    for _ in range(gfa.number_blocks):
-                        blocks.append(
-                            self._decode_strip_null(self._buffer.read_binary(1024, 's')[0])
-                        )
-
-                    lat, lon = self._get_latlon(gfa.number_points)
-
-                    self._elements.append(
-                        GraphicalForecastAreaElement(
-                            header_struct,
-                            gfa.number_blocks,
-                            gfa.number_points,
-                            blocks,
-                            lat,
-                            lon,
-                        )
-                    )
-                elif vg_type == VGType.jet:
-                    jet_line_info = [
-                        ('line_color', 'i'),
-                        ('number_points', 'i'),
-                        ('line_type', 'i'),
-                        ('stroke', 'i'),
-                        ('direction', 'i'),
-                        ('size', 'f', partial(round, ndigits=1)),
-                        ('width', 'i'),
-                    ]
-                    jet_line = self._buffer.read_struct(
-                        NamedStruct(jet_line_info, self.prefmt, 'JetLineInfo')
-                    )
-                    jet_line_lat, jet_line_lon = self._get_latlon(jet_line.number_points)
-                    line_attr = LineAttribute(
-                        jet_line.line_color,
-                        jet_line.number_points,
-                        jet_line.line_type,
-                        jet_line.stroke,
-                        jet_line.direction,
-                        jet_line.size,
-                        jet_line.width,
-                        jet_line_lat,
-                        jet_line_lon,
-                    )
-
-                    self._buffer.skip((MAX_POINTS - jet_line.number_points) * 8)
-
-                    number_barbs = self._buffer.read_int(4, 'big', False)
-
-                    jet_barb_info = [
-                        ('wind_color', 'i'),
-                        ('number_wind', 'i'),
-                        ('width', 'i'),
-                        ('size', 'f', partial(round, ndigits=1)),
-                        ('wind_type', 'i'),
-                        ('head_size', 'f', partial(round, ndigits=1)),
-                        ('speed', 'f', partial(round, ndigits=2)),
-                        ('direction', 'f', partial(round, ndigits=2)),
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                        ('flight_level_color', 'i'),
-                        ('text_rotation', 'f', partial(round, ndigits=1)),
-                        ('text_size', 'f', partial(round, ndigits=3)),
-                        ('text_type', 'i'),
-                        ('turbulence_symbol', 'i'),
-                        ('font', 'i'),
-                        ('text_flag', 'i'),
-                        ('text_width', 'i'),
-                        ('text_color', 'i'),
-                        ('line_color', 'i'),
-                        ('fill_color', 'i'),
-                        ('align', 'i'),
-                        ('text_lat', 'f', partial(round, ndigits=2)),
-                        ('text_lon', 'f', partial(round, ndigits=2)),
-                        ('offset_x', 'i'),
-                        ('offset_y', 'i'),
-                        ('text', '255s', self._decode_strip_null),
-                        (None, '1x'),  # skip struct alignment padding byte
-                    ]
-
-                    barbs = []
-                    barb_struct = NamedStruct(jet_barb_info, self.prefmt, 'JetBarbInfo')
-                    for _ in range(number_barbs):
-                        jet_barb = self._buffer.read_struct(barb_struct)
-
-                        barbs.append(
-                            BarbAttribute(
-                                jet_barb.wind_color,
-                                jet_barb.number_wind,
-                                jet_barb.width,
-                                jet_barb.size,
-                                jet_barb.wind_type,
-                                jet_barb.head_size,
-                                jet_barb.speed,
-                                jet_barb.direction,
-                                jet_barb.lat,
-                                jet_barb.lon,
-                                jet_barb.flight_level_color,
-                                jet_barb.text_rotation,
-                                jet_barb.text_size,
-                                jet_barb.text_type,
-                                jet_barb.turbulence_symbol,
-                                jet_barb.font,
-                                jet_barb.text_flag,
-                                jet_barb.text_width,
-                                jet_barb.text_color,
-                                jet_barb.line_color,
-                                jet_barb.fill_color,
-                                jet_barb.align,
-                                jet_barb.text_lat,
-                                jet_barb.text_lon,
-                                jet_barb.offset_x,
-                                jet_barb.offset_y,
-                                jet_barb.text,
-                            )
-                        )
-
-                    self._buffer.skip((MAX_JET_POINTS - number_barbs) * barb_struct.size)
-
-                    number_hash = self._buffer.read_int(4, 'big', False)
-
-                    jet_hash_info = [
-                        ('wind_color', 'i'),
-                        ('number_wind', 'i'),
-                        ('width', 'i'),
-                        ('size', 'f', partial(round, ndigits=1)),
-                        ('wind_type', 'i'),
-                        ('head_size', 'f', partial(round, ndigits=1)),
-                        ('speed', 'f', partial(round, ndigits=2)),
-                        ('direction', 'f', partial(round, ndigits=2)),
-                        ('lat', 'f', partial(round, ndigits=2)),
-                        ('lon', 'f', partial(round, ndigits=2)),
-                    ]
-
-                    hashes = []
-                    hash_struct = NamedStruct(jet_hash_info, self.prefmt, 'JetHashInfo')
-                    for _ in range(number_hash):
-                        jet_hash = self._buffer.read_struct(hash_struct)
-
-                        hashes.append(
-                            HashAttribute(
-                                jet_hash.wind_color,
-                                jet_hash.number_wind,
-                                jet_hash.width,
-                                jet_hash.size,
-                                jet_hash.wind_type,
-                                jet_hash.head_size,
-                                jet_hash.speed,
-                                jet_hash.direction,
-                                jet_hash.lat,
-                                jet_hash.lon,
-                            )
-                        )
-
-                    self._buffer.skip((MAX_JET_POINTS - number_hash) * hash_struct.size)
-
-                    self._elements.append(
-                        JetElement(
-                            header_struct, line_attr, number_barbs, barbs, number_hash, hashes
-                        )
-                    )
-                elif vg_type == VGType.tca:
-                    tca_string_length = header_struct.record_size - VGF_HEADER_SIZE
-                    tca_string = self._buffer.read_ascii(tca_string_length)
-
-                    storm_number = int(
-                        re.search(r'(?<=<tca_stormNum>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    issue_status = re.search(
-                        r'(?<=<tca_issueStatus>)(.+?)(?=<)', tca_string
-                    ).group()
-
-                    basin = int(re.search(r'(?<=<tca_basin>)(.+?)(?=<)', tca_string).group())
-
-                    advisory_number = int(
-                        re.search(r'(?<=<tca_advisoryNum>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    storm_name = re.search(
-                        r'(?<=<tca_stormName>)(.+?)(?=<)', tca_string
-                    ).group()
-
-                    storm_type = int(
-                        re.search(r'(?<=<tca_stormType>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    valid = re.search(r'(?<=<tca_validTime>)(.+?)(?=<)', tca_string).group()
-
-                    tz = re.search(r'(?<=<tca_timezone>)(.+?)(?=<)', tca_string).group()
-
-                    text_lat = float(
-                        re.search(r'(?<=<tca_textLat>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    text_lon = float(
-                        re.search(r'(?<=<tca_textLon>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    text_font = int(
-                        re.search(r'(?<=<tca_textFont>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    text_size = float(
-                        re.search(r'(?<=<tca_textSize>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    text_width = int(
-                        re.search(r'(?<=<tca_textWidth>)(.+?)(?=<)', tca_string).group()
-                    )
-
-                    wwnum = int(re.search(r'(?<=<tca_wwNum>)(.+?)(?=<)', tca_string).group())
-
-                    ww = []
-                    for n in range(wwnum):
-                        wwstr = re.search(
-                            rf'(?<=<tca_tcawwStr_{n}>)(.+?)(?=<)', tca_string
-                        ).group()
-                        nbreaks = int(
-                            re.search(
-                                rf'(?<=<tca_numBreakPts_{n}>)(.+?)(?=<)', tca_string
-                            ).group()
-                        )
-                        breakpts = re.search(
-                            rf'(?<=<tca_breakPts_{n}>)(.+?)(?=<|$)', tca_string
-                        ).group()
-
-                        severity, advisory_type, special_geog = wwstr.split('|')
-
-                        parsed_breaks = np.array_split(breakpts.split('|'), nbreaks)
-                        decode_breaks = [
-                            [float(lat), float(lon), bname]
-                            for lat, lon, bname in parsed_breaks
-                        ]
-
-                        ww.append(
-                            {
-                                'severity': Severity(int(severity)),
-                                'advisory_type': AdvisoryType(int(advisory_type)),
-                                'special_geography': SpecialGeography(int(special_geog)),
-                                'number_breaks': nbreaks,
-                                'break_points': decode_breaks,
-                            }
-                        )
-
-                        self._elements.append(
-                            TropicalCycloneAdvisoryElement(
-                                header_struct,
-                                storm_number,
-                                issue_status,
-                                basin,
-                                advisory_number,
-                                storm_name,
-                                storm_type,
-                                valid,
-                                tz,
-                                text_lat,
-                                text_lon,
-                                text_font,
-                                text_size,
-                                text_width,
-                                wwnum,
-                                ww,
-                            )
-                        )
-                elif vg_type in [
-                    VGType.tc_error_cone,
-                    VGType.tc_track,
-                    VGType.tc_break_point,
-                ]:
-                    tc_info = [
-                        ('storm_number', '5s', self._decode_strip_null),
-                        ('issue_status', '2s', self._decode_strip_null),
-                        ('basin', '5s', self._decode_strip_null),
-                        ('advisory_number', '5s', self._decode_strip_null),
-                        ('storm_name', '128s', self._decode_strip_null),
-                        ('storm_type', '5s', self._decode_strip_null),
-                        ('valid_time', '21s', self._decode_strip_null),
-                        ('timezone', '4s', self._decode_strip_null),
-                        ('forecast_period', '5s', self._decode_strip_null),
-                    ]
-
-                    tc = self._buffer.read_struct(NamedStruct(tc_info, self.prefmt, 'TCInfo'))
-
-                    if vg_type == VGType.tc_error_cone:
-                        cone_info = [
-                            ('line_color', 'i'),
-                            ('line_type', 'i'),
-                            ('fill_color', 'i'),
-                            ('fill_type', 'i'),
-                            ('number_points', 'i'),
-                        ]
-
-                        cone = self._buffer.read_struct(
-                            NamedStruct(cone_info, self.prefmt, 'TCConeInfo')
-                        )
-
-                        lat, lon = self._get_latlon(cone.number_points)
-
-                        self._elements.append(
-                            TropicalCycloneErrorElement(
-                                header_struct,
-                                tc.storm_number,
-                                tc.issue_status,
-                                tc.basin,
-                                tc.advisory_number,
-                                tc.storm_name,
-                                tc.storm_type,
-                                tc.valid_time,
-                                tc.timezone,
-                                tc.forecast_period,
-                                cone.line_color,
-                                cone.line_type,
-                                cone.fill_color,
-                                cone.fill_type,
-                                cone.number_points,
-                                lat,
-                                lon,
-                            )
-                        )
-                    elif vg_type == VGType.tc_track:
-                        track_info = [
-                            ('line_color', 'i'),
-                            ('line_type', 'i'),
-                            ('number_points', 'i'),
-                        ]
-
-                        track = self._buffer.read_struct(
-                            NamedStruct(track_info, self.prefmt, 'TCTrackInfo')
-                        )
-
-                        track_point_info = [
-                            ('lat', 'f', partial(round, ndigits=2)),
-                            ('lon', 'f', partial(round, ndigits=2)),
-                            ('advisory_date', '50s', self._decode_strip_null),
-                            ('tau', '50s', self._decode_strip_null),
-                            ('max_wind', '50s', self._decode_strip_null),
-                            ('wind_gust', '50s', self._decode_strip_null),
-                            ('minimum_pressure', '50s', self._decode_strip_null),
-                            ('development_level', '50s', self._decode_strip_null),
-                            ('development_label', '50s', self._decode_strip_null),
-                            ('direction', '50s', self._decode_strip_null),
-                            ('speed', '50s', self._decode_strip_null),
-                            ('date_label', '50s', self._decode_strip_null),
-                            ('storm_source', '50s', self._decode_strip_null),
-                            (None, '2x'),  # skip struct alignment padding bytes
-                        ]
-
-                        point_struct = NamedStruct(
-                            track_point_info, self.prefmt, 'TrackPointInfo'
-                        )
-
-                        track_points = []
-                        for _ in range(track.number_points):
-                            pt = self._buffer.read_struct(point_struct)
-                            track_points.append(
-                                TrackAttribute(
-                                    pt.advisory_date,
-                                    pt.tau,
-                                    pt.max_wind,
-                                    pt.wind_gust,
-                                    pt.minimum_pressure,
-                                    pt.development_level,
-                                    pt.development_label,
-                                    pt.direction,
-                                    pt.speed,
-                                    pt.date_label,
-                                    pt.storm_source,
-                                    pt.lat,
-                                    pt.lon,
-                                )
-                            )
-
-                        self.elements.append(
-                            TropicalCycloneTrackElement(
-                                header_struct,
-                                tc.storm_number,
-                                tc.issue_status,
-                                tc.basin,
-                                tc.advisory_number,
-                                tc.storm_name,
-                                tc.storm_type,
-                                tc.valid_time,
-                                tc.timezone,
-                                tc.forecast_period,
-                                track.line_color,
-                                track.line_type,
-                                track.number_points,
-                                track_points,
-                            )
-                        )
-                    elif vg_type == VGType.tc_break_point:
-                        break_info = [
-                            ('line_color', 'i'),
-                            ('line_width', 'i'),
-                            ('ww_level', 'i'),
-                            ('number_points', 'i'),
-                        ]
-
-                        brkpt = self._buffer(break_info, self.prefmt, 'BreakPointInfo')
-
-                        break_meta = [
-                            ('lat', 'f', partial(round, ndigits=2)),
-                            ('lon', 'f', partial(round, ndigits=2)),
-                            ('name', '256s', self._decode_strip_null),
-                        ]
-
-                        break_struct = NamedStruct(break_meta, self.prefmt, 'BreakPoint')
-
-                        breakpoints = []
-                        for _ in range(brkpt.number_points):
-                            bp = self._buffer.read_struct(break_struct)
-                            breakpoints.append(BreakPointAttribute(bp.lat, bp.lon, bp.name))
-
-                        self._elements.append(
-                            TropicalCycloneBreakPointElement(
-                                header_struct,
-                                tc.storm_number,
-                                tc.issue_status,
-                                tc.basin,
-                                tc.advisory_number,
-                                tc.storm_name,
-                                tc.storm_type,
-                                tc.valid_time,
-                                tc.timezone,
-                                tz.forecast_period,
-                                brkpt.line_color,
-                                brkpt.line_width,
-                                brkpt.ww_level,
-                                brkpt.number_points,
-                                breakpoints,
-                            )
-                        )
-                    elif vg_type == VGType.sgwx:
-                        sgwx_info = [
-                            ('subtype', 'i'),
-                            ('number_points', 'i'),
-                            ('text_lat', 'f', partial(round, ndigits=2)),
-                            ('text_lon', 'f', partial(round, ndigits=2)),
-                            ('arrow_lat', 'f', partial(round, ndigits=2)),
-                            ('arrow_lon', 'f', partial(round, ndigits=2)),
-                            ('line_element', 'i'),
-                            ('line_type', 'i'),
-                            ('line_width', 'i'),
-                            ('arrow_size', 'f', partial(round, ndigits=1)),
-                            ('special_symbol', 'i'),
-                            ('weather_symbol', 'i'),
-                        ]
-
-                        sgwx = self._buffer.read_struct(
-                            NamedStruct(sgwx_info, self.prefmt, 'SGWXInfo')
-                        )
-
-                        special_text_info = [
-                            ('rotation', 'f', partial(round, ndigits=1)),
-                            ('text_size', 'f', partial(round, ndigits=3)),
-                            ('text_type', 'i'),
-                            ('turbulence_symbol', 'i'),
-                            ('font', 'i'),
-                            ('text_flag', 'i'),
-                            ('width', 'i'),
-                            ('text_color', 'i'),
-                            ('line_color', 'i'),
-                            ('fill_color', 'i'),
-                            ('align', 'i'),
-                            ('lat', 'f', partial(round, ndigits=2)),
-                            ('lon', 'f', partial(round, ndigits=2)),
-                            ('offset_x', 'i'),
-                            ('offset_y', 'i'),
-                        ]
-
-                        text = self._buffer.read_struct(
-                            NamedStruct(special_text_info, self.prefmt, 'SpecialTextInfo')
-                        )
-
-                        lat, lon = self._get_latlon(sgwx.number_points)
-
-                        self._elements.append(
-                            SignificantWeatherElement(
-                                header_struct,
-                                sgwx.subtype,
-                                sgwx.number_points,
-                                sgwx.text_lat,
-                                sgwx.text_lon,
-                                sgwx.arrow_lat,
-                                sgwx.arrow_lon,
-                                sgwx.line_element,
-                                sgwx.line_type,
-                                sgwx.line_width,
-                                sgwx.arrow_size,
-                                sgwx.special_symbol,
-                                sgwx.weather_symbol,
-                                text.rotation,
-                                text.text_size,
-                                text.text_type,
-                                text.turbulence_symbol,
-                                text.font,
-                                text.text_flag,
-                                text.text_width,
-                                text.text_color,
-                                text.line_color,
-                                text.fill_color,
-                                text.text_align,
-                                text.offset_x,
-                                text.offset_y,
-                                text.text,
-                                lat,
-                                lon,
-                            )
-                        )
-
-                        self._buffer.skip((MAX_SGWX_POINTS - sgwx.number_points) * 4)
-                else:
-                    raise NotImplementedError(f'MET type `{vg_type}` not implemented.')
-            elif vg_class == VGClass.watches:
+                county_fips = np.array([], dtype=f'{self.prefmt}i')
+
+                county_status = np.array([], dtype=f'{self.prefmt}i4')
+
+                county_lat = np.array([], dtype=f'{self.prefmt}f')
+                county_lon = np.array([], dtype=f'{self.prefmt}f')
+
+                lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+                lon = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+
+                # Manually close watch parallelogram
+                if watch.number_points > 2:
+                    lon, lat = self.close_coordinates(lon, lat)
+            case 2:
+                watch_info = [
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('shape', 'i'),
+                    ('status', 'i'),
+                    ('number', 'i'),
+                    ('issue_time', '20s', self._decode_strip_null),
+                    ('expire_time', '20s', self._decode_strip_null),
+                    ('watch_type', 'i'),
+                    ('severity', 'i'),
+                    ('timezone', '4s', self._decode_strip_null),
+                    ('max_hail', '8s', self._decode_strip_null),
+                    ('max_wind', '8s', self._decode_strip_null),
+                    ('max_tops', '8s', self._decode_strip_null),
+                    ('mean_storm_direction', '8s', self._decode_strip_null),
+                    ('mean_storm_speed', '8s', self._decode_strip_null),
+                    ('states', '20s', self._decode_strip_null),
+                    ('adjacent_areas', '20s', self._decode_strip_null),
+                    ('replacing', '24s', self._decode_strip_null),
+                    ('forecaster', '64s', self._decode_strip_null),
+                    ('filename', '128s', self._decode_strip_null),
+                    ('issue_flag', 'i'),
+                    ('wsm_issue_time', '20s', self._decode_strip_null),
+                    ('wsm_expire_time', '20s', self._decode_strip_null),
+                    ('wsm_reference_direction', '32s', self._decode_strip_null),
+                    ('wsm_recent_from_line', '128s', self._decode_strip_null),
+                    ('wsm_md_number', '8s', self._decode_strip_null),
+                    ('wsm_forecaster', '64s', self._decode_strip_null),
+                    ('number_counties', 'i'),
+                    ('plot_counties', 'i'),
+                ]
+
+                watch = self._buffer.read_struct(
+                    NamedStruct(watch_info, self.prefmt, 'WatchBoxInfo')
+                )
+
+                county_status = self._buffer.read_array(
+                    watch.number_counties, f'{self.prefmt}i'
+                )
+                county_status_blank_size = 4 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_status_blank_size)
+
+                county_fips = np.array([], dtype=f'{self.prefmt}i')
+
+                county_lat = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_lon = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_loc_blank_size = 8 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_loc_blank_size)
+
+                lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+                lon = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+
+                # Manually close watch parallelogram
+                if watch.number_points > 2:
+                    lon, lat = self.close_coordinates(lon, lat)
+            case 3:
+                watch_info = [
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('shape', 'i'),
+                    ('anchor0_station', '8s', self._decode_strip_null),
+                    ('anchor0_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor0_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor0_distance', 'i'),
+                    ('anchor0_direction', '4s', self._decode_strip_null),
+                    ('anchor1_station', '8s', self._decode_strip_null),
+                    ('anchor1_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor1_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor1_distance', 'i'),
+                    ('anchor1_direction', '4s', self._decode_strip_null),
+                    ('status', 'i'),
+                    ('number', 'i'),
+                    ('issue_time', '20s', self._decode_strip_null),
+                    ('expire_time', '20s', self._decode_strip_null),
+                    ('watch_type', 'i'),
+                    ('severity', 'i'),
+                    ('timezone', '4s', self._decode_strip_null),
+                    ('max_hail', '8s', self._decode_strip_null),
+                    ('max_wind', '8s', self._decode_strip_null),
+                    ('max_tops', '8s', self._decode_strip_null),
+                    ('mean_storm_direction', '8s', self._decode_strip_null),
+                    ('mean_storm_speed', '8s', self._decode_strip_null),
+                    ('states', '20s', self._decode_strip_null),
+                    ('adjacent_areas', '20s', self._decode_strip_null),
+                    ('replacing', '24s', self._decode_strip_null),
+                    ('forecaster', '64s', self._decode_strip_null),
+                    ('filename', '128s', self._decode_strip_null),
+                    ('issue_flag', 'i'),
+                    ('wsm_issue_time', '20s', self._decode_strip_null),
+                    ('wsm_expire_time', '20s', self._decode_strip_null),
+                    ('wsm_reference_direction', '32s', self._decode_strip_null),
+                    ('wsm_recent_from_line', '128s', self._decode_strip_null),
+                    ('wsm_md_number', '8s', self._decode_strip_null),
+                    ('wsm_forecaster', '64s', self._decode_strip_null),
+                    ('number_counties', 'i'),
+                    ('plot_counties', 'i'),
+                ]
+
+                watch = self._buffer.read_struct(
+                    NamedStruct(watch_info, self.prefmt, 'WatchBoxInfo')
+                )
+
+                county_status = self._buffer.read_array(
+                    watch.number_counties, f'{self.prefmt}i'
+                )
+                county_status_blank_size = 4 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_status_blank_size)
+
+                county_fips = np.array([], dtype=f'{self.prefmt}i')
+
+                county_lat = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_lon = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_loc_blank_size = 8 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_loc_blank_size)
+
+                lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+                lon = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+
+                # Manually close watch parallelogram
+                if watch.number_points > 2:
+                    lon, lat = self.close_coordinates(lon, lat)
+            case 4:
+                watch_info = [
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('shape', 'i'),
+                    ('anchor0_station', '8s', self._decode_strip_null),
+                    ('anchor0_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor0_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor0_distance', 'i'),
+                    ('anchor0_direction', '4s', self._decode_strip_null),
+                    ('anchor1_station', '8s', self._decode_strip_null),
+                    ('anchor1_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor1_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor1_distance', 'i'),
+                    ('anchor1_direction', '4s', self._decode_strip_null),
+                    ('status', 'i'),
+                    ('number', 'i'),
+                    ('issue_time', '20s', self._decode_strip_null),
+                    ('expire_time', '20s', self._decode_strip_null),
+                    ('watch_type', 'i'),
+                    ('severity', 'i'),
+                    ('timezone', '4s', self._decode_strip_null),
+                    ('max_hail', '8s', self._decode_strip_null),
+                    ('max_wind', '8s', self._decode_strip_null),
+                    ('max_tops', '8s', self._decode_strip_null),
+                    ('mean_storm_direction', '8s', self._decode_strip_null),
+                    ('mean_storm_speed', '8s', self._decode_strip_null),
+                    ('states', '80s', self._decode_strip_null),
+                    ('adjacent_areas', '80s', self._decode_strip_null),
+                    ('replacing', '24s', self._decode_strip_null),
+                    ('forecaster', '64s', self._decode_strip_null),
+                    ('filename', '128s', self._decode_strip_null),
+                    ('issue_flag', 'i'),
+                    ('wsm_issue_time', '20s', self._decode_strip_null),
+                    ('wsm_expire_time', '20s', self._decode_strip_null),
+                    ('wsm_reference_direction', '32s', self._decode_strip_null),
+                    ('wsm_recent_from_line', '128s', self._decode_strip_null),
+                    ('wsm_md_number', '8s', self._decode_strip_null),
+                    ('wsm_forecaster', '64s', self._decode_strip_null),
+                    ('number_counties', 'i'),
+                    ('plot_counties', 'i'),
+                ]
+
+                watch = self._buffer.read_struct(
+                    NamedStruct(watch_info, self.prefmt, 'WatchBoxInfo')
+                )
+
+                county_status = self._buffer.read_array(
+                    watch.number_counties, f'{self.prefmt}i'
+                )
+                county_status_blank_size = 4 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_status_blank_size)
+
+                county_fips = self._buffer.read_array(watch.number_counties, f'{self.prefmt}i')
+                county_fips_blank_size = 4 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_fips_blank_size)
+
+                county_lat = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_lon = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_loc_blank_size = 8 * (MAX_COUNTIES_LEGACY - watch.number_counties)
+                self._buffer.skip(county_loc_blank_size)
+
+                lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+                lon = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+
+                # Manually close watch parallelogram
+                if watch.number_points > 2:
+                    lon, lat = self.close_coordinates(lon, lat)
+            case 5:
+                watch_info = [
+                    ('number_points', 'i'),
+                    ('style', 'i'),
+                    ('shape', 'i'),
+                    ('anchor0_station', '8s', self._decode_strip_null),
+                    ('anchor0_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor0_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor0_distance', 'i'),
+                    ('anchor0_direction', '4s', self._decode_strip_null),
+                    ('anchor1_station', '8s', self._decode_strip_null),
+                    ('anchor1_lat', 'f', partial(round, ndigits=2)),
+                    ('anchor1_lon', 'f', partial(round, ndigits=2)),
+                    ('anchor1_distance', 'i'),
+                    ('anchor1_direction', '4s', self._decode_strip_null),
+                    ('status', 'i'),
+                    ('number', 'i'),
+                    ('issue_time', '20s', self._decode_strip_null),
+                    ('expire_time', '20s', self._decode_strip_null),
+                    ('watch_type', 'i'),
+                    ('severity', 'i'),
+                    ('timezone', '4s', self._decode_strip_null),
+                    ('max_hail', '8s', self._decode_strip_null),
+                    ('max_wind', '8s', self._decode_strip_null),
+                    ('max_tops', '8s', self._decode_strip_null),
+                    ('mean_storm_direction', '8s', self._decode_strip_null),
+                    ('mean_storm_speed', '8s', self._decode_strip_null),
+                    ('states', '80s', self._decode_strip_null),
+                    ('adjacent_areas', '80s', self._decode_strip_null),
+                    ('replacing', '24s', self._decode_strip_null),
+                    ('forecaster', '64s', self._decode_strip_null),
+                    ('filename', '128s', self._decode_strip_null),
+                    ('issue_flag', 'i'),
+                    ('wsm_issue_time', '20s', self._decode_strip_null),
+                    ('wsm_expire_time', '20s', self._decode_strip_null),
+                    ('wsm_reference_direction', '32s', self._decode_strip_null),
+                    ('wsm_recent_from_line', '128s', self._decode_strip_null),
+                    ('wsm_md_number', '8s', self._decode_strip_null),
+                    ('wsm_forecaster', '64s', self._decode_strip_null),
+                    ('number_counties', 'i'),
+                    ('plot_counties', 'i'),
+                ]
+
+                watch = self._buffer.read_struct(
+                    NamedStruct(watch_info, self.prefmt, 'WatchBoxInfo')
+                )
+
+                county_status = np.array([], dtype=f'{self.prefmt}i4')
+
+                county_fips = self._buffer.read_array(watch.number_counties, f'{self.prefmt}i')
+                county_fips_blank_size = 4 * (MAX_COUNTIES - watch.number_counties)
+                self._buffer.skip(county_fips_blank_size)
+
+                county_lat = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_lon = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
+                county_loc_blank_size = 8 * (MAX_COUNTIES - watch.number_counties)
+                self._buffer.skip(county_loc_blank_size)
+
+                lat = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+                lon = self._buffer.read_array(watch.number_points, f'{self.prefmt}f')
+
+                # Manually close watch parallelogram
+                if watch.number_points > 2:
+                    lon, lat = self.close_coordinates(lon, lat)
+            case 6:
                 watch_info = [
                     ('number_points', 'i'),
                     ('style', 'i'),
@@ -4541,6 +4933,8 @@ class VectorGraphicFile:
                 county_fips_blank_size = 4 * (MAX_COUNTIES - watch.number_counties)
                 self._buffer.skip(county_fips_blank_size)
 
+                county_status = np.array([], dtype=f'{self.prefmt}i4')
+
                 county_lat = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
                 county_lon = self._buffer.read_array(watch.number_counties, f'{self.prefmt}f')
                 county_loc_blank_size = 8 * (MAX_COUNTIES - watch.number_counties)
@@ -4553,95 +4947,239 @@ class VectorGraphicFile:
                 if watch.number_points > 2:
                     lon, lat = self.close_coordinates(lon, lat)
 
-                self._elements.append(
-                    WatchBoxElement(
-                        header_struct,
-                        watch.number_points,
-                        watch.style,
-                        watch.shape,
-                        watch.marker_type,
-                        watch.marker_size,
-                        watch.marker_width,
-                        watch.anchor0_station,
-                        watch.anchor0_lat,
-                        watch.anchor0_lon,
-                        watch.anchor0_distance,
-                        watch.anchor0_direction,
-                        watch.anchor1_station,
-                        watch.anchor1_lat,
-                        watch.anchor1_lon,
-                        watch.anchor1_distance,
-                        watch.anchor1_direction,
-                        watch.status,
-                        watch.number,
-                        watch.issue_time,
-                        watch.expire_time,
-                        watch.watch_type,
-                        watch.severity,
-                        watch.timezone,
-                        watch.max_hail,
-                        watch.max_wind,
-                        watch.max_tops,
-                        watch.mean_storm_direction,
-                        watch.mean_storm_speed,
-                        watch.states,
-                        watch.adjacent_areas,
-                        watch.replacing,
-                        watch.forecaster,
-                        watch.filename,
-                        watch.issue_flag,
-                        watch.wsm_issue_time,
-                        watch.wsm_expire_time,
-                        watch.wsm_reference_direction,
-                        watch.wsm_recent_from_line,
-                        watch.wsm_md_number,
-                        watch.wsm_forecaster,
-                        watch.number_counties,
-                        watch.plot_counties,
-                        county_fips,
-                        county_lat,
-                        county_lon,
-                        lat,
-                        lon,
-                    )
-                )
-            elif vg_class == VGClass.winds:
-                wind_info = [
-                    ('number_wind', 'i'),
-                    ('width', 'i'),
-                    ('size', 'f', partial(round, ndigits=1)),
-                    ('wind_type', 'i'),
-                    ('head_size', 'f', partial(round, ndigits=1)),
-                    ('speed', 'f', partial(round, ndigits=2)),
-                    ('direction ', 'f', partial(round, ndigits=2)),
-                    ('lat', 'f', partial(round, ndigits=2)),
-                    ('lon', 'f', partial(round, ndigits=2)),
-                ]
-                wind = self._buffer.read_struct(
-                    NamedStruct(wind_info, self.prefmt, 'WindInfo')
-                )
+        self._elements.append(
+            WatchBoxElement(
+                header_struct,
+                watch.number_points,
+                watch.style,
+                watch.shape,
+                watch.marker_type if hasattr(watch, 'marker_type') else 1,
+                watch.marker_size if hasattr(watch, 'marker_size') else 1.0,
+                watch.marker_width if hasattr(watch, 'marker_width') else 1,
+                watch.anchor0_station if hasattr(watch, 'anchor0_station') else '',
+                watch.anchor0_lat if hasattr(watch, 'anchor0_lat') else MISSING_FLOAT,
+                watch.anchor0_lon if hasattr(watch, 'anchor0_lon') else MISSING_FLOAT,
+                watch.anchor0_distance
+                if hasattr(watch, 'anchor0_distance')
+                else MISSING_FLOAT,
+                watch.anchor0_direction if hasattr(watch, 'anchor0_direction') else '',
+                watch.anchor1_station if hasattr(watch, 'anchor1_station') else '',
+                watch.anchor1_lat if hasattr(watch, 'anchor1_lat') else MISSING_FLOAT,
+                watch.anchor1_lon if hasattr(watch, 'anchor1_lon') else MISSING_FLOAT,
+                watch.anchor1_distance
+                if hasattr(watch, 'anchor1_distance')
+                else MISSING_FLOAT,
+                watch.anchor1_direction if hasattr(watch, 'anchor1_direction') else '',
+                watch.status if hasattr(watch, 'status') else 0,
+                watch.number,
+                watch.issue_time if hasattr(watch, 'issue_time') else 0,
+                watch.expire_time if hasattr(watch, 'expire_time') else 0,
+                watch.watch_type,
+                watch.severity if hasattr(watch, 'severity') else 0,
+                watch.timezone if hasattr(watch, 'timezone') else '',
+                watch.max_hail if hasattr(watch, 'max_hail') else '',
+                watch.max_wind if hasattr(watch, 'max_wind') else '',
+                watch.max_tops if hasattr(watch, 'max_tops') else '',
+                watch.mean_storm_direction if hasattr(watch, 'mean_storm_direction') else '',
+                watch.mean_storm_speed if hasattr(watch, 'mean_storm_speed') else '',
+                watch.states if hasattr(watch, 'states') else '',
+                watch.adjacent_areas if hasattr(watch, 'adjacent_areas') else '',
+                watch.replacing if hasattr(watch, 'replacing') else '',
+                watch.forecaster if hasattr(watch, 'forecaster') else '',
+                watch.filename,
+                watch.issue_flag if hasattr(watch, 'issue_flag') else 0,
+                watch.wsm_issue_time if hasattr(watch, 'wsm_issue_time') else '',
+                watch.wsm_expire_time if hasattr(watch, 'wsm_expire_time') else '',
+                watch.wsm_reference_direction
+                if hasattr(watch, 'wsm_reference_direction')
+                else '',
+                watch.wsm_recent_from_line if hasattr(watch, 'wsm_recent_from_line') else '',
+                watch.wsm_md_number if hasattr(watch, 'wsm_md_number') else '',
+                watch.wsm_forecaster if hasattr(watch, 'wsm_forecaster') else '',
+                watch.number_counties if hasattr(watch, 'number_counties') else 0,
+                watch.plot_counties if hasattr(watch, 'plot_counties') else 1,
+                county_fips,
+                county_status,
+                county_lat,
+                county_lon,
+                lat,
+                lon,
+            )
+        )
 
-                self._elements.append(
-                    WindElement(
-                        header_struct,
-                        wind.number_wind,
-                        wind.width,
-                        wind.size,
-                        wind.wind_type,
-                        wind.head_size,
-                        wind.speed,
-                        wind.direction,
-                        wind.lat,
-                        wind.lon,
+    def _decode_winds(self, header_struct):
+        """Decode wind elements."""
+        wind_info = [
+            ('number_wind', 'i'),
+            ('width', 'i'),
+            ('size', 'f', partial(round, ndigits=1)),
+            ('wind_type', 'i'),
+            ('head_size', 'f', partial(round, ndigits=1)),
+            ('speed', 'f', partial(round, ndigits=2)),
+            ('direction ', 'f', partial(round, ndigits=2)),
+            ('lat', 'f', partial(round, ndigits=2)),
+            ('lon', 'f', partial(round, ndigits=2)),
+        ]
+        wind = self._buffer.read_struct(NamedStruct(wind_info, self.prefmt, 'WindInfo'))
+
+        self._elements.append(
+            WindElement(
+                header_struct,
+                wind.number_wind,
+                wind.width,
+                wind.size,
+                wind.wind_type,
+                wind.head_size,
+                wind.speed,
+                wind.direction,
+                wind.lat,
+                wind.lon,
+            )
+        )
+
+    def _decode_elements(self):
+        """Decode elements of a VGF."""
+        more = True
+
+        while not self._buffer.at_end() and more:
+            header_struct = self._read_header()
+
+            rec_size = header_struct.record_size
+            vg_type = header_struct.vg_type
+            vg_class = header_struct.vg_class
+            data_size = rec_size - VGF_HEADER_SIZE
+
+            # In keeping with the original GEMPAK code,
+            # we validate the header. If the current header
+            # is not valid, we assume no more elements in the
+            # VGF file. See cvgrdhdr.c
+            if self._validate_header(header_struct):
+                more = False
+                continue
+
+            group_info = header_struct.group_type
+
+            # Ignores the file header group
+            if group_info not in self._groups and group_info and vg_class != VGClass.header:
+                self._groups.append(group_info)
+
+            if vg_class == VGClass.header and vg_type == VGType.file_header:
+                self._decode_file_header(header_struct)
+            elif vg_class == VGClass.fronts:
+                self._decode_fronts(header_struct)
+            elif vg_class == VGClass.symbols:
+                self._decode_symbols(header_struct)
+            elif vg_class == VGClass.circle:
+                if vg_type == VGType.circle:
+                    self._decode_circles(header_struct)
+                else:
+                    logger.warning(
+                        'Circle class with type `%s` cannot be decoded. Skipping.', vg_type
                     )
-                )
+                    _ = self._buffer.skip(data_size)
+            elif vg_class == VGClass.lines:
+                if vg_type == VGType.line:
+                    self._decode_lines(header_struct)
+                elif vg_type == VGType.special_line:
+                    self._decode_special_lines(header_struct)
+                else:
+                    logger.warning(
+                        'Line class with type `%s` cannot be decoded. Skipping.', vg_type
+                    )
+                    _ = self._buffer.skip(data_size)
+            elif vg_class == VGClass.lists:
+                self._decode_lists(header_struct)
+            elif vg_class == VGClass.text:
+                if vg_type == VGType.text or vg_type == VGType.justified_text:
+                    self._decode_text(header_struct)
+                elif vg_type == VGType.special_text:
+                    self._decode_special_text(header_struct)
+                else:
+                    logger.warning(
+                        'Text class with type `%s` cannot be decoded. Skipping.', vg_type
+                    )
+                    _ = self._buffer.skip(data_size)
+            elif vg_class == VGClass.tracks:
+                self._decode_tracks(header_struct)
+            elif vg_class == VGClass.sigmets:
+                if vg_type in [
+                    VGType.convective_outlook,
+                    VGType.convective_sigmet,
+                    VGType.nonconvective_sigmet,
+                    VGType.airmet,
+                    VGType.international_sigmet,
+                ]:
+                    self._decode_sigmet(header_struct)
+                elif vg_type == VGType.ccf:
+                    self._decode_ccf(header_struct)
+                elif vg_type == VGType.volcano:
+                    self._decode_volcanoes(header_struct)
+                elif vg_type == VGType.ash_cloud:
+                    self._decode_ash_clouds(header_struct)
+                else:
+                    logger.warning(
+                        'SIGMET class with type `%s` cannot be decoded. Skipping.', vg_type
+                    )
+                    _ = self._buffer.skip(data_size)
+            elif vg_class == VGClass.met:
+                if vg_type == VGType.gfa:
+                    self._decode_gfa(header_struct)
+                elif vg_type == VGType.jet:
+                    self._decode_jet(header_struct)
+                elif vg_type == VGType.tca:
+                    self._decode_tca(header_struct)
+                elif vg_type in [
+                    VGType.tc_error_cone,
+                    VGType.tc_track,
+                    VGType.tc_break_point,
+                ]:
+                    if vg_type == VGType.tc_error_cone:
+                        self._decode_tc_error(header_struct)
+                    elif vg_type == VGType.tc_track:
+                        self._decode_tc_track(header_struct)
+                    elif vg_type == VGType.tc_break_point:
+                        self._decode_tc_break_point(header_struct)
+                elif vg_type == VGType.sgwx:
+                    self._decode_sgwx(header_struct)
+                else:
+                    logger.warning(
+                        'MET class with type `%s` cannot be decoded. Skipping.', vg_type
+                    )
+                    _ = self._buffer.skip(data_size)
+            elif vg_class == VGClass.watches:
+                self._decode_watches(header_struct)
+            elif vg_class == VGClass.winds:
+                self._decode_winds(header_struct)
             else:
                 logger.warning(
                     'Could not decode element with class `%s` and type `%s`',
                     VGClass(vg_class).name,
                     VGType(vg_type).name,
                 )
-                _ = self._buffer.skip(data_size)
+                _ = self._buffer.skip(header_struct.record_size - VGF_HEADER_SIZE)
+
+    def _validate_header(self, header_struct):
+        """Validate VGF header."""
+        size = len(self._buffer._data)
+        delete = header_struct.delete
+        major_color = header_struct.major_color
+        minor_color = header_struct.minor_color
+        rec_size = header_struct.record_size
+        vg_type = header_struct.vg_type
+        vg_class = header_struct.vg_class
+
+        return (
+            delete < 0
+            or delete > 1
+            or vg_type < 0
+            or vg_type not in VGType.__members__.values()
+            or vg_class not in VGClass.__members__.values()
+            or major_color < 0
+            or major_color > 32
+            or minor_color < 0
+            or minor_color > 32
+            or rec_size > size
+        )
 
     def _get_latlon(self, points):
         """Extract latitude and longitude from VGF element.
