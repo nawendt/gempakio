@@ -32,6 +32,7 @@ from gempakio.common import (
     PackingType,
     VerticalCoordinates,
 )
+from gempakio.decode.gempak import GempakGrid, GempakSounding, GempakSurface
 from gempakio.tools import NamedStruct, OrderedSet
 
 
@@ -46,7 +47,7 @@ def pack_grib(grid, missing_float, nbits=16):
     if lendat * 32 != nbits * kxky:
         lendat += 1
 
-    out = np.zeros(lendat, dtype=np.int32)
+    out = np.empty(lendat, dtype=np.int32)
 
     has_missing = bool((grid == missing_float).any())
 
@@ -101,8 +102,8 @@ def pack_grib(grid, missing_float, nbits=16):
 
         # Now construct 2d arrays of shifts and input indexes, where each array is the output
         # length by number of input words per output word
-        jshfts = np.zeros((lendat, n_input_words), dtype=np.int8)
-        iis = np.zeros((lendat, n_input_words), dtype=np.int64)
+        jshfts = np.empty((lendat, n_input_words), dtype=np.int8)
+        iis = np.empty((lendat, n_input_words), dtype=np.int64)
 
         # Fill the first input word with the relevant values from the word starts
         jshfts[:, 0] = word_shifts[word_starts]
@@ -307,8 +308,8 @@ class DataManagementFile:
     def _encode_vertical_coordinate(coord):
         try:
             return VerticalCoordinates[coord.lower()].value
-        except KeyError as err:
-            raise KeyError(f'`{coord}` has no numeric value.') from err
+        except KeyError:
+            return struct.unpack('<i', coord.encode())[0]
 
     def _init_headers(self):
         self.make_column_header = namedtuple('ColumnHeader', self.column_names)
@@ -754,6 +755,29 @@ class GridFile(DataManagementFile):
         else:
             raise NotImplementedError(f'`{name}` projection not implemented.')
 
+    @classmethod
+    def from_gempak_file(cls, gempak_file):
+        """Create GridFile from existing data."""
+        data = GempakGrid(gempak_file)
+        lat = data.lat
+        lon = data.lon
+        projection = pyproj.Proj(data.crs)
+
+        obj = cls(lon, lat, projection)
+
+        for grid, info in zip(data.gdxarray(), data.gdinfo(), strict=True):
+            obj.add_grid(
+                grid.values.squeeze(),
+                info.PARM,
+                info.COORD,
+                info.LEVEL1,
+                info.DATTIM1,
+                info.LEVEL2,
+                info.DATTIM2,
+            )
+
+        return obj
+
     def add_grid(
         self,
         grid,
@@ -1110,6 +1134,10 @@ class SoundingFile(DataManagementFile):
         pack_data : bool
             Toggle data packing (i.e., real numbers packed as integers).
             Currently not implemented.
+
+        Notes
+        -----
+        This class only creates merged sounding files.
         """
         super().__init__()
         self.file_type = FileTypes.sounding
@@ -1159,6 +1187,33 @@ class SoundingFile(DataManagementFile):
         """Validate sounding parameters are of same length."""
         sz = len(data_dict[next(iter(data_dict))])
         return all(len(x) == sz for x in data_dict.values()) and sz < MAX_LEVELS
+
+    @classmethod
+    def from_gempak_file(cls, gempak_file):
+        """Create SoundingFile from existing data."""
+        data = GempakSounding(gempak_file)
+        profiles = data.snxarray()
+
+        # All parameters should be the same
+        obj = cls(list(profiles[0].data_vars))
+
+        for profile, info in zip(profiles, data.sninfo(), strict=True):
+            station_info = {
+                'station_id': info.ID,
+                'station_number': info.NUMBER,
+                'elevation': info.ELEV,
+                'state': info.STATE,
+                'country': info.COUNTRY,
+            }
+            obj.add_sounding(
+                {k: profile.data_vars[k].values for k in profile.data_vars},
+                info.LAT,
+                info.LON,
+                info.DATTIM,
+                station_info,
+            )
+
+        return obj
 
     def add_sounding(self, data, slat, slon, date_time, station_info=None):
         """Add sounding to the file.
@@ -1372,7 +1427,8 @@ class SurfaceFile(DataManagementFile):
         Notes
         -----
         Creates a standard surface file that does not contain any text
-        (e.g., TEXT/SPCL parameters).
+        (e.g., TEXT/SPCL parameters). Climate and ship files are not currently
+        implemented.
         """
         super().__init__()
         self.file_type = FileTypes.surface
@@ -1431,6 +1487,33 @@ class SurfaceFile(DataManagementFile):
     def _validate_length(data_dict):
         """Validate surface parameters are of same length."""
         return all(np.isscalar(x) for x in data_dict.values())
+
+    @classmethod
+    def from_gempak_file(cls, gempak_file):
+        """Create SurfaceFile from existing data."""
+        data = GempakSurface(gempak_file)
+        stations = data.sfjson(as_generator=True)
+        parameters = [p for p in stations[0]['values'] if p not in ['text', 'spcl']]
+
+        obj = cls(parameters)
+
+        for station in stations:
+            station_info = {
+                'station_id': station['properties']['station_id'],
+                'station_number': station['properties']['station_number'],
+                'elevation': station['properties']['elevation'],
+                'state': station['properties']['state'],
+                'country': station['properties']['country'],
+            }
+            obj.add_station(
+                {k: v for k, v in station['values'].items() if k not in ['text', 'spcl']},
+                station['properties']['latitude'],
+                station['properties']['longitude'],
+                station['properties']['date_time'],
+                station_info,
+            )
+
+        return obj
 
     def add_station(self, data, slat, slon, date_time, station_info=None):
         """Add station to the file.
@@ -1571,10 +1654,10 @@ class SurfaceFile(DataManagementFile):
                         stream.write_int(getattr(ch, key))
 
     def _write_data(self, stream):
-        """Write sounding to a SurfaceFile stream."""
+        """Write surface data to a SurfaceFile stream."""
         for i, row in enumerate(self.row_headers):
             for j, col in enumerate(self.column_headers):
-                # Only 1 part for merged sounding, so math can be simplified
+                # Only 1 part for surface without text, so math can be simplified
                 pointer = self.data_block_ptr + i * self.columns + j
                 stream.jump_to(pointer)
                 if (row, col) in self.data:
