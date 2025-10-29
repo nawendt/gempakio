@@ -6,8 +6,6 @@
 import bisect
 from collections import namedtuple
 from collections.abc import Iterable
-from copy import deepcopy
-import ctypes
 from datetime import datetime, timedelta
 from itertools import product
 import logging
@@ -164,8 +162,8 @@ def _unpack_grib(packed_buffer, nbits, kxky, reference, scale, missing_value=Non
     # words per output word. Otherwise, only keep track of 1.
     n_input_words = 2 if split_words.any() else 1
 
-    iis = np.zeros((kxky, n_input_words), dtype=np.int64)
-    jshft = np.zeros((kxky, n_input_words), dtype=np.int8)
+    iis = np.empty((kxky, n_input_words), dtype=np.int64)
+    jshft = np.empty((kxky, n_input_words), dtype=np.int8)
 
     # Indexes increment where output words are split or if the output word starts on an input
     # word boundary.
@@ -524,19 +522,29 @@ class GempakFile:
         else:
             return struct.pack(f'{self.prefmt}i', coord).decode()
 
+    # @staticmethod
+    # def _fortran_ishift(i, shift):
+    #     """Python-friendly bit shifting."""
+    #     mask = 0xFFFFFFFF
+    #     if shift > 0:
+    #         shifted = ctypes.c_int32(i << shift).value
+    #     elif shift < 0:
+    #         shifted = (i & mask) >> abs(shift) if i < 0 else i >> abs(shift)
+    #     elif shift == 0:
+    #         shifted = i
+    #     else:
+    #         raise ValueError(f'Bad shift value {shift}.')
+    #     return shifted
+
     @staticmethod
     def _fortran_ishift(i, shift):
-        """Python-friendly bit shifting."""
         mask = 0xFFFFFFFF
         if shift > 0:
-            shifted = ctypes.c_int32(i << shift).value
+            return ((i << shift) & mask)
         elif shift < 0:
-            shifted = (i & mask) >> abs(shift) if i < 0 else i >> abs(shift)
-        elif shift == 0:
-            shifted = i
+            return ((i & mask) >> -shift)
         else:
-            raise ValueError(f'Bad shift value {shift}.')
-        return shifted
+            return i
 
     @staticmethod
     def _decode_strip(b):
@@ -564,9 +572,17 @@ class GempakFile:
 
         pwords = (sum(parameters['bits']) - 1) // 32 + 1
         npack = (length - 1) // pwords + 1
-        unpacked = np.ones(npack * nparms, dtype=np.float32) * self.dm_label.missing_float
+        unpacked = np.full(npack * nparms, self.dm_label.missing_float, dtype=np.float32)
         if npack * pwords != length:
             raise ValueError('Unpacking length mismatch.')
+
+        bit_info = {
+            b: {
+                'mask': self._fortran_ishift(mskpat, b - 32),
+                'imissc': self._fortran_ishift(mskpat, b - 32),
+            }
+            for b in set(parameters['bits'])
+        }
 
         ir = 0
         ii = 0
@@ -580,14 +596,14 @@ class GempakFile:
                 bits = parameters['bits'][idata]
                 isbitc = (itotal % 32) + 1
                 iswrdc = itotal // 32
-                imissc = self._fortran_ishift(mskpat, bits - 32)
+                imissc = bit_info[bits]['imissc']
 
                 jbit = bits
                 jsbit = isbitc
                 jshift = 1 - jsbit
                 jsword = iswrdc
                 jword = pdat[jsword]
-                mask = self._fortran_ishift(mskpat, jbit - 32)
+                mask = bit_info[bits]['mask']
                 ifield = self._fortran_ishift(jword, jshift)
                 ifield &= mask
 
@@ -708,8 +724,7 @@ class GempakGrid(GempakFile):
         if gemproj not in GEMPROJ_TO_PROJ:
             raise NotImplementedError(f'{gemproj} projection not implemented.')
         proj, ptype = GEMPROJ_TO_PROJ[gemproj]
-        ellps = 'sphere'  # Kept for posterity
-        earth_radius = 6371200.0  # R takes precedence over ellps
+        earth_radius = 6371200.0
 
         if ptype == 'azm':
             lat_0 = self.navigation_block.proj_angle1
@@ -724,7 +739,6 @@ class GempakGrid(GempakFile):
                     'proj': proj,
                     'lat_0': lat_0,
                     'lon_0': lon_0,
-                    'ellps': ellps,
                     'R': earth_radius,
                 }
             )
@@ -743,7 +757,6 @@ class GempakGrid(GempakFile):
                         'proj': proj,
                         'lat_0': lat_0,
                         'lon_0': lon_0,
-                        'ellps': ellps,
                         'R': earth_radius,
                     }
                 )
@@ -764,7 +777,6 @@ class GempakGrid(GempakFile):
                         'lat_0': avglat,
                         'lon_0': lon_0,
                         'k_0': k_0,
-                        'ellps': ellps,
                         'R': earth_radius,
                     }
                 )
@@ -778,7 +790,6 @@ class GempakGrid(GempakFile):
                     'lon_0': lon_0,
                     'lat_1': lat_1,
                     'lat_2': lat_2,
-                    'ellps': ellps,
                     'R': earth_radius,
                 }
             )
@@ -811,7 +822,7 @@ class GempakGrid(GempakFile):
             if lendat > 1:
                 buffer_fmt = f'{self.prefmt}{lendat}f'
                 buffer = self._buffer.read_struct(struct.Struct(buffer_fmt))
-                grid = np.zeros(self.ky * self.kx, dtype=np.float32)
+                grid = np.empty(self.ky * self.kx, dtype=np.float32)
                 grid[...] = buffer
             else:
                 grid = None
@@ -849,7 +860,7 @@ class GempakGrid(GempakFile):
             lendat = self.data_header_length - part.header_length - 8
             packed_buffer_fmt = f'{self.prefmt}{lendat}i'
             packed_buffer = self._buffer.read_struct(struct.Struct(packed_buffer_fmt))
-            grid = np.zeros((self.ky, self.kx), dtype=np.float32)
+            grid = np.empty((self.ky, self.kx), dtype=np.float32)
 
             if lendat > 1:
                 iword = 0
@@ -914,7 +925,7 @@ class GempakGrid(GempakFile):
             lendat = self.data_header_length - part.header_length - 6
             packed_buffer_fmt = f'{self.prefmt}{lendat}i'
 
-            grid = np.zeros(self.grid_meta_int.kxky, dtype=np.float32)
+            grid = np.empty(self.grid_meta_int.kxky, dtype=np.float32)
 
             packed_buffer = np.array(
                 self._buffer.read_struct(struct.Struct(packed_buffer_fmt)), dtype=np.int32
@@ -2585,10 +2596,16 @@ class GempakSurface(GempakFile):
                 # will be kept with the report we return.
                 stnstr = '----' if station is None else station.groupdict()['station']
 
-                if txt.count(stnstr) > 1:
-                    # GEMPAK sometimes has more than one text report attached. We can
-                    # recover all of them by splitting with the station ID.
-                    reports = [f'{stnstr}{s}'.strip() for s in filter(None, txt.split(stnstr))]
+                # if txt.count(stnstr) > 1:
+                #     # GEMPAK sometimes has more than one text report attached. We can
+                #     # recover all of them by splitting with the station ID.
+                #     reports = [f'{stnstr}{s}'.strip() for s in filter(None, txt.split(stnstr))]
+                # else:
+                #     reports = [txt.strip()]
+
+                parts = txt.split(stnstr)
+                if len(parts) > 2:
+                    reports = [f'{stnstr}{s}'.strip() for s in parts if s]
                 else:
                     reports = [txt.strip()]
 
@@ -2601,7 +2618,7 @@ class GempakSurface(GempakFile):
                     else:
                         time_group = timestamp.groupdict()
 
-                    new_report = deepcopy(report)
+                    new_report = dict(report)
                     if param == 'SPCL':  # Do not update standard METAR time
                         try:
                             dt = datetime(
@@ -2748,6 +2765,30 @@ class GempakSurface(GempakFile):
 
         return time_matched
 
+    @staticmethod
+    def _json_generator(data, include_special):
+        """Generate station JSON output."""
+        for stn in data:
+            if stn:
+                if not include_special and 'SPCL' in stn:
+                    continue
+                stnobj = {
+                    'properties': {
+                        'date_time': datetime.combine(stn.pop('DATE'), stn.pop('TIME')),
+                        'station_id': stn.pop('STID') + stn.pop('STD2'),
+                        'station_number': stn.pop('STNM'),
+                        'longitude': stn.pop('SLON'),
+                        'latitude': stn.pop('SLAT'),
+                        'elevation': stn.pop('SELV'),
+                        'state': stn.pop('STAT'),
+                        'country': stn.pop('COUN'),
+                        'priority': stn.pop('SPRI'),
+                    },
+                    'values': {name.lower(): ob for name, ob in stn.items()},
+                }
+
+                yield stnobj
+
     def sfjson(
         self,
         station_id=None,
@@ -2757,6 +2798,7 @@ class GempakSurface(GempakFile):
         country=None,
         bbox=None,
         include_special=False,
+        as_generator=False
     ):
         """Select surface stations and output as list of JSON objects.
 
@@ -2789,6 +2831,9 @@ class GempakSurface(GempakFile):
         include_special : bool
             If True, parse special observations that are stored
             as raw METAR text. Default is False.
+
+        as_generator : bool
+            If True, return data as a generator instead of a list.
 
         Returns
         -------
@@ -2868,25 +2913,9 @@ class GempakSurface(GempakFile):
         elif self.surface_type == 'climate':
             data = self._unpack_climate(sfcno)
 
-        stnarr = []
-        for stn in data:
-            if stn:
-                if not include_special and 'SPCL' in stn:
-                    continue
-                stnobj = {
-                    'properties': {
-                        'date_time': datetime.combine(stn.pop('DATE'), stn.pop('TIME')),
-                        'station_id': stn.pop('STID') + stn.pop('STD2'),
-                        'station_number': stn.pop('STNM'),
-                        'longitude': stn.pop('SLON'),
-                        'latitude': stn.pop('SLAT'),
-                        'elevation': stn.pop('SELV'),
-                        'state': stn.pop('STAT'),
-                        'country': stn.pop('COUN'),
-                        'priority': stn.pop('SPRI'),
-                    },
-                    'values': {name.lower(): ob for name, ob in stn.items()},
-                }
-                stnarr.append(stnobj)
+        output = self._json_generator(data, include_special)
 
-        return stnarr
+        if as_generator:
+            return output
+        else:
+            return list(output)

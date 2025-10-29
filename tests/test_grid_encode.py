@@ -16,9 +16,7 @@ from gempakio.encode.gempak import pack_grib
 
 def test_grid_type_mismatch():
     """Test for grid type mismatches."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -34,9 +32,7 @@ def test_grid_type_mismatch():
 
 def test_grid_write():
     """Test writing grid."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -89,9 +85,7 @@ def test_grid_pack(nbits):
 
 def test_grid_write_incorrect_datetime_format():
     """Test writing grid with incorrect datetime string input."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -108,9 +102,7 @@ def test_grid_write_incorrect_datetime_format():
 
 def test_grid_write_incomplete_datetime():
     """Test writing grid with incomplete datetime string input."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -145,9 +137,7 @@ def test_grid_write_incomplete_datetime():
 
 def test_grid_write_incomplete_datetime_forecast():
     """Test writing grid with incomplete datetime string input on forecast grid."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -182,9 +172,7 @@ def test_grid_write_incomplete_datetime_forecast():
 
 def test_grid_write_minutes():
     """Test writing grid with forecast grid type with minutes."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -219,9 +207,7 @@ def test_grid_write_minutes():
 
 def test_grid_write_multiple_grid_types():
     """Test writing grid with multiple grid types supplied."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -238,9 +224,7 @@ def test_grid_write_multiple_grid_types():
 
 def test_grid_write_multiple_times_levels():
     """Test writing grid with forecast grid type and multiple times and levels."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -282,9 +266,7 @@ def test_grid_write_multiple_times_levels():
 
 def test_grid_write_multiple_times_minutes():
     """Test writing grid with forecast grid type and multiple times and levels."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -326,9 +308,7 @@ def test_grid_write_multiple_times_minutes():
 
 def test_grid_write_analysis():
     """Test writing grid with analysis grid type."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -363,9 +343,7 @@ def test_grid_write_analysis():
 
 def test_grid_write_valid():
     """Test writing grid with valid grid type."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -400,9 +378,7 @@ def test_grid_write_valid():
 
 def test_grid_write_forecast():
     """Test writing grid with forecast grid type."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -437,9 +413,7 @@ def test_grid_write_forecast():
 
 def test_grid_write_guess():
     """Test writing grid with guess grid type."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
@@ -474,9 +448,7 @@ def test_grid_write_guess():
 
 def test_grid_write_initial():
     """Test writing grid with initial grid type."""
-    proj = pyproj.Proj(
-        '+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +ellps=sphere +R=6371200.0'
-    )
+    proj = pyproj.Proj('+proj=lcc +lon_0=-95.0 +lat_1=25.0 +lat_2=25.0 +R=6371200.0')
 
     grid = Path(__file__).parent / 'data' / 'surface_temp.npz'
 
