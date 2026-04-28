@@ -520,3 +520,31 @@ def test_grid_write_projected_using_xy(proj_type):
         np.testing.assert_allclose(test_lon, true_lon, rtol=1e-3, atol=0)
     finally:
         gem.unlink()
+
+
+def test_grid_append():
+    """Test appending grid."""
+    grid = Path(__file__).parent / 'data' / 'hrcbob.grd'
+    add = Path(__file__).parent / 'data' / 'grid_append.npz'
+
+    out_grid = GridFile.from_gempak_file(grid)
+    with np.load(add) as dat:
+        pmsl = dat['pmsl']
+    out_grid.add_grid(pmsl, 'pmsl', 'pres', 0, '202603181900', grid_type='F')
+
+    kwargs = {'dir': '.', 'suffix': '.gem', 'delete': False}
+    try:
+        with tempfile.NamedTemporaryFile(**kwargs) as tmp:
+            gem = Path(tmp.name)
+            out_grid.to_gempak(tmp.name)
+
+        in_grid = GempakGrid(gem)
+        # print(in_grid.gdxarray('pmsl', coordinate='pres', level=0))
+        test_pmsl = in_grid.gdxarray(
+            parameter='pmsl', date_time='202603181900', coordinate='pres', level=0
+        )[0].squeeze()
+
+        assert test_pmsl.grid_type == 'forecast'
+        np.testing.assert_allclose(test_pmsl, pmsl, rtol=1e-6, atol=0)
+    finally:
+        gem.unlink()
