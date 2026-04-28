@@ -502,9 +502,9 @@ class GempakFile:
             iftime = ftime - iftype.value * 100000
             hours = iftime // 100
             minutes = iftime - hours * 100
-            out = (iftype.name, timedelta(hours=hours, minutes=minutes))
+            out = (iftype.name, {'hours': hours, 'minutes': minutes})
         else:
-            out = None
+            raise ValueError('Invalid forecast time founds in GEMPAK grid.')
         return out
 
     @staticmethod
@@ -522,27 +522,13 @@ class GempakFile:
         else:
             return struct.pack(f'{self.prefmt}i', coord).decode()
 
-    # @staticmethod
-    # def _fortran_ishift(i, shift):
-    #     """Python-friendly bit shifting."""
-    #     mask = 0xFFFFFFFF
-    #     if shift > 0:
-    #         shifted = ctypes.c_int32(i << shift).value
-    #     elif shift < 0:
-    #         shifted = (i & mask) >> abs(shift) if i < 0 else i >> abs(shift)
-    #     elif shift == 0:
-    #         shifted = i
-    #     else:
-    #         raise ValueError(f'Bad shift value {shift}.')
-    #     return shifted
-
     @staticmethod
     def _fortran_ishift(i, shift):
         mask = 0xFFFFFFFF
         if shift > 0:
-            return ((i << shift) & mask)
+            return (i << shift) & mask
         elif shift < 0:
-            return ((i & mask) >> -shift)
+            return (i & mask) >> -shift
         else:
             return i
 
@@ -681,8 +667,8 @@ class GempakGrid(GempakFile):
                 Grid(
                     n,
                     head.GTM1[0],
-                    head.GDT1 + head.GTM1[1],
-                    head.GDT2 + head.GTM2[1] if head.GDT2 and head.GTM2 else None,
+                    head.GDT1 + timedelta(**head.GTM1[1]),
+                    head.GDT2 + timedelta(**head.GTM2[1]) if head.GDT2 and head.GTM2 else None,
                     head.GPM1 + head.GPM2 + head.GPM3,
                     head.GLV1,
                     head.GLV2,
@@ -1124,7 +1110,9 @@ class GempakGrid(GempakFile):
 
                 full_name = col_head.GPM1 + col_head.GPM2 + col_head.GPM3
                 ftype, ftime = col_head.GTM1
-                valid = col_head.GDT1 + ftime
+                ftype2, ftime2 = col_head.GTM2
+                valid = col_head.GDT1 + timedelta(**ftime)
+                valid2 = col_head.GDT2 + timedelta(**ftime2) if col_head.GDT2 else None
                 gvcord = col_head.GVCD.lower() if col_head.GVCD is not None else 'none'
                 var = (
                     GVCORD_TO_VAR[full_name]
@@ -1159,6 +1147,10 @@ class GempakGrid(GempakFile):
                         attrs={
                             **self.crs.to_cf(),
                             'grid_type': ftype,
+                            'forecast_time': ftime,
+                            'dattim2': valid2,
+                            'grid_type2': ftype2,
+                            'forecast_time2': ftime2,
                         },
                     )
                     grids.append(xrda)
@@ -2606,7 +2598,9 @@ class GempakSurface(GempakFile):
                 # if txt.count(stnstr) > 1:
                 #     # GEMPAK sometimes has more than one text report attached. We can
                 #     # recover all of them by splitting with the station ID.
-                #     reports = [f'{stnstr}{s}'.strip() for s in filter(None, txt.split(stnstr))]
+                #     reports = [
+                #         f'{stnstr}{s}'.strip() for s in filter(None, txt.split(stnstr))
+                #     ]
                 # else:
                 #     reports = [txt.strip()]
 
@@ -2805,7 +2799,7 @@ class GempakSurface(GempakFile):
         country=None,
         bbox=None,
         include_special=False,
-        as_generator=False
+        as_generator=False,
     ):
         """Select surface stations and output as list of JSON objects.
 

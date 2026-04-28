@@ -774,6 +774,7 @@ class GridFile(DataManagementFile):
                 info.DATTIM1,
                 info.LEVEL2,
                 info.DATTIM2,
+                grid.grid_type,
             )
 
         return obj
@@ -787,6 +788,7 @@ class GridFile(DataManagementFile):
         date_time,
         level2=None,
         date_time2=None,
+        grid_type=None,
     ):
         """Add grid to the file.
 
@@ -862,9 +864,22 @@ class GridFile(DataManagementFile):
 
         level = int(level)
 
+        type_map = {
+            'A': 0,
+            'F': 1,
+            'V': 1,
+            'G': 2,
+            'I': 3,
+            'ANALYSIS': 0,
+            'FORECAST': 1,
+            'VALID': 1,
+            'GUESS': 2,
+            'INITIAL': 3,
+        }
+
         forecast_hour = 0
         forecast_minute = 0
-        grid_type = 0
+        grid_type1 = 0 if grid_type is None else type_map.get(grid_type.upper(), 0)
         if isinstance(date_time, str):
             if len(date_time) < 12:
                 raise ValueError(f'{date_time} does not match minimum format of YYYYmmddHHMM.')
@@ -880,17 +895,13 @@ class GridFile(DataManagementFile):
                     forecast_minute = int(fmin)
                 else:
                     forecast_hour = 0 if fhr == '' else int(fhr)
-                grid_type = {'A': 0, 'F': 1, 'V': 1, 'G': 2, 'I': 3}.get(gtype)
+                grid_type1 = type_map.get(gtype, 0)
             elif len(split_time) > 3:
                 raise ValueError(f'Cannot parse malformed date_time input {date_time}.')
             else:
                 init_date = datetime.strptime(date_time, '%Y%m%d%H%M')
-                forecast_hour = int(init_date.strftime('%H'))
-                forecast_minute = int(init_date.strftime('%M'))
         elif isinstance(date_time, datetime):
             init_date = date_time
-            forecast_hour = int(init_date.strftime('%H'))
-            forecast_minute = int(init_date.strftime('%M'))
         else:
             raise TypeError('date_time must be string or datetime.')
 
@@ -902,10 +913,10 @@ class GridFile(DataManagementFile):
 
         forecast_hour2 = 0
         forecast_minute2 = 0
-        grid_type2 = 0
+        grid_type2 = 0 if grid_type is None else type_map.get(grid_type.upper(), 0)
         if date_time2 is not None:
             if isinstance(date_time2, str):
-                if len(date_time) < 12:
+                if len(date_time2) < 12:
                     raise ValueError(
                         f'{date_time2} does not match minimum format of YYYYmmddHHMM.'
                     )
@@ -921,19 +932,15 @@ class GridFile(DataManagementFile):
                         forecast_minute2 = int(fmin)
                     else:
                         forecast_hour2 = 0 if fhr == '' else int(fhr)
-                    grid_type2 = {'A': 0, 'F': 1, 'V': 1, 'G': 2, 'I': 3}.get(gtype)
-                    if grid_type != grid_type2:
+                    grid_type2 = type_map.get(gtype, 0)
+                    if grid_type1 != grid_type2:
                         raise ValueError('Grid type mismatch in date_time and date_time2.')
                 elif len(split_time) > 3:
                     raise ValueError(f'Cannot parse malformed date_time2 input {date_time2}.')
                 else:
                     init_date2 = datetime.strptime(date_time2, '%Y%m%d%H%M')
-                    forecast_hour2 = int(init_date2.strftime('%H'))
-                    forecast_minute2 = int(init_date2.strftime('%M'))
             elif isinstance(date_time2, datetime):
                 init_date2 = date_time2
-                forecast_hour2 = int(init_date2.strftime('%H'))
-                forecast_minute2 = int(init_date2.strftime('%M'))
             else:
                 raise TypeError('date_time must be string or datetime or None.')
 
@@ -941,8 +948,8 @@ class GridFile(DataManagementFile):
         gpm1, gpm2, gpm3 = (pbuff[i : (i + 4)] for i in range(0, len(pbuff), 4))
 
         new_column = (
-            (grid_type, init_date),
-            (grid_type, forecast_hour, forecast_minute),
+            (grid_type1, init_date),
+            (grid_type1, forecast_hour, forecast_minute),
             (grid_type2, init_date2) if date_time2 is not None else 0,
             (grid_type2, forecast_hour2, forecast_minute2),
             level,
