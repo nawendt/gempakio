@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Nathan Wendt.
+# Copyright (c) 2026 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding various GEMPAK file formats."""
@@ -792,10 +792,8 @@ class GempakGrid(GempakFile):
         self._transform = transform
 
         # Normalize longitude
-        lower_left_lon = self.navigation_block.lower_left_lon
-        upper_right_lon = self.navigation_block.upper_right_lon
-        lower_left_lon = lower_left_lon % 360
-        upper_right_lon = upper_right_lon % 360
+        lower_left_lon = self.navigation_block.lower_left_lon % 360
+        upper_right_lon = self.navigation_block.upper_right_lon % 360
 
         llx, lly = transform(lower_left_lon, self.navigation_block.lower_left_lat)
         urx, ury = transform(upper_right_lon, self.navigation_block.upper_right_lat)

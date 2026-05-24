@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Nathan Wendt.
+# Copyright (c) 2026 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for decoding GEMPAK grid files."""
@@ -105,3 +105,39 @@ def test_multi_time_grid():
 
     assert dattim1 == datetime(1991, 8, 19, 0, 0)
     assert dattim2 == datetime(1991, 8, 20, 0, 0)
+
+
+def test_global_grid_360():
+    """Test global coordinates (0-360)."""
+    g = Path(__file__).parent / 'data' / 'test_gfsp.grd'
+    d = Path(__file__).parent / 'data' / 'global_coords_360.npz'
+
+    grid = GempakGrid(g)
+    gempak = np.load(d)
+
+    np.testing.assert_allclose(grid.lat, gempak['lat'], rtol=1e-6, atol=0)
+    np.testing.assert_allclose(grid.lon, gempak['lon'], rtol=1e-6, atol=0)
+
+
+def test_global_coords_180():
+    """Test global coordinates (-180-180)."""
+    g = Path(__file__).parent / 'data' / 'grib.grd'
+    d = Path(__file__).parent / 'data' / 'global_coords_180.npz'
+
+    grid = GempakGrid(g)
+    gempak = np.load(d)
+
+    np.testing.assert_allclose(grid.lat, gempak['lat'], rtol=1e-6, atol=0)
+    np.testing.assert_allclose(grid.lon, gempak['lon'], rtol=1e-6, atol=0)
+
+
+def test_regional_coords():
+    """Test global coordinates (-180-180)."""
+    g = Path(__file__).parent / 'data' / 'test_sfcoa.grd'
+    d = Path(__file__).parent / 'data' / 'conus_coords.npz'
+
+    grid = GempakGrid(g)
+    gempak = np.load(d)
+
+    np.testing.assert_allclose(grid.lat, gempak['lat'], rtol=1e-6, atol=0)
+    np.testing.assert_allclose(grid.lon, gempak['lon'], rtol=1e-6, atol=0)
