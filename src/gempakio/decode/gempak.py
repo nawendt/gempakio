@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Nathan Wendt.
+# Copyright (c) 2026 Nathan Wendt.
 # Distributed under the terms of the BSD 3-Clause License.
 # SPDX-License-Identifier: BSD-3-Clause
 """Classes for decoding various GEMPAK file formats."""
@@ -790,16 +790,23 @@ class GempakGrid(GempakFile):
         """
         transform = pyproj.Proj(self.crs)
         self._transform = transform
-        llx, lly = transform(
-            self.navigation_block.lower_left_lon, self.navigation_block.lower_left_lat
-        )
-        urx, ury = transform(
-            self.navigation_block.upper_right_lon, self.navigation_block.upper_right_lat
-        )
+
+        # Normalize longitude
+        lower_left_lon = self.navigation_block.lower_left_lon % 360
+        upper_right_lon = self.navigation_block.upper_right_lon % 360
+
+        llx, lly = transform(lower_left_lon, self.navigation_block.lower_left_lat)
+        urx, ury = transform(upper_right_lon, self.navigation_block.upper_right_lat)
         self.x = np.linspace(llx, urx, self.kx, dtype=np.float32)
         self.y = np.linspace(lly, ury, self.ky, dtype=np.float32)
         xx, yy = np.meshgrid(self.x, self.y, copy=False)
         self.lon, self.lat = transform(xx, yy, inverse=True)
+
+        # Handle global grids crossing antimeridian
+        self.lon = self.lon % 360
+        if not (lower_left_lon < 180 < upper_right_lon):
+            self.lon = np.where(self.lon > 180, self.lon - 360, self.lon)
+
         self.lon = self.lon.astype(np.float32)
         self.lat = self.lat.astype(np.float32)
 

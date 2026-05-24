@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  run-tests:
+    uses: ./.github/workflows/testing.yml
+    secrets: inherit
+
+  create-release:
+    name: Create GitHub Release
+    needs: run-tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            Changes:
+          generate_release_notes: true

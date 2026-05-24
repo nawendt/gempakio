@@ -1,18 +1,21 @@
+fixes:
+  - "*/site-packages/gempakio/::src/gempakio/"
+  - "*\\site-packages\\gempakio\\::src/gempakio/"
+
 coverage:
   status:
     patch:
       default:
-        target: '80'
+        target: "80"
     project:
       library:
         target: auto
         threshold: 0.1%
         paths:
-          - "src/gempakio/.*"
-
+          - "src/gempakio/"
       tests:
         target: 100%
         paths:
-          - "tests/.*"
+          - "tests/"
 
 comment: off
