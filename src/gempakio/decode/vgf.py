@@ -4,7 +4,7 @@
 """Classes for decoding GEMPAK VGF files."""
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from enum import IntEnum
 from functools import partial
 import json
@@ -2000,9 +2000,7 @@ class TropicalCycloneBase(VectorGraphicElement):
         self.advisory_number = advisory_number
         self.storm_name = storm_name
         self.storm_type = StormType(storm_type)
-        self.valid_time = datetime.strptime(valid_time, '%y%m%d/%H%M').replace(
-            tzinfo=timezone.utc
-        )
+        self.valid_time = datetime.strptime(valid_time, '%y%m%d/%H%M').replace(tzinfo=UTC)
         self.timezone = tz
         self.forecast_period = forecast_period
 
