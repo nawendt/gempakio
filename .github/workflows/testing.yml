@@ -36,13 +36,13 @@ jobs:
 
       - name: Test with pytest
         run: |
-          python -m pytest --cov-report json --cov gempakio tests
+          python -m pytest --cov-report xml --cov gempakio tests
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         with:
           name: pypi-${{ matrix.python-version }}-${{ runner.os }}
-          path: coverage.json
+          path: coverage.xml
           retention-days: 1
 
   codecov:
