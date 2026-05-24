@@ -218,7 +218,10 @@ def test_time_keywords(keyword, date_time):
     gso = GempakSounding(g).snxarray(date_time=keyword)[0]
     expected = datetime.strptime(date_time, '%Y%m%d%H%M')
     dt64 = gso.time.values[0]
-    epoch_seconds = int(dt64) / 1e9
+    if isinstance(dt64, datetime):
+        epoch_seconds = dt64.timestamp()
+    else:
+        epoch_seconds = int(dt64) / 1e9
     sounding_dt = datetime(1970, 1, 1) + timedelta(seconds=epoch_seconds)
 
     assert sounding_dt == expected
