@@ -32,6 +32,13 @@ build-backend = "setuptools.build_meta"
 homepage = "https://github.com/nawendt/gempakio"
 repository = "https://github.com/nawendt/gempakio"
 
+[tool.coverage.paths]
+source = [
+    "src/",
+    "*/site-packages/",
+    "*\\site-packages\\"
+]
+
 [tool.ruff]
 line-length = 95
 exclude = [

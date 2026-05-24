@@ -36,7 +36,7 @@ jobs:
 
       - name: Test with pytest
         run: |
-          python -m pytest --cov-report json --cov src/gempakio tests
+          python -m pytest --cov-report json --cov gempakio tests
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
