@@ -87,10 +87,7 @@ def test_time_keywords(keyword, date_time):
 
     grid = GempakGrid(g).gdxarray(date_time=keyword)[0]
     dt64 = grid.time.values[0]
-    if isinstance(dt64, datetime):
-        epoch_seconds = dt64.timestamp()
-    else:
-        epoch_seconds = int(dt64) / 1e9
+    epoch_seconds = dt64.astype('datetime64[ns]').astype('int64') / 1e9
     grid_dt = datetime(1970, 1, 1) + timedelta(seconds=epoch_seconds)
     expected = datetime.strptime(date_time, '%Y%m%d%H%M')
 
