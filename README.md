@@ -1,4 +1,11 @@
 # gempakIO
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/gempakio/badges/version.svg)](https://anaconda.org/conda-forge/gempakio)
+[![Anaconda-Server Badge](https://anaconda.org/conda-forge/gempakio/badges/downloads.svg)](https://anaconda.org/conda-forge/gempakio)
+[![PyPI Package](https://img.shields.io/pypi/v/gempakio.svg)](https://pypi.org/project/gempakIO)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/gempakio.svg)](https://pypi.org/project/gempakIO)
+[![codecov](https://codecov.io/gh/nawendt/gempakio/branch/main/graph/badge.svg?token=1XVYMN3Y63)](https://codecov.io/gh/nawendt/gempakio)
+[![Testing](https://github.com/nawendt/gempakio/actions/workflows/testing.yml/badge.svg?branch=main)](https://github.com/nawendt/gempakio/actions/workflows/testing.yml)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
 
 gempakIO is a pure-Python package that will read and write GEMPAK grid, sounding, and surface data. Because Python is platform independent, this brings the ability to read GEMPAK data in Windows much more easily.
 
